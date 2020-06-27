@@ -28,9 +28,9 @@ pr:
 variables:
   RUST_BACKTRACE: '1'
   RUSTFLAGS: '-C debug-assertions'
-  gh_user: 'mwcproject'
-  gh_repo: 'mwcproject.github.io'
-  gh_auth_header: '$(echo -n "${gh_user}:$(github_pat)" | base64);'
+  ghpages_user: 'mwcproject'
+  ghpages_repo: 'mwcproject.github.io'
+  ghpages_auth_header: '$(echo -n "${gh_user}:$(github_pat)" | base64);'
 jobs:
 - job: linux
   pool:
