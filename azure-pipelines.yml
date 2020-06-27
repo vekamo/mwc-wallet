@@ -30,7 +30,7 @@ variables:
   RUSTFLAGS: '-C debug-assertions'
   ghpages_user: 'mwcproject'
   ghpages_repo: 'mwcproject.github.io'
-  ghpages_auth_header: '$(echo -n "${gh_user}:$(github_pat)" | base64);'
+  ghpages_auth_header: '$(echo -n "${ghpages_user}:$(github_pat)" | base64);'
 jobs:
 - job: linux
   pool:
