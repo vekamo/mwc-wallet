@@ -697,6 +697,7 @@ mod test {
 		assert_eq!(tx1.outputs()[0].commitment(), tx2.inputs()[0].commitment());
 	}
 
+	/*
 	#[test]
 	fn payment_proof_construction() {
 		let secp_inst = static_secp_instance();
@@ -754,4 +755,5 @@ mod test {
 		let signature = Signature::from_der(&secp, &signature).unwrap();
 		assert!(crypto::verify_signature(&msg, &signature, &public_key).is_ok());
 	}
+	*/
 }
