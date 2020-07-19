@@ -33,6 +33,7 @@ use crate::util::secp::pedersen;
 use crate::util::{static_secp_instance, ZeroingString};
 use crate::{ECDHPubkey, Owner, PubAddress, Token};
 use easy_jsonrpc_mw;
+use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use rand::thread_rng;
 use std::time::Duration;
 
@@ -373,7 +374,6 @@ pub trait OwnerRpcS {
 
 	/**
 		Networked version of [Owner::init_send_tx](struct.Owner.html#method.init_send_tx).
-
 	```
 		# // Full data request
 		# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
@@ -392,7 +392,7 @@ pub trait OwnerRpcS {
 					"selection_strategy_is_use_all": true,
 					"message": "my message",
 					"target_slate_version": null,
-					"payment_proof_recipient_address": "d03c09e9c19bb74aa9ea44e0fe5ae237a9bf40bddf0941064a80913a4459c8bb",
+					"payment_proof_recipient_address": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2",
 					"ttl_blocks": null,
 					"address": null,
 					"estimate_only": false,
@@ -426,9 +426,9 @@ pub trait OwnerRpcS {
 				}
 			  ],
 			  "payment_proof": {
-				"receiver_address": "d03c09e9c19bb74aa9ea44e0fe5ae237a9bf40bddf0941064a80913a4459c8bb",
+				"receiver_address": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2",
 				"receiver_signature": null,
-				"sender_address": "294b08ba7422c0e1d9215d98829b7eba4834db80c86d5292ecbb199907d7ae42"
+				"sender_address": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5"
 			  },
 			  "ttl_cutoff_height": null,
 			  "tx": {
@@ -469,7 +469,7 @@ pub trait OwnerRpcS {
 		# "#
 		# ,true, 4, false, false, false, false);
 		#
-		# // Short request. minimum_confirmations is ptional but we put it, otherwise there will be not enough funds for default value 10
+		# // Short request. minimum_confirmations is optional but we put it, otherwise there will be not enough funds for default value 10
 		# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
 		# r#"
 		{
@@ -1973,7 +1973,11 @@ pub trait OwnerRpcS {
 		"id": 1,
 		"jsonrpc": "2.0",
 		"result": {
-			"Ok": "294b08ba7422c0e1d9215d98829b7eba4834db80c86d5292ecbb199907d7ae42"
+			"Ok": {
+			  "domain": "",
+			  "port": null,
+			  "public_key": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5"
+			}
 		}
 	}
 	# "#
@@ -1985,7 +1989,7 @@ pub trait OwnerRpcS {
 		&self,
 		token: Token,
 		derivation_index: u32,
-	) -> Result<PubAddress, ErrorKind>;
+	) -> Result<ProvableAddress, ErrorKind>;
 
 	/**
 	Networked version of [Owner::proof_address_from_onion_v3](struct.Owner.html#method.proof_address_from_onion_v3).
@@ -2043,10 +2047,19 @@ pub trait OwnerRpcS {
 		"Ok": {
 		  "amount": "2000000000",
 		  "excess": "08b3b8b83c622f630141a66c9cad96e19c78f745e4e2ddea85439f05d14a404640",
-		  "recipient_address": "7rky2tvk763cq5kvhyxv7zkjxfytmao3qttqvoc6fsiawo4kzgii7bqd",
-		  "recipient_sig": "a2c0a8c4328dd6d8379cc1caf41137b15b0b4d2fe6cd9752525bb0020115b5a004e3e0f44258b2f2963bdd77fccc5ed516caef55bdd36f632f9fca6581c7cc0f",
-		  "sender_address": "fffqrotuelaodwjblwmifg36xjedjw4azbwvfexmxmmzsb6xvzbkhuqd",
-		  "sender_sig": "6509f1050e2569ce959ca18f4300d270947fb477429993808db45c3f8a69565f2ad571c9b8e4c3dfe58cdc2b0e05c106daee7df3c212686e1545019d15e71306"
+		  "recipient_address": {
+				"domain": "",
+				"port": null,
+				"public_key": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2"
+
+		  },
+		  "recipient_sig": "30440220050ccd7244a8e1bcad8724a26bef6e0bc3df85f09dfc41870635711627955c4c02202b3d3599a7371bcc685315876c54cdf956a8c990ce6526f6be8e50591bde3be2",
+		  "sender_address": {
+				"domain": "",
+				"port": null,
+				"public_key": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5"
+		  },
+		  "sender_sig": "3045022100945b57de1e8b9f7863c4f4c5698d5617ffa55748c80a8324729f98ce5ef86509022063f6bc511d80046f6f21c9476344ed8d948234cc32a0b022d720161798e09861"
 		}
 	  }
 	}
@@ -2076,11 +2089,20 @@ pub trait OwnerRpcS {
 			"proof": {
 			  "amount": "2000000000",
 			  "excess": "08b3b8b83c622f630141a66c9cad96e19c78f745e4e2ddea85439f05d14a404640",
-			  "recipient_address": "7rky2tvk763cq5kvhyxv7zkjxfytmao3qttqvoc6fsiawo4kzgii7bqd",
-			  "recipient_sig": "a2c0a8c4328dd6d8379cc1caf41137b15b0b4d2fe6cd9752525bb0020115b5a004e3e0f44258b2f2963bdd77fccc5ed516caef55bdd36f632f9fca6581c7cc0f",
-			  "sender_address": "fffqrotuelaodwjblwmifg36xjedjw4azbwvfexmxmmzsb6xvzbkhuqd",
-			  "sender_sig": "6509f1050e2569ce959ca18f4300d270947fb477429993808db45c3f8a69565f2ad571c9b8e4c3dfe58cdc2b0e05c106daee7df3c212686e1545019d15e71306"
-			}
+			  "recipient_address": {
+				"domain": "",
+				"port": null,
+				"public_key": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2"
+
+		  },
+			  "recipient_sig": "30440220050ccd7244a8e1bcad8724a26bef6e0bc3df85f09dfc41870635711627955c4c02202b3d3599a7371bcc685315876c54cdf956a8c990ce6526f6be8e50591bde3be2",
+			  "sender_address": {
+				"domain": "",
+				"port": null,
+				"public_key": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5"
+		  },
+			 "sender_sig": "3045022100945b57de1e8b9f7863c4f4c5698d5617ffa55748c80a8324729f98ce5ef86509022063f6bc511d80046f6f21c9476344ed8d948234cc32a0b022d720161798e09861"
+		}
 		},
 		"id": 1
 	}
@@ -2515,14 +2537,16 @@ where
 		&self,
 		token: Token,
 		derivation_index: u32,
-	) -> Result<PubAddress, ErrorKind> {
+	) -> Result<ProvableAddress, ErrorKind> {
 		let address = Owner::get_public_proof_address(
 			self,
 			(&token.keychain_mask).as_ref(),
 			derivation_index,
 		)
 		.map_err(|e| e.kind())?;
-		Ok(PubAddress { address })
+		let public_proof_address = ProvableAddress::from_pub_key(&address);
+		println!("public_proof address {}", public_proof_address.public_key);
+		Ok(public_proof_address)
 	}
 
 	fn retrieve_payment_proof(

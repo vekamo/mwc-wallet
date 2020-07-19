@@ -14,7 +14,6 @@
 
 //! Selection of inputs for building transactions
 
-use crate::address;
 use crate::error::{Error, ErrorKind};
 use crate::grin_core::core::amount_to_hr_string;
 use crate::grin_core::libtx::{
@@ -26,9 +25,9 @@ use crate::grin_keychain::{Identifier, Keychain};
 use crate::grin_util::secp::key::SecretKey;
 use crate::grin_util::secp::pedersen::Commitment;
 use crate::internal::keys;
+use crate::proof::proofaddress;
 use crate::slate::Slate;
 use crate::types::*;
-use crate::util::OnionV3Address;
 use grin_wallet_util::grin_util as util;
 use std::collections::HashMap;
 
@@ -188,16 +187,15 @@ where
 					.into());
 				}
 			};
-			let sender_key = address::address_from_derivation_path(
+			let sender_a = proofaddress::payment_proof_address(
 				&keychain,
 				&parent_key_id,
 				sender_address_path,
 			)?;
-			let sender_address = OnionV3Address::from_private(&sender_key.0)?;
 			t.payment_proof = Some(StoredProofInfo {
-				receiver_address: p.receiver_address,
-				receiver_signature: p.receiver_signature,
-				sender_address: sender_address.to_ed25519()?,
+				receiver_address: p.receiver_address.clone(),
+				receiver_signature: p.receiver_signature.clone(),
+				sender_address: sender_a,
 				sender_address_path,
 				sender_signature: None,
 			});

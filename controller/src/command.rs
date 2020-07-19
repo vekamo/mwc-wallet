@@ -29,9 +29,9 @@ use crate::util::secp::key::SecretKey;
 use crate::util::{Mutex, ZeroingString};
 use crate::{controller, display};
 use grin_wallet_impls::adapters::create_swap_message_sender;
+use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::swap::types::Action;
 use grin_wallet_libwallet::{Slate, TxLogEntry};
-use grin_wallet_util::OnionV3Address;
 use serde_json as json;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -319,7 +319,7 @@ pub struct SendArgs {
 	pub fluff: bool,
 	pub max_outputs: usize,
 	pub target_slate_version: Option<u16>,
-	pub payment_proof_address: Option<OnionV3Address>,
+	pub payment_proof_address: Option<ProvableAddress>,
 	pub ttl_blocks: Option<u64>,
 	pub exclude_change_outputs: bool,
 	pub minimum_confirmations_change_outputs: u64,
@@ -1113,7 +1113,7 @@ where
 	controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, m| {
 		// Just address at derivation index 0 for now
 		let pub_key = api.get_public_proof_address(m, 0)?;
-		let addr = OnionV3Address::from_bytes(pub_key.to_bytes());
+		let addr = ProvableAddress::from_pub_key(&pub_key);
 		println!();
 		println!("Address for account - {}", g_args.account);
 		println!("-------------------------------------");

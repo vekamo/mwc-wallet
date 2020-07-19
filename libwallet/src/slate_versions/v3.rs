@@ -25,10 +25,9 @@ use crate::grin_util::secp;
 use crate::grin_util::secp::key::PublicKey;
 use crate::grin_util::secp::pedersen::{Commitment, RangeProof};
 use crate::grin_util::secp::Signature;
+use crate::proof::proofaddress;
+use crate::proof::proofaddress::ProvableAddress;
 use crate::slate::CompatKernelFeatures;
-use crate::slate_versions::ser as dalek_ser;
-use ed25519_dalek::PublicKey as DalekPublicKey;
-use ed25519_dalek::Signature as DalekSignature;
 use uuid::Uuid;
 
 use crate::slate_versions::v2::{
@@ -69,13 +68,13 @@ pub struct SlateV3 {
 	/// is receiver, though this will change for multi-party
 	pub participant_data: Vec<ParticipantDataV3>,
 	/// Payment Proof
-	#[serde(default = "default_payment_none")]
+	///#[serde(default = "default_payment_none")]
 	pub payment_proof: Option<PaymentInfoV3>,
 }
 
-fn default_payment_none() -> Option<PaymentInfoV3> {
-	None
-}
+//fn default_payment_none() -> Option<PaymentInfoV3> {
+//	None
+//}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VersionCompatInfoV3 {
@@ -110,12 +109,17 @@ pub struct ParticipantDataV3 {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PaymentInfoV3 {
-	#[serde(with = "dalek_ser::dalek_pubkey_serde")]
-	pub sender_address: DalekPublicKey,
-	#[serde(with = "dalek_ser::dalek_pubkey_serde")]
-	pub receiver_address: DalekPublicKey,
-	#[serde(with = "dalek_ser::option_dalek_sig_serde")]
-	pub receiver_signature: Option<DalekSignature>,
+	#[serde(
+		serialize_with = "proofaddress::as_string",
+		deserialize_with = "proofaddress::proof_address_from_string"
+	)]
+	pub sender_address: ProvableAddress,
+	#[serde(
+		serialize_with = "proofaddress::as_string",
+		deserialize_with = "proofaddress::proof_address_from_string"
+	)]
+	pub receiver_address: ProvableAddress,
+	pub receiver_signature: Option<String>,
 }
 
 /// A transaction

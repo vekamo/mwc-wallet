@@ -35,6 +35,7 @@ use crate::libwallet::{
 use crate::util::logger::LoggingConfig;
 use crate::util::secp::key::SecretKey;
 use crate::util::{from_hex, static_secp_instance, Mutex, ZeroingString};
+use grin_wallet_util::grin_util::secp::key::PublicKey;
 use grin_wallet_util::OnionV3Address;
 use std::convert::TryFrom;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -2144,7 +2145,7 @@ where
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		derivation_index: u32,
-	) -> Result<DalekPublicKey, Error> {
+	) -> Result<PublicKey, Error> {
 		owner::get_public_proof_address(self.wallet_inst.clone(), keychain_mask, derivation_index)
 	}
 

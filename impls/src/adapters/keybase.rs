@@ -79,6 +79,9 @@ impl KeybaseChannel {
 		let des_address = KeybaseAddress::from_str(self.des_address.as_ref()).map_err(|e| {
 			ErrorKind::KeybaseGenericError(format!("Invalid destination address, {}", e))
 		})?;
+		//		let version = slate.lowest_version();
+		//		let slate = VersionedSlate::into_version(slate,version);
+
 		keybase_publisher
 			.post_slate(&slate, &des_address)
 			.map_err(|e| {

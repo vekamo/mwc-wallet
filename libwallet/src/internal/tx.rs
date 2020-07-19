@@ -14,25 +14,24 @@
 
 //! Transaction building functions
 
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use std::io::Cursor;
 use uuid::Uuid;
 
 use crate::grin_core::consensus::valid_header_version;
 use crate::grin_core::core::HeaderVersion;
 use crate::grin_keychain::{Identifier, Keychain};
+use crate::grin_util as util;
 use crate::grin_util::secp::key::SecretKey;
-use crate::grin_util::secp::pedersen;
+use crate::grin_util::secp::{pedersen, Secp256k1, Signature};
 use crate::grin_util::Mutex;
 use crate::internal::{selection, updater};
+use crate::proof::crypto;
+use crate::proof::crypto::Hex;
+use crate::proof::proofaddress;
+use crate::proof::proofaddress::ProvableAddress;
+use crate::proof::tx_proof::{push_proof_for_slate, TxProof};
 use crate::slate::Slate;
 use crate::types::{Context, NodeClient, StoredProofInfo, TxLogEntryType, WalletBackend};
-use crate::util::OnionV3Address;
 use crate::{address, Error, ErrorKind};
-use ed25519_dalek::Keypair as DalekKeypair;
-use ed25519_dalek::PublicKey as DalekPublicKey;
-use ed25519_dalek::SecretKey as DalekSecretKey;
-use ed25519_dalek::Signature as DalekSignature;
 
 // static for incrementing test UUIDs
 lazy_static! {
@@ -353,7 +352,7 @@ where
 	Ok(())
 }
 
-/// Update the stored transaction (this update needs to happen when the TX is finalised)
+/// Update the stored transaction (this update needs to happen when the TX is finalized)
 pub fn update_stored_tx<'a, T: ?Sized, C, K>(
 	wallet: &mut T,
 	keychain_mask: Option<&SecretKey>,
@@ -413,16 +412,23 @@ where
 		let keychain = wallet.keychain(keychain_mask)?;
 		let parent_key_id = wallet.parent_key_id();
 		let excess = slate.calc_excess(&keychain)?;
-		let sender_key =
+		//sender address.
+		let sender_address_secret_key =
 			address::address_from_derivation_path(&keychain, &parent_key_id, derivation_index)?;
-		let sender_address = OnionV3Address::from_private(&sender_key.0)?;
-		let sig =
-			create_payment_proof_signature(slate.amount, &excess, p.sender_address, sender_key)?;
+		let sender_a =
+			proofaddress::payment_proof_address(&keychain, &parent_key_id, derivation_index)?;
+
+		let sig = create_payment_proof_signature(
+			slate.amount,
+			&excess,
+			p.sender_address.clone(),
+			sender_address_secret_key,
+		)?;
 		tx.payment_proof = Some(StoredProofInfo {
-			receiver_address: p.receiver_address,
-			receiver_signature: p.receiver_signature,
+			receiver_address: p.receiver_address.clone(),
+			receiver_signature: p.receiver_signature.clone(),
 			sender_address_path: derivation_index,
-			sender_address: sender_address.to_ed25519()?,
+			sender_address: sender_a,
 			sender_signature: Some(sig),
 		})
 	}
@@ -471,58 +477,56 @@ where
 pub fn payment_proof_message(
 	amount: u64,
 	kernel_commitment: &pedersen::Commitment,
-	sender_address: DalekPublicKey,
-) -> Result<Vec<u8>, Error> {
-	let mut msg = Vec::new();
-	msg.write_u64::<BigEndian>(amount)?;
-	msg.append(&mut kernel_commitment.0.to_vec());
-	msg.append(&mut sender_address.to_bytes().to_vec());
-	Ok(msg)
+	sender_address_publickey: String,
+) -> Result<String, Error> {
+	let mut message = String::new();
+	debug!("the kernel excess is {:?}", kernel_commitment.0.to_vec());
+	debug!("the sender public key is {}", &sender_address_publickey);
+	message.push_str(&util::to_hex(kernel_commitment.0.to_vec()));
+	message.push_str(&sender_address_publickey);
+	message.push_str(&amount.to_string());
+	Ok(message)
 }
 
 /// decode proof message
-pub fn _decode_payment_proof_message(
-	msg: &[u8],
-) -> Result<(u64, pedersen::Commitment, DalekPublicKey), Error> {
-	let mut rdr = Cursor::new(msg);
-	let amount = rdr.read_u64::<BigEndian>()?;
-	let mut commit_bytes = [0u8; 33];
-	for i in 0..33 {
-		commit_bytes[i] = rdr.read_u8()?;
-	}
-	let mut sender_address_bytes = [0u8; 32];
-	for i in 0..32 {
-		sender_address_bytes[i] = rdr.read_u8()?;
-	}
-
-	Ok((
-		amount,
-		pedersen::Commitment::from_vec(commit_bytes.to_vec()),
-		DalekPublicKey::from_bytes(&sender_address_bytes)
-			.map_err(|e| ErrorKind::Signature(format!("Failed to build public key, {}", e)))?,
-	))
-}
+//pub fn _decode_payment_proof_message(
+//	msg: &[u8],
+//) -> Result<(u64, pedersen::Commitment, DalekPublicKey), Error> {
+//	let mut rdr = Cursor::new(msg);
+//	let amount = rdr.read_u64::<BigEndian>()?;
+//	let mut commit_bytes = [0u8; 33];
+//	for i in 0..33 {
+//		commit_bytes[i] = rdr.read_u8()?;
+//	}
+//	let mut sender_address_bytes = [0u8; 32];
+//	for i in 0..32 {
+//		sender_address_bytes[i] = rdr.read_u8()?;
+//	}
+//
+//	Ok((
+//		amount,
+//		pedersen::Commitment::from_vec(commit_bytes.to_vec()),
+//		DalekPublicKey::from_bytes(&sender_address_bytes)
+//			.map_err(|e| ErrorKind::Signature(format!("Failed to build public key, {}", e)))?,
+//	))
+//}
 
 /// create a payment proof
+/// To make it compatible with mwc713, here we are using the implementation of wallet713.
 pub fn create_payment_proof_signature(
 	amount: u64,
 	kernel_commitment: &pedersen::Commitment,
-	sender_address: DalekPublicKey,
+	sender_address: ProvableAddress,
 	sec_key: SecretKey,
-) -> Result<DalekSignature, Error> {
-	let msg = payment_proof_message(amount, kernel_commitment, sender_address)?;
-	let d_skey = match DalekSecretKey::from_bytes(&sec_key.0) {
-		Ok(k) => k,
-		Err(e) => {
-			return Err(ErrorKind::ED25519Key(format!("{}", e)).into());
-		}
-	};
-	let pub_key: DalekPublicKey = (&d_skey).into();
-	let keypair = DalekKeypair {
-		public: pub_key,
-		secret: d_skey,
-	};
-	Ok(keypair.sign(&msg))
+) -> Result<String, Error> {
+	let message_ser = payment_proof_message(amount, kernel_commitment, sender_address.public_key)?;
+
+	let mut challenge = String::new();
+	//todo check if this is the correct way.
+	challenge.push_str(&message_ser);
+	let signature = crypto::sign_challenge(&challenge, &sec_key)?;
+	let signature = signature.to_hex();
+	Ok(signature)
 }
 
 /// Verify all aspects of a completed payment proof on the current slate
@@ -585,28 +589,28 @@ where
 				.into());
 			}
 		};
-		let orig_sender_sk =
-			address::address_from_derivation_path(&keychain, parent_key_id, index)?;
-		let orig_sender_address = OnionV3Address::from_private(&orig_sender_sk.0)?;
-		if p.sender_address != orig_sender_address.to_ed25519()? {
+		let orig_sender_a = proofaddress::payment_proof_address(&keychain, &parent_key_id, index)?;
+		if p.sender_address.public_key != orig_sender_a.public_key {
 			return Err(ErrorKind::PaymentProof(
 				"Sender address on slate does not match original sender address".to_owned(),
 			)
 			.into());
 		}
 
-		if orig_proof_info.receiver_address != p.receiver_address {
+		if orig_proof_info.receiver_address.public_key != p.receiver_address.public_key {
 			return Err(ErrorKind::PaymentProof(
 				"Recipient address on slate does not match original recipient address".to_owned(),
 			)
 			.into());
 		}
+
+		//build the message which was used to generated receiver signature.
 		let msg = payment_proof_message(
 			slate.amount,
 			&slate.calc_excess(&keychain)?,
-			orig_sender_address.to_ed25519()?,
+			orig_sender_a.public_key.clone(),
 		)?;
-		let sig = match p.receiver_signature {
+		let sig = match p.clone().receiver_signature {
 			Some(s) => s,
 			None => {
 				return Err(ErrorKind::PaymentProof(
@@ -616,12 +620,40 @@ where
 			}
 		};
 
-		if let Err(e) = p.receiver_address.verify(&msg, &sig) {
-			return Err(ErrorKind::PaymentProof(format!(
-				"Invalid proof signature, {}",
-				e
-			)))?;
-		};
+		let secp = Secp256k1::new();
+		let signature_ser = util::from_hex(&sig).map_err(|e| {
+			ErrorKind::TxProofGenericError(format!(
+				"Unable to build signature from HEX {}, {}",
+				&sig, e
+			))
+		})?;
+		let signature = Signature::from_der(&secp, &signature_ser).map_err(|e| {
+			ErrorKind::TxProofGenericError(format!("Unable to build signature, {}", e))
+		})?;
+		debug!(
+			"the receiver pubkey is {}",
+			orig_proof_info.receiver_address.clone().public_key
+		);
+		let receiver_pubkey = orig_proof_info.receiver_address.public_key().map_err(|e| {
+			ErrorKind::TxProofGenericError(format!("Unable to get receiver address, {}", e))
+		})?;
+		crypto::verify_signature(&msg, &signature, &receiver_pubkey)
+			.map_err(|e| ErrorKind::TxProofVerifySignature(format!("{}", e)))?;
+
+		////add an extra step of generating and save proof.
+		//generate the sender secret key
+		let sender_address_secret_key =
+			address::address_from_derivation_path(&keychain, &parent_key_id, index)?;
+		let tx_proof = TxProof::from_slate(msg, slate, &sender_address_secret_key, &orig_sender_a)
+			.map_err(|e| {
+				ErrorKind::TxProofVerifySignature(format!(
+					"Cannot create tx_proof using slate, {}",
+					e
+				))
+			})?;
+
+		debug!("tx_proof = {:?}", tx_proof);
+		push_proof_for_slate(&slate.id, tx_proof);
 	}
 	Ok(())
 }
@@ -665,18 +697,19 @@ mod test {
 		assert_eq!(tx1.outputs()[0].commitment(), tx2.inputs()[0].commitment());
 	}
 
+	/*
 	#[test]
 	fn payment_proof_construction() {
 		let secp_inst = static_secp_instance();
 		let secp = secp_inst.lock();
-		let mut test_rng = StepRng::new(1_234_567_890_u64, 1);
-		let sec_key = secp::key::SecretKey::new(&secp, &mut test_rng);
-		let d_skey = DalekSecretKey::from_bytes(&sec_key.0).unwrap();
 
-		let address: DalekPublicKey = (&d_skey).into();
+		let identifier = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
+		let keychain = ExtKeychain::from_random_seed(true).unwrap();
+		let sender_address_secret_key =
+			address::address_from_derivation_path(&keychain, &identifier, 0).unwrap();
+		let public_key = crypto::public_key_from_secret_key(&sender_address_secret_key).unwrap();
 
 		let kernel_excess = {
-			ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 			let keychain = ExtKeychain::from_random_seed(true).unwrap();
 			let switch = SwitchCommitmentType::Regular;
 			let id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -697,16 +730,30 @@ mod test {
 		};
 
 		let amount = 1_234_567_890_u64;
-		let msg = payment_proof_message(amount, &kernel_excess, address).unwrap();
+		let sender_address_string = ProvableAddress::from_pub_key(&public_key).public_key;
+		let msg = payment_proof_message(amount, &kernel_excess, sender_address_string).unwrap();
 		println!("payment proof message is (len {}): {:?}", msg.len(), msg);
 
-		let decoded = _decode_payment_proof_message(&msg).unwrap();
-		assert_eq!(decoded.0, amount);
-		assert_eq!(decoded.1, kernel_excess);
-		assert_eq!(decoded.2, address);
+		//todo don't know know to get PublicKey from bytes same as DalekPublicKey
+		//		let decoded = _decode_payment_proof_message(&msg).unwrap();
+		//		assert_eq!(decoded.0, amount);
+		//		assert_eq!(decoded.1, kernel_excess);
+		//		assert_eq!(decoded.2, address);
+		let provable_address =
+			proofaddress::payment_proof_address(&keychain, &identifier, 0).unwrap();
 
-		let sig = create_payment_proof_signature(amount, &kernel_excess, address, sec_key).unwrap();
+		let sig = create_payment_proof_signature(
+			amount,
+			&kernel_excess,
+			provable_address,
+			sender_address_secret_key,
+		)
+		.unwrap();
 
-		assert!(address.verify(&msg, &sig).is_ok());
+		let secp = Secp256k1::new();
+		let signature = util::from_hex(&sig).unwrap();
+		let signature = Signature::from_der(&secp, &signature).unwrap();
+		assert!(crypto::verify_signature(&msg, &signature, &public_key).is_ok());
 	}
+	*/
 }

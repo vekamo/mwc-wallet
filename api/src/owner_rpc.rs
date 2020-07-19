@@ -30,8 +30,7 @@ use crate::util::secp::pedersen;
 use crate::util::Mutex;
 use crate::{Owner, OwnerRpcS};
 use easy_jsonrpc_mw;
-use grin_wallet_util::OnionV3Address;
-use std::convert::TryFrom;
+use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use std::sync::Arc;
 
 /// Public definition used to generate Owner jsonrpc api.
@@ -413,7 +412,7 @@ pub trait OwnerRpc: Sync + Send {
 						"selection_strategy_is_use_all": false,
 						"message": "my message",
 						"target_slate_version": 3,
-						"payment_proof_recipient_address": "d03c09e9c19bb74aa9ea44e0fe5ae237a9bf40bddf0941064a80913a4459c8bb",
+						"payment_proof_recipient_address": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2",
 						"ttl_blocks": 3,
 						"send_args": null
 					}
@@ -445,9 +444,9 @@ pub trait OwnerRpc: Sync + Send {
 					}
 				  ],
 				  "payment_proof": {
-					"receiver_address": "d03c09e9c19bb74aa9ea44e0fe5ae237a9bf40bddf0941064a80913a4459c8bb",
+					"receiver_address": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2",
 					"receiver_signature": null,
-					"sender_address": "294b08ba7422c0e1d9215d98829b7eba4834db80c86d5292ecbb199907d7ae42"
+					"sender_address": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5"
 				  },
 				  "ttl_cutoff_height": "7",
 				  "tx": {
@@ -1690,8 +1689,11 @@ pub fn run_doctest_owner(
 		assert!(wallet_refreshed);
 	}
 
-	//	let proof_address = api_impl::owner::get_public_proof_address(wallet2.clone(), (&mask2).as_ref(), 0).unwrap();
-	//	println!("Wallet 2 proof_address: {}", proof_address);
+	let proof_address_pubkey =
+		api_impl::owner::get_public_proof_address(wallet2.clone(), (&mask2).as_ref(), 0).unwrap();
+	//println!("owner_rpc Wallet 2 proof_address is ============: {}", proof_address);
+	let public_proof_address = ProvableAddress::from_pub_key(&proof_address_pubkey);
+	println!("public_proof address {}", public_proof_address.public_key);
 
 	if perform_tx {
 		api_impl::owner::update_wallet_state(wallet1.clone(), (&mask1).as_ref(), &None).unwrap();
@@ -1701,8 +1703,8 @@ pub fn run_doctest_owner(
 		let w = w_lock.lc_provider().unwrap().wallet_inst().unwrap();
 		let proof_address = match payment_proof {
 			true => {
-				let address = "fc558d4eaaffb62875553e2f5fe549b9713601db84e70ab85e2c900b3b8ac990";
-				Some(OnionV3Address::try_from(address).unwrap())
+				//let address = "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2";
+				Some(public_proof_address)
 			}
 			false => None,
 		};

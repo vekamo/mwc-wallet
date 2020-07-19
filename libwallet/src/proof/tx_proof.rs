@@ -21,6 +21,7 @@ use super::crypto;
 use super::message::EncryptedMessage;
 use super::proofaddress::ProvableAddress;
 use crate::error::{Error, ErrorKind};
+use crate::slate_versions::VersionedSlate;
 use crate::Slate;
 use std::collections::HashMap;
 use std::fs::File;
@@ -48,6 +49,10 @@ pub fn pop_proof_for_slate(uuid: &uuid::Uuid) -> Option<TxProof> {
 }
 
 /// Tx Proof - the mwc713 based proof that can be made for any address that is a public key.
+/// we would like to generalize mwc713 proof implementation to be used in mwc-wallet proof framework with changing
+/// of the message to generate signature in receiver wallet.
+/// in mwc713 proof signature is generated using json string of  slate; and after upgrade
+/// it is generated using three factors: amount,sender address and commitment sum.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TxProof {
 	/// From address.
@@ -68,6 +73,10 @@ pub struct TxProof {
 	pub inputs: Vec<Commitment>,
 	/// Placeholder
 	pub outputs: Vec<Commitment>,
+	///added to support the new proof implementation but be backward compatible
+	pub version: Option<String>,
+	///this is the encrypted slate message
+	pub slate_message: Option<String>,
 }
 
 impl TxProof {
@@ -90,13 +99,24 @@ impl TxProof {
 		crypto::verify_signature(&challenge, &self.signature, &public_key)
 			.map_err(|e| ErrorKind::TxProofVerifySignature(format!("{}", e)))?;
 
-		let encrypted_message: EncryptedMessage =
-			serde_json::from_str(&self.message).map_err(|e| {
+		let encrypted_message: EncryptedMessage;
+		if let Some(_version) = &self.version {
+			//this is the newer version tx_proof
+			encrypted_message = serde_json::from_str(&self.slate_message.clone().unwrap())
+				.map_err(|e| {
+					ErrorKind::TxProofGenericError(format!(
+						"Fail to convert Json to EncryptedMessage {}, {}",
+						self.message, e
+					))
+				})?;
+		} else {
+			encrypted_message = serde_json::from_str(&self.message.clone()).map_err(|e| {
 				ErrorKind::TxProofGenericError(format!(
-					"Fail to convert Json to EncryptedMessage {}, {}",
+					"Fail to convert proof message Json to EncryptedMessage {}, {}",
 					self.message, e
 				))
 			})?;
+		}
 
 		// TODO: at some point, make this check required
 		let destination = &encrypted_message.destination;
@@ -175,11 +195,108 @@ impl TxProof {
 			fee: 0,
 			inputs: vec![],
 			outputs: vec![],
+			version: None,
+			slate_message: None,
 		};
 
 		let (_, slate) = proof.verify_extract(Some(expected_destination))?;
 
 		Ok((slate, proof))
+	}
+
+	/// Build proof data from slate
+	pub fn from_slate(
+		message: String,
+		slate: &Slate,
+		secret_key: &SecretKey,
+		expected_destination: &ProvableAddress, //needs to figure out where to get this expected_destination
+	) -> Result<TxProof, ErrorKind> {
+		if let Some(p) = slate.payment_proof.clone() {
+			if let Some(signature) = p.receiver_signature {
+				//build the signature from signature string:
+				let address = p.receiver_address;
+				let secp = Secp256k1::new();
+				let signature = util::from_hex(&signature).map_err(|e| {
+					ErrorKind::TxProofGenericError(format!(
+						"Unable to build signature from HEX {}, {}",
+						signature, e
+					))
+				})?;
+				let signature = Signature::from_der(&secp, &signature).map_err(|e| {
+					ErrorKind::TxProofGenericError(format!("Unable to build signature, {}", e))
+				})?;
+
+				let _public_key = address.public_key().map_err(|e| {
+					ErrorKind::TxProofGenericError(format!(
+						"Unable to build public key for address {}, {}",
+						address, e
+					))
+				})?;
+
+				//build the encrypted message from the slate
+				//and generate the key.
+
+				let version = slate.lowest_version();
+				let slate = VersionedSlate::into_version(slate.clone(), version);
+
+				let encrypted_message = EncryptedMessage::new(
+					serde_json::to_string(&slate).map_err(|e| {
+						ErrorKind::TxProofGenericError(format!(
+							"Unable to build public key for address {}, {}",
+							address, e
+						))
+					})?,
+					expected_destination, //this is the sender address when receiver wallet sends the slate back
+					&expected_destination.public_key().map_err(|e| {
+						ErrorKind::TxProofGenericError(format!(
+							"Unable to build public key for address {}, {}",
+							address, e
+						))
+					})?,
+					&secret_key,
+				)
+				.map_err(|e| ErrorKind::GenericError(format!("Unable encrypt slate, {}", e)))?;
+
+				let message_ser = &serde_json::to_string(&encrypted_message).map_err(|e| {
+					ErrorKind::TxProofGenericError(format!(
+						"Unable to build public key for address {}, {}",
+						address, e
+					))
+				})?;
+				let key = encrypted_message
+					.key(&expected_destination.public_key().unwrap(), secret_key)
+					.map_err(|e| {
+						ErrorKind::TxProofGenericError(format!(
+							"Unable to build a signature, {}",
+							e
+						))
+					})?;
+
+				let proof = TxProof {
+					address: address.clone(),
+					message,
+					challenge: "".to_string(),
+					signature,
+					key,
+					amount: 0,
+					fee: 0,
+					inputs: vec![],
+					outputs: vec![],
+					version: Some("version2".to_string()),
+					slate_message: Some(message_ser.to_string()),
+				};
+				proof.verify_extract(Some(expected_destination))?;
+				Ok(proof)
+			} else {
+				return Err(ErrorKind::TxProofGenericError(
+					"No receiver signature in payment proof in slate".to_string(),
+				));
+			}
+		} else {
+			return Err(ErrorKind::TxProofGenericError(
+				"No pyament proof in slate".to_string(),
+			));
+		}
 	}
 
 	/// Init proff files storage

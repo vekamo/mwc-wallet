@@ -38,7 +38,7 @@ pub struct EncryptedMessage {
 }
 
 // See comments at  mwc-wallet/impls/src/seed.rs
-// Seed is encrypted exactlty the same way ...
+// Seed is encrypted exactly the same way ...
 
 impl EncryptedMessage {
 	/// Construct new instance

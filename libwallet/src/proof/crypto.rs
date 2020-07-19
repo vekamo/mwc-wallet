@@ -52,6 +52,20 @@ pub fn sign_challenge(challenge: &str, secret_key: &SecretKey) -> Result<Signatu
 		.map_err(|e| ErrorKind::Secp(e).into())
 }
 
+/// convert to a signature from string
+pub fn signature_from_string(sig_str: &str) -> Result<Signature, Error> {
+	let secp = Secp256k1::new();
+	let signature_ser = util::from_hex(sig_str).map_err(|e| {
+		ErrorKind::TxProofGenericError(format!(
+			"Unable to build signature from HEX {}, {}",
+			sig_str, e
+		))
+	})?;
+	let signature = Signature::from_der(&secp, &signature_ser)
+		.map_err(|e| ErrorKind::TxProofGenericError(format!("Unable to build signature, {}", e)))?;
+	Ok(signature)
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// to and from Hex conversion

@@ -27,12 +27,10 @@ use crate::grin_util::secp::key::{PublicKey, SecretKey, ZERO_KEY};
 use crate::grin_util::secp::pedersen::Commitment;
 use crate::grin_util::secp::{self, pedersen, Secp256k1};
 use crate::grin_util::ZeroingString;
+use crate::proof::proofaddress::ProvableAddress;
 use crate::slate::ParticipantMessages;
-use crate::slate_versions::ser as dalek_ser;
 use crate::Slate;
 use chrono::prelude::*;
-use ed25519_dalek::PublicKey as DalekPublicKey;
-use ed25519_dalek::Signature as DalekSignature;
 use serde;
 use serde_json;
 use std::collections::HashMap;
@@ -1082,19 +1080,15 @@ impl TxLogEntry {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StoredProofInfo {
 	/// receiver address
-	#[serde(with = "dalek_ser::dalek_pubkey_serde")]
-	pub receiver_address: DalekPublicKey,
-	#[serde(with = "dalek_ser::option_dalek_sig_serde")]
+	pub receiver_address: ProvableAddress,
 	/// receiver signature
-	pub receiver_signature: Option<DalekSignature>,
+	pub receiver_signature: Option<String>,
 	/// sender address derivation path index
 	pub sender_address_path: u32,
 	/// sender address
-	#[serde(with = "dalek_ser::dalek_pubkey_serde")]
-	pub sender_address: DalekPublicKey,
+	pub sender_address: ProvableAddress,
 	/// sender signature
-	#[serde(with = "dalek_ser::option_dalek_sig_serde")]
-	pub sender_signature: Option<DalekSignature>,
+	pub sender_signature: Option<String>,
 }
 
 impl ser::Writeable for StoredProofInfo {

@@ -17,12 +17,10 @@
 use crate::grin_core::libtx::secp_ser;
 use crate::grin_keychain::Identifier;
 use crate::grin_util::secp::pedersen;
-use crate::slate_versions::ser as dalek_ser;
+use crate::proof::proofaddress;
+use crate::proof::proofaddress::ProvableAddress;
 use crate::slate_versions::SlateVersion;
 use crate::types::OutputData;
-use grin_wallet_util::OnionV3Address;
-
-use ed25519_dalek::Signature as DalekSignature;
 
 /// Send TX API Args
 // TODO: This is here to ensure the legacy V1 API remains intact
@@ -103,9 +101,12 @@ pub struct InitTxArgs {
 	#[serde(default)]
 	pub ttl_blocks: Option<u64>,
 	/// If set, require a payment proof for the particular recipient
-	#[serde(with = "dalek_ser::option_ov3_serde")]
+	#[serde(
+		serialize_with = "proofaddress::option_as_string",
+		deserialize_with = "proofaddress::option_proof_address_from_string"
+	)]
 	#[serde(default)]
-	pub payment_proof_recipient_address: Option<OnionV3Address>,
+	pub payment_proof_recipient_address: Option<ProvableAddress>,
 	/// address of another party to store in tx history.
 	#[serde(default)]
 	pub address: Option<String>,
@@ -307,18 +308,14 @@ pub struct PaymentProof {
 		deserialize_with = "secp_ser::commitment_from_hex"
 	)]
 	pub excess: pedersen::Commitment,
-	/// Recipient Wallet Address (Onion V3)
-	#[serde(with = "dalek_ser::ov3_serde")]
-	pub recipient_address: OnionV3Address,
+	/// Recipient Wallet Address
+	pub recipient_address: ProvableAddress,
 	/// Recipient Signature
-	#[serde(with = "dalek_ser::dalek_sig_serde")]
-	pub recipient_sig: DalekSignature,
-	/// Sender Wallet Address (Onion V3)
-	#[serde(with = "dalek_ser::ov3_serde")]
-	pub sender_address: OnionV3Address,
+	pub recipient_sig: String,
+	/// Sender Wallet Address
+	pub sender_address: ProvableAddress,
 	/// Sender Signature
-	#[serde(with = "dalek_ser::dalek_sig_serde")]
-	pub sender_sig: DalekSignature,
+	pub sender_sig: String,
 }
 
 /// Init swap operation

@@ -18,6 +18,7 @@ use crate::error::{Error, ErrorKind};
 use crate::libwallet::proof::crypto;
 use crate::libwallet::proof::crypto::Hex;
 use crate::util::Mutex;
+
 use crate::SlateSender;
 use crate::SwapMessageSender;
 use grin_core::core::amount_to_hr_string;
@@ -27,7 +28,7 @@ use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::proof::tx_proof::{push_proof_for_slate, TxProof};
 use grin_wallet_libwallet::swap::message::Message;
 use grin_wallet_libwallet::swap::message::SwapMessage;
-use grin_wallet_libwallet::Slate;
+use grin_wallet_libwallet::{Slate, VersionedSlate};
 use grin_wallet_util::grin_util::secp::key::SecretKey;
 use regex::Regex;
 use std::collections::HashMap;
@@ -357,6 +358,8 @@ impl MWCMQSBroker {
 	) -> Result<String, Error> {
 		let pkey = to.address.public_key()?;
 		let skey = secret_key.clone();
+		let version = slate.lowest_version();
+		let slate = VersionedSlate::into_version(slate.clone(), version);
 		let serde_json = serde_json::to_string(&slate).map_err(|e| {
 			ErrorKind::MqsGenericError(format!("Unable convert Slate to Json, {}", e))
 		})?;
@@ -401,6 +404,8 @@ impl MWCMQSBroker {
 		}
 		let pkey = to.address.public_key()?;
 		let skey = secret_key.clone();
+		let version = slate.lowest_version();
+		let slate = VersionedSlate::into_version(slate.clone(), version);
 
 		let message = EncryptedMessage::new(
 			serde_json::to_string(&slate).map_err(|e| {
@@ -441,7 +446,6 @@ impl MWCMQSBroker {
 			&str::replace(&to.get_stripped(), "@", "%40")
 		);
 		let response = client.post(&url).form(&params).send();
-		println!("post slate url = {}", url);
 
 		if !response.is_ok() {
 			return Err(ErrorKind::MqsInvalidRespose("mwcmqs connection error".to_string()).into());

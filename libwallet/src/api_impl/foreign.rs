@@ -129,7 +129,7 @@ where
 		// purposes
 		address_for_logging = Some("http".to_string());
 	}
-
+	debug!("foreign just received_tx just got slate = {:?}", slate);
 	let mut ret_slate = slate.clone();
 	check_ttl(w, &ret_slate, refresh_from_node)?;
 
@@ -203,7 +203,7 @@ where
 		let sig = tx::create_payment_proof_signature(
 			ret_slate.amount,
 			&excess,
-			p.sender_address,
+			p.sender_address.clone(),
 			address::address_from_derivation_path(&keychain, &parent_key_id, 0)?,
 		)?;
 

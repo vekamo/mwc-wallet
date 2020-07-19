@@ -30,6 +30,7 @@ use grin_wallet_controller::{Error, ErrorKind};
 use grin_wallet_impls::tor::config::is_tor_address;
 use grin_wallet_impls::{DefaultLCProvider, DefaultWalletImpl};
 use grin_wallet_impls::{PathToSlate, SlateGetter as _};
+use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::swap::types::Currency;
 use grin_wallet_libwallet::Slate;
 use grin_wallet_libwallet::{IssueInvoiceTxArgs, NodeClient, WalletInst, WalletLCProvider};
@@ -37,11 +38,9 @@ use grin_wallet_util::grin_core as core;
 use grin_wallet_util::grin_core::core::amount_to_hr_string;
 use grin_wallet_util::grin_core::global;
 use grin_wallet_util::grin_keychain as keychain;
-use grin_wallet_util::OnionV3Address;
 use linefeed::terminal::Signal;
 use linefeed::{Interface, ReadResult};
 use rpassword;
-use std::convert::TryFrom;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -512,11 +511,11 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 			true => {
 				// if the destination address is a TOR address, we don't need the address
 				// separately
-				match OnionV3Address::try_from(dest) {
+				match ProvableAddress::from_str(dest) {
 					Ok(a) => Some(a),
 					Err(_) => {
 						let addr = parse_required(args, "proof_address")?;
-						match OnionV3Address::try_from(addr) {
+						match ProvableAddress::from_str(addr) {
 							Ok(a) => Some(a),
 							Err(e) => {
 								let msg = format!("Invalid proof address: {:?}", e);

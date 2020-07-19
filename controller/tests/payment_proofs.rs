@@ -29,6 +29,7 @@ use grin_wallet_util::OnionV3Address;
 #[macro_use]
 mod common;
 use common::{clean_output_dir, create_wallet_proxy, setup};
+use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 
 /// Various tests on accounts within the same wallet
 fn payment_proofs_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
@@ -82,7 +83,7 @@ fn payment_proofs_test_impl(test_dir: &'static str) -> Result<(), wallet::Error>
 		Ok(())
 	})?;
 
-	let address = OnionV3Address::from_bytes(address.as_ref().unwrap().to_bytes());
+	let address = ProvableAddress::from_pub_key(&address.unwrap());
 	println!("Public address is: {:?}", address);
 	let amount = 2_000_000_000; // grin value: 60_000_000_000
 	let mut slate = Slate::blank(1);
@@ -101,8 +102,13 @@ fn payment_proofs_test_impl(test_dir: &'static str) -> Result<(), wallet::Error>
 		let slate_i = sender_api.init_send_tx(m, args, None, 1)?;
 
 		assert_eq!(
-			slate_i.payment_proof.as_ref().unwrap().receiver_address,
-			address.to_ed25519().unwrap(),
+			slate_i
+				.payment_proof
+				.as_ref()
+				.unwrap()
+				.receiver_address
+				.public_key,
+			address.public_key,
 		);
 		println!(
 			"Sender addr: {:?}",
@@ -121,8 +127,13 @@ fn payment_proofs_test_impl(test_dir: &'static str) -> Result<(), wallet::Error>
 		assert!(txs[0].payment_proof.is_some());
 		let pp = txs[0].clone().payment_proof.unwrap();
 		assert_eq!(
-			pp.receiver_address,
-			slate_i.payment_proof.as_ref().unwrap().receiver_address
+			pp.receiver_address.public_key,
+			slate_i
+				.payment_proof
+				.as_ref()
+				.unwrap()
+				.receiver_address
+				.public_key
 		);
 		assert!(pp.receiver_signature.is_some());
 		assert_eq!(pp.sender_address_path, 0);
