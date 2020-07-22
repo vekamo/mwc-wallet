@@ -163,6 +163,7 @@ pub mod dalek_sig_serde {
 	use serde::{Deserialize, Deserializer, Serializer};
 
 	use crate::grin_util::{from_hex, to_hex};
+	use crate::signature::Signature;
 
 	///
 	pub fn serialize<S>(key: &DalekSignature, serializer: S) -> Result<S::Ok, S::Error>
@@ -194,6 +195,7 @@ pub mod option_dalek_sig_serde {
 	use serde::{Deserialize, Deserializer, Serializer};
 
 	use crate::grin_util::{from_hex, to_hex};
+	use crate::signature::Signature;
 
 	///
 	pub fn serialize<S>(key: &Option<DalekSignature>, serializer: S) -> Result<S::Ok, S::Error>
@@ -244,6 +246,7 @@ mod test {
 	use ed25519_dalek::Signature as DalekSignature;
 	use serde::Deserialize;
 
+	use ed25519_dalek::Signer;
 	use serde_json;
 
 	#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]

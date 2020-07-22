@@ -48,6 +48,7 @@ extern crate strum_macros;
 
 extern crate grin_api;
 extern crate hex;
+extern crate signature;
 
 pub mod address;
 pub mod api_impl;

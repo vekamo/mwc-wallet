@@ -15,14 +15,17 @@
 use crate::grin_util as util;
 use crate::grin_util::secp::key::SecretKey;
 use crate::grin_util::secp::pedersen::Commitment;
-use crate::grin_util::secp::{Secp256k1, Signature};
+use crate::grin_util::secp::Secp256k1;
+use crate::grin_util::secp::Signature;
 
 use super::crypto;
 use super::message::EncryptedMessage;
 use super::proofaddress::ProvableAddress;
 use crate::error::{Error, ErrorKind};
+use crate::signature::Signature as otherSignature;
 use crate::slate_versions::VersionedSlate;
 use crate::Slate;
+use ed25519_dalek::Verifier;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -62,7 +65,7 @@ pub struct TxProof {
 	/// Challenge
 	pub challenge: String,
 	/// Message & Challenge signature
-	pub signature: Signature,
+	pub signature: Option<Signature>,
 	/// Private key to decrypt the message
 	pub key: [u8; 32],
 	/// Placeholder
@@ -77,6 +80,8 @@ pub struct TxProof {
 	pub version: Option<String>,
 	///this is the encrypted slate message
 	pub slate_message: Option<String>,
+	pub tor_proof_signature: Option<String>,
+	pub tor_sender_address: Option<String>,
 }
 
 impl TxProof {
@@ -89,15 +94,58 @@ impl TxProof {
 		challenge.push_str(self.message.as_str());
 		challenge.push_str(self.challenge.as_str());
 
-		let public_key = self.address.public_key().map_err(|e| {
-			ErrorKind::TxProofGenericError(format!(
-				"Unable to build public key from address {}, {}",
-				self.address, e
-			))
-		})?;
+		let mut tor_proof = false;
+		if let Some(version) = &self.version {
+			if version.eq("tor") {
+				tor_proof = true;
+			}
+		}
+		if tor_proof {
+			if let Some(signature) = &self.tor_proof_signature {
+				let dalek_sig_vec = util::from_hex(&signature).map_err(|e| {
+					ErrorKind::TxProofGenericError(format!(
+						"Unable to deserialize tor payment proof signature, {}",
+						e
+					))
+				})?;
 
-		crypto::verify_signature(&challenge, &self.signature, &public_key)
-			.map_err(|e| ErrorKind::TxProofVerifySignature(format!("{}", e)))?;
+				let dalek_sig = ed25519_dalek::Signature::from_bytes(dalek_sig_vec.as_ref())
+					.map_err(|e| {
+						ErrorKind::TxProofGenericError(format!(
+							"Unable to deserialize tor payment proof receiver signature, {}",
+							e
+						))
+					})?;
+
+				let receiver_dalek_pub_key = self.address.tor_public_key().map_err(|e| {
+					ErrorKind::TxProofGenericError(format!(
+						"Unable to deserialize tor payment proof receiver address, {}",
+						e
+					))
+				})?;
+				if let Err(e) = receiver_dalek_pub_key.verify(&challenge.as_bytes(), &dalek_sig) {
+					return Err(ErrorKind::PaymentProof(format!(
+						"Invalid proof signature, {}",
+						e
+					)))?;
+				};
+			}
+		} else {
+			let public_key = self.address.public_key().map_err(|e| {
+				ErrorKind::TxProofGenericError(format!(
+					"Unable to build public key from address {}, {}",
+					self.address, e
+				))
+			})?;
+			if let Some(signature) = &self.signature {
+				crypto::verify_signature(&challenge, &signature, &public_key)
+					.map_err(|e| ErrorKind::TxProofVerifySignature(format!("{}", e)))?;
+			} else {
+				return Err(ErrorKind::TxProofVerifySignature(format!(
+					"empty proof signature!"
+				)));
+			}
+		}
 
 		let encrypted_message: EncryptedMessage;
 		if let Some(_version) = &self.version {
@@ -119,7 +167,7 @@ impl TxProof {
 		}
 
 		// TODO: at some point, make this check required
-		let destination = &encrypted_message.destination;
+		let destination = &encrypted_message.destination; //sender address
 
 		if expected_destination.is_some()
 			&& destination.public_key != expected_destination.clone().unwrap().public_key
@@ -140,8 +188,18 @@ impl TxProof {
 				e
 			))
 		})?;
-
-		Ok((destination.clone(), slate))
+		//for mwc713 display purpose. the destination needs to be onion address
+		if let Some(onion_addr) = self.tor_sender_address.clone() {
+			let tor_sender = ProvableAddress::from_str(&onion_addr).map_err(|e| {
+				ErrorKind::TxProofGenericError(format!(
+					"Unable to create sender onion address, {}",
+					e
+				))
+			})?;
+			Ok((tor_sender, slate))
+		} else {
+			Ok((destination.clone(), slate))
+		}
 	}
 
 	/// Build proof data. massage suppose to be slate.
@@ -189,7 +247,7 @@ impl TxProof {
 			address: address.clone(),
 			message,
 			challenge,
-			signature,
+			signature: Some(signature),
 			key,
 			amount: 0,
 			fee: 0,
@@ -197,6 +255,8 @@ impl TxProof {
 			outputs: vec![],
 			version: None,
 			slate_message: None,
+			tor_proof_signature: None,
+			tor_sender_address: None,
 		};
 
 		let (_, slate) = proof.verify_extract(Some(expected_destination))?;
@@ -209,84 +269,157 @@ impl TxProof {
 		message: String,
 		slate: &Slate,
 		secret_key: &SecretKey,
-		expected_destination: &ProvableAddress, //needs to figure out where to get this expected_destination
+		expected_destination: &ProvableAddress, //sender address
+		tor_destination: Option<String>,        //tor onion address
 	) -> Result<TxProof, ErrorKind> {
 		if let Some(p) = slate.payment_proof.clone() {
 			if let Some(signature) = p.receiver_signature {
 				//build the signature from signature string:
-				let address = p.receiver_address;
-				let secp = Secp256k1::new();
-				let signature = util::from_hex(&signature).map_err(|e| {
-					ErrorKind::TxProofGenericError(format!(
-						"Unable to build signature from HEX {}, {}",
-						signature, e
-					))
-				})?;
-				let signature = Signature::from_der(&secp, &signature).map_err(|e| {
-					ErrorKind::TxProofGenericError(format!("Unable to build signature, {}", e))
-				})?;
+				if p.receiver_address.public_key.len() == 56 {
+					let address = p.receiver_address;
 
-				let _public_key = address.public_key().map_err(|e| {
-					ErrorKind::TxProofGenericError(format!(
-						"Unable to build public key for address {}, {}",
-						address, e
-					))
-				})?;
-
-				//build the encrypted message from the slate
-				//and generate the key.
-
-				let version = slate.lowest_version();
-				let slate = VersionedSlate::into_version(slate.clone(), version);
-
-				let encrypted_message = EncryptedMessage::new(
-					serde_json::to_string(&slate).map_err(|e| {
+					let _public_key = address.tor_public_key().map_err(|e| {
 						ErrorKind::TxProofGenericError(format!(
-							"Unable to build public key for address {}, {}",
+							"Unable to build dalek public key for address {}, {}",
 							address, e
-						))
-					})?,
-					expected_destination, //this is the sender address when receiver wallet sends the slate back
-					&expected_destination.public_key().map_err(|e| {
-						ErrorKind::TxProofGenericError(format!(
-							"Unable to build public key for address {}, {}",
-							address, e
-						))
-					})?,
-					&secret_key,
-				)
-				.map_err(|e| ErrorKind::GenericError(format!("Unable encrypt slate, {}", e)))?;
-
-				let message_ser = &serde_json::to_string(&encrypted_message).map_err(|e| {
-					ErrorKind::TxProofGenericError(format!(
-						"Unable to build public key for address {}, {}",
-						address, e
-					))
-				})?;
-				let key = encrypted_message
-					.key(&expected_destination.public_key().unwrap(), secret_key)
-					.map_err(|e| {
-						ErrorKind::TxProofGenericError(format!(
-							"Unable to build a signature, {}",
-							e
 						))
 					})?;
 
-				let proof = TxProof {
-					address: address.clone(),
-					message,
-					challenge: "".to_string(),
-					signature,
-					key,
-					amount: 0,
-					fee: 0,
-					inputs: vec![],
-					outputs: vec![],
-					version: Some("version2".to_string()),
-					slate_message: Some(message_ser.to_string()),
-				};
-				proof.verify_extract(Some(expected_destination))?;
-				Ok(proof)
+					//build the encrypted message from the slate
+					//and generate the key.
+
+					let version = slate.lowest_version();
+					let slate = VersionedSlate::into_version(slate.clone(), version);
+
+					let encrypted_message = EncryptedMessage::new(
+						serde_json::to_string(&slate).map_err(|e| {
+							ErrorKind::TxProofGenericError(format!(
+								"Unable to build public key for address {}, {}",
+								address, e
+							))
+						})?,
+						expected_destination, //this is the sender address
+						&expected_destination.public_key().map_err(|e| {
+							ErrorKind::TxProofGenericError(format!(
+								"Unable to build public key for address {}, {}",
+								address, e
+							))
+						})?,
+						&secret_key,
+					)
+					.map_err(|e| ErrorKind::GenericError(format!("Unable encrypt slate, {}", e)))?;
+
+					let message_ser = &serde_json::to_string(&encrypted_message).map_err(|e| {
+						ErrorKind::TxProofGenericError(format!(
+							"Unable to build public key for address {}, {}",
+							address, e
+						))
+					})?;
+					let key = encrypted_message
+						.key(&expected_destination.public_key().unwrap(), secret_key)
+						.map_err(|e| {
+							ErrorKind::TxProofGenericError(format!(
+								"Unable to build a signature, {}",
+								e
+							))
+						})?;
+
+					//create the tor address for the sender wallet.
+
+					let proof = TxProof {
+						address: address.clone(),
+						message,
+						challenge: "".to_string(),
+						signature: None,
+						key,
+						amount: 0,
+						fee: 0,
+						inputs: vec![],
+						outputs: vec![],
+						version: Some("tor".to_string()),
+						slate_message: Some(message_ser.to_string()),
+						tor_proof_signature: Some(signature),
+						tor_sender_address: tor_destination,
+					};
+					proof.verify_extract(Some(expected_destination))?;
+					Ok(proof)
+				} else {
+					let address = p.receiver_address;
+					let secp = Secp256k1::new();
+					let signature = util::from_hex(&signature).map_err(|e| {
+						ErrorKind::TxProofGenericError(format!(
+							"Unable to build signature from HEX {}, {}",
+							signature, e
+						))
+					})?;
+					let signature = Signature::from_der(&secp, &signature).map_err(|e| {
+						ErrorKind::TxProofGenericError(format!("Unable to build signature, {}", e))
+					})?;
+
+					let _public_key = address.public_key().map_err(|e| {
+						ErrorKind::TxProofGenericError(format!(
+							"Unable to build public key for address {}, {}",
+							address, e
+						))
+					})?;
+
+					//build the encrypted message from the slate
+					//and generate the key.
+
+					let version = slate.lowest_version();
+					let slate = VersionedSlate::into_version(slate.clone(), version);
+
+					let encrypted_message = EncryptedMessage::new(
+						serde_json::to_string(&slate).map_err(|e| {
+							ErrorKind::TxProofGenericError(format!(
+								"Unable to build public key for address {}, {}",
+								address, e
+							))
+						})?,
+						expected_destination, //this is the sender address when receiver wallet sends the slate back
+						&expected_destination.public_key().map_err(|e| {
+							ErrorKind::TxProofGenericError(format!(
+								"Unable to build public key for address {}, {}",
+								address, e
+							))
+						})?,
+						&secret_key,
+					)
+					.map_err(|e| ErrorKind::GenericError(format!("Unable encrypt slate, {}", e)))?;
+
+					let message_ser = &serde_json::to_string(&encrypted_message).map_err(|e| {
+						ErrorKind::TxProofGenericError(format!(
+							"Unable to build public key for address {}, {}",
+							address, e
+						))
+					})?;
+					let key = encrypted_message
+						.key(&expected_destination.public_key().unwrap(), secret_key)
+						.map_err(|e| {
+							ErrorKind::TxProofGenericError(format!(
+								"Unable to build a signature, {}",
+								e
+							))
+						})?;
+
+					let proof = TxProof {
+						address: address.clone(),
+						message,
+						challenge: "".to_string(),
+						signature: Some(signature),
+						key,
+						amount: 0,
+						fee: 0,
+						inputs: vec![],
+						outputs: vec![],
+						version: Some("version2".to_string()),
+						slate_message: Some(message_ser.to_string()),
+						tor_proof_signature: None,
+						tor_sender_address: None,
+					};
+					proof.verify_extract(Some(expected_destination))?;
+					Ok(proof)
+				}
 			} else {
 				return Err(ErrorKind::TxProofGenericError(
 					"No receiver signature in payment proof in slate".to_string(),

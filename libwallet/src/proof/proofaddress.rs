@@ -17,9 +17,12 @@ use crate::address;
 use crate::error::Error;
 use crate::grin_util::secp::key::PublicKey;
 use crate::proof::crypto;
+use ed25519_dalek::PublicKey as DalekPublicKey;
 use grin_core::global;
 use grin_wallet_util::grin_keychain::{Identifier, Keychain};
+use grin_wallet_util::OnionV3Address;
 use serde::{Deserialize, Deserializer, Serializer};
+use std::convert::TryFrom;
 use std::fmt::{self, Display};
 
 /// Address prefixes for mainnet
@@ -49,7 +52,10 @@ impl ProvableAddress {
 	/// new instance
 	pub fn from_str(public_key: &str) -> Result<Self, Error> {
 		// Just check if it works
-		PublicKey::from_base58_check(public_key, version_bytes())?;
+		//this can be either PublicKey or DalekPublicKey
+		if public_key.len() != 56 {
+			PublicKey::from_base58_check(public_key, version_bytes())?;
+		}
 
 		Ok(Self {
 			public_key: String::from(public_key),
@@ -70,6 +76,20 @@ impl ProvableAddress {
 	/// Get public key that represent this address
 	pub fn public_key(&self) -> Result<PublicKey, Error> {
 		PublicKey::from_base58_check(&self.public_key, version_bytes())
+	}
+	/// Create address from public key
+	pub fn from_tor_pub_key(public_key: &DalekPublicKey) -> Self {
+		Self {
+			public_key: OnionV3Address::from_bytes(*public_key.as_bytes()).to_ov3_str(),
+			domain: String::new(),
+			port: None,
+		}
+	}
+
+	/// Get public key that represent this address
+	pub fn tor_public_key(&self) -> Result<DalekPublicKey, Error> {
+		let addr = OnionV3Address::try_from(self.public_key.as_str())?;
+		Ok(addr.to_ed25519()?)
 	}
 }
 

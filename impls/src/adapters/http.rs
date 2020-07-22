@@ -354,7 +354,7 @@ impl SlateSender for HttpDataSender {
 			})?;
 		}
 
-		let res: Value = serde_json::from_str(&res_str).map_err(|e| {
+		let mut res: Value = serde_json::from_str(&res_str).map_err(|e| {
 			ErrorKind::GenericError(format!("Unable to parse respond {}, {}", res_str, e))
 		})?;
 		trace!("Response: {}", res);
@@ -367,6 +367,9 @@ impl SlateSender for HttpDataSender {
 			return Err(ErrorKind::ClientCallback(report).into());
 		}
 
+		if res["result"]["Ok"]["version_info"]["version"] == json!(3) && res["result"]["Ok"]["ttl_cutoff_height"] == json!(null) {
+			res["result"]["Ok"]["ttl_cutoff_height"] = json!(u64::MAX);
+		}
 		let slate_value = res["result"]["Ok"].clone();
 		trace!("slate_value: {}", slate_value);
 		let slate =

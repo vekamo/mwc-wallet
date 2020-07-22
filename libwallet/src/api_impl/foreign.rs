@@ -204,6 +204,7 @@ where
 			ret_slate.amount,
 			&excess,
 			p.sender_address.clone(),
+			p.receiver_address.clone(),
 			address::address_from_derivation_path(&keychain, &parent_key_id, 0)?,
 		)?;
 
