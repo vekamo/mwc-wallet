@@ -384,10 +384,7 @@ where
 	}
 
 	/// get kernel
-	fn get_kernel(
-		&mut self,
-		m: WalletProxyMessage,
-	) -> Result<WalletProxyMessage, libwallet::Error> {
+	fn get_kernel(&self, m: WalletProxyMessage) -> Result<WalletProxyMessage, libwallet::Error> {
 		let split = m.body.split(',').collect::<Vec<&str>>();
 		let excess = split[0].parse::<String>().unwrap();
 		let min = split[1].parse::<u64>().unwrap();
@@ -611,7 +608,7 @@ impl NodeClient for LocalWalletClient {
 	}
 
 	fn get_kernel(
-		&mut self,
+		&self,
 		excess: &pedersen::Commitment,
 		min_height: Option<u64>,
 		max_height: Option<u64>,

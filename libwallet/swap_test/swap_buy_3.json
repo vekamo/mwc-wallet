@@ -5,8 +5,8 @@
   "network": "Floonet",
   "role": "Buyer",
   "seller_lock_first": false,
-  "started": "2019-09-04T21:22:32.386997Z",
-  "status": "Completed",
+  "started": "2019-09-04T21:22:32Z",
+  "state": "BuyerWaitForRedeemMwcConfirmations",
   "primary_amount": "100000000000",
   "secondary_amount": "3000000",
   "secondary_currency": "Btc",
@@ -15,27 +15,7 @@
       "cosign": "03b480859d2dcf9cd66f115b685b2847bf3f52f624d069d802e1dc9362be4f5bdf",
       "refund": "03434496eb1554ad47c7ec5c267e902e1b71a03e189cc4fe9c83d9513e3a4e2e5a",
       "refund_tx": null,
-      "confirmed_outputs": [
-        {
-          "out_point": {
-            "txid": "8551e10f16d42ace55f16dfdee096f5dab615a1bf92d9a88c2fe94b5270df706",
-            "vout": 0
-          },
-          "value": 1000000,
-          "height": 500002
-        },
-        {
-          "out_point": {
-            "txid": "5f28d9a513b3651f7dbc30a070dff2567ac6380157c72d0afcd54dd4cbd66ec4",
-            "vout": 0
-          },
-          "value": 2000000,
-          "height": 500000
-        }
-      ],
-      "locked": true,
-      "redeem_tx": null,
-      "redeem_confirmations": null
+      "redeem_tx": null
     }
   },
   "redeem_public": "030654f6b3b4b54db0f2b066e651dcd67709444d2131d207ae5add2167596a091a",
@@ -130,7 +110,6 @@
     ],
     "payment_proof": null
   },
-  "lock_confirmations": 30,
   "refund_slate": {
     "version_info": {
       "version": 3,
@@ -251,12 +230,113 @@
     ],
     "payment_proof": null
   },
-  "redeem_confirmations": 1,
   "adaptor_signature": "c243a5a05254a9e99cc69e80851f8566653ae806b8986595fedd057ae2a6b6dd20cea0957af2f764ab045d1177d4fa0a353428dcb8f572a9ca4b3007bcac9a0a",
   "mwc_confirmations": 30,
   "secondary_confirmations": 6,
   "message_exchange_time_sec": 3600,
   "redeem_time_sec": 3600,
-  "message1": null,
-  "message2": null
+  "message1": {
+    "id": "4fc16adb-9f32-4441-b0c1-b4de076a1972",
+    "inner": {
+      "AcceptOffer": {
+        "multisig": {
+          "partial_commitment": "0929fbb62bc719998c1146fc78955ed210bb5bf474f968cbce230175e2585fb71c",
+          "t_1": "025820002d7b0fda64d5f9c5ab58c6169f205da4bcf28d4b5091a3376bc3e357a9",
+          "t_2": "02c48aeedbc41836ce47ed930655db0d1af7d484ab3d0c47029feddc97b6264904",
+          "tau_x": "e6576c9e6521204c6bfe83cf14b02dd4ef4585ea8ccbd4e3a8f46b580b3af4dd"
+        },
+        "redeem_public": "030654f6b3b4b54db0f2b066e651dcd67709444d2131d207ae5add2167596a091a",
+        "lock_participant": {
+          "id": "1",
+          "public_blind_excess": "0329fbb62bc719998c1146fc78955ed210bb5bf474f968cbce230175e2585fb71c",
+          "public_nonce": "025095c06816053b34317505e03ec069483ea0c17a865851560c06ce1a7c01b23b",
+          "part_sig": "3bb2017c1ace060c565158867ac1a03e4869c03ee0057531343b051668c095508dbef5d8c85ffa7138968c04f8e9939bea2b696a0f40f884ec0f5b05e78e9c10",
+          "message": null,
+          "message_sig": null
+        },
+        "refund_participant": {
+          "id": "1",
+          "public_blind_excess": "0229fbb62bc719998c1146fc78955ed210bb5bf474f968cbce230175e2585fb71c",
+          "public_nonce": "02c5feea3b4566008a8075f9d16b9259853d7575719d5608a7160f8361a52efa96",
+          "part_sig": "96fa2ea561830f16a708569d7175753d8559926bd1f975808a0066453beafec5ad56547ae452ba0abcec4f1d41d21e695dc4b08a984928ca68b7026362a7c9ee",
+          "message": null,
+          "message_sig": null
+        }
+      }
+    },
+    "inner_secondary": {
+      "BTC": {
+        "AcceptOffer": {
+          "refund": "03434496eb1554ad47c7ec5c267e902e1b71a03e189cc4fe9c83d9513e3a4e2e5a"
+        }
+      }
+    }
+  },
+  "message2": {
+    "id": "4fc16adb-9f32-4441-b0c1-b4de076a1972",
+    "inner": {
+      "InitRedeem": {
+        "redeem_slate": {
+          "version_info": {
+            "version": 2,
+            "orig_version": 3,
+            "block_header_version": 1
+          },
+          "num_participants": 2,
+          "id": "78aa5af1-048e-4c49-8776-a2e66d4a460c",
+          "tx": {
+            "offset": "90de4a3812c7b78e567548c86926820d838e7e0b43346b1ba63066cd5cc7d999",
+            "body": {
+              "inputs": [
+                {
+                  "features": "Plain",
+                  "commit": "084ff3703ce3ac1354759727878d0868b09867b192dcdf7f0be043d2a6d35e28fc"
+                }
+              ],
+              "outputs": [
+                {
+                  "features": "Plain",
+                  "commit": "08a0ba5aff8954f117ab2b1f475944d726b5e36fe474f1ca6db79630f2da5b9c85",
+                  "proof": "a7d92bfa3ccc026828c70eff08eefd9799ac1719f48fb16214b6b774aeac354af43b859f2f0a752e19f916b14b027b98db03bad04353cc925b7cbae64518f8360fa19ae8c4d46ef0148d0b3c303164c2d5936ccb511094fd449e74bcc55ca8f9433b79c280b715ffe6753111e4a662698d8a9cbeed3e72e48b774f9177d2a7afc67b47c9d52efee4ef78abff6a81c559a6e2e46535d07b76c2e8af8987e153128eb870e7e4b4db5e47908f4a92f100ca8412a6575352fc9cdd3370004cfa349a2bc1b0993212deebd9bb8c2a91a67a2e27e12214fc7e5d477a5db3fc11046b295314a82648cbf77db2108c1588de614b8cd5e15481a895e13c62fd24b923701ca7423eaad126046e0ea3f47c4e8ffef3f8b4ab70d215fe41103ed333b0c1b263dcdbde84ff88735e7841a0ea9aab1db997f88dacbff8f889a3708d27d8df7f28bdd0b585cb8420e411a96b9411b3b83e411ffa891e317bda2ed844c729fe346e0433036f0b70303bea1c1e307bb2c56ba561852d3ba01618c49507356184395a73a607c8b6647a9fc4fc31914906be890bd37b9001e0d200bed31ba1b0fc2a8b984780f037d623709f345f1a454f76cd27314d9b1b9e739c5756c8ffcc12ebcccf73cb4097005941a7394a86a27fd512f1ded7747b2a4c86b2048f1e31952d3f30e8f64d5734422242492b44b09eb73830b6a42467cf6a4923d967e54abc190a2d414a2b91f1268b61347b99c923167321e0e159367e27a7e8d08e73a38a9279c1cb4fab1a3a171a72b70c3a931feadf4b0909b76d19707048625ac0e5b5f416a90d8312b4b2db30ea12b4a33ab10db42ad45ffd1d3a3fe1d02922cdd90e0f02abfa5a5eebf7c0d1e756ffe6456b1e5f0e38ec66920f3231ba9d6fb061e276949cbe588a9869c48dd6c88191094a9ecc6dc13d3d17b4ee65d6e1d1da94944aef421dc4"
+                }
+              ],
+              "kernels": [
+                {
+                  "features": "Plain",
+                  "fee": "4000000",
+                  "lock_height": "0",
+                  "excess": "000000000000000000000000000000000000000000000000000000000000000000",
+                  "excess_sig": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          },
+          "amount": "99996000000",
+          "fee": "4000000",
+          "height": "300002",
+          "lock_height": "0",
+          "participant_data": [
+            {
+              "id": "0",
+              "public_blind_excess": "0267084e1cd57ab8bea0a631397d6addced43d13b154d9bbc39850b82a59a4940c",
+              "public_nonce": "0252cb796558103905ccf66987645382a19b8b2abebe501f63c1862cbe152da0fd",
+              "part_sig": null,
+              "message": null,
+              "message_sig": null
+            },
+            {
+              "id": "1",
+              "public_blind_excess": "025a6d71e906d11a3eaa0cef3022c401a258bd08e4d57913ed7bdd0630d18baf68",
+              "public_nonce": "02ddb6a6e27a05ddfe956598b806e83a6566851f85809ec69ce9a95452a0a543c2",
+              "part_sig": null,
+              "message": null,
+              "message_sig": null
+            }
+          ]
+        },
+        "adaptor_signature": "c243a5a05254a9e99cc69e80851f8566653ae806b8986595fedd057ae2a6b6dd20cea0957af2f764ab045d1177d4fa0a353428dcb8f572a9ca4b3007bcac9a0a"
+      }
+    },
+    "inner_secondary": "Empty"
+  }
 }

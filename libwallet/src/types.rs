@@ -375,7 +375,7 @@ pub trait NodeClient: Send + Sync + Clone {
 	/// Get a kernel and the height of the block it's included in. Returns
 	/// (tx_kernel, height, mmr_index)
 	fn get_kernel(
-		&mut self,
+		&self,
 		excess: &pedersen::Commitment,
 		min_height: Option<u64>,
 		max_height: Option<u64>,

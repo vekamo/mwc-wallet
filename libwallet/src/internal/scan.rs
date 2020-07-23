@@ -791,7 +791,7 @@ where
 		}
 
 		// Validate kernels from transaction. Kernel are a source of truth
-		let mut client = w.w2n_client().clone();
+		let client = w.w2n_client().clone();
 		for tx in transactions.values_mut() {
 			if !(tx.tx_log.confirmed || tx.tx_log.is_cancelled())
 				|| tx.tx_log.output_height >= start_height

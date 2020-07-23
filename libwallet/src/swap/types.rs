@@ -15,6 +15,7 @@
 use super::bitcoin::{BtcBuyerContext, BtcData, BtcSellerContext};
 use super::ser::*;
 use super::ErrorKind;
+use crate::swap::message::Message;
 use grin_core::global::ChainTypes;
 use grin_core::{global, ser};
 use grin_keychain::Identifier;
@@ -73,49 +74,6 @@ pub enum Role {
 	Seller(String, u64),
 	/// Buyer  - buy MWC for BTC
 	Buyer,
-}
-
-/// Status of the MWC swap session
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Status {
-	/// Swap instance Created by Seller
-	Created,
-	/// Offered to Buyer
-	Offered,
-	/// Offer accepted by Seller
-	Accepted,
-	/// MWC & BTC funds are locked
-	Locked,
-	/// Init Redeem transaction
-	InitRedeem,
-	/// Buyer redeem MWC transaction
-	Redeem,
-	/// Seller redeem BTC Transaction
-	RedeemSecondary,
-	/// Done
-	Completed,
-	/// Failure scenario for Seller: MWC refund transaction was posted, get a refund
-	Refunded,
-	/// Failure scenario for both parties: Session is cancelled, might wait for Refund.
-	Cancelled,
-}
-
-impl fmt::Display for Status {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		let disp = match &self {
-			Status::Created => "created",
-			Status::Offered => "offered",
-			Status::Accepted => "accepted",
-			Status::Locked => "locked",
-			Status::InitRedeem => "init redeem",
-			Status::Redeem => "buyer redeem",
-			Status::RedeemSecondary => "seller redeem",
-			Status::Completed => "completed",
-			Status::Refunded => "refunded",
-			Status::Cancelled => "cancelled",
-		};
-		write!(f, "{}", disp)
-	}
 }
 
 /// Secondary currency that swap support
@@ -385,18 +343,30 @@ pub enum SecondaryBuyerContext {
 }
 
 /// Action or step of the swap process
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Action {
 	/// No further action required
 	None,
-	/// Send a message to the counterparty
-	SendMessage(usize),
+	/// Seller Send a message to the counterparty
+	SellerSendOfferMessage(Message),
+	/// Buyer send accpet offer back to Sender
+	BuyerSendAcceptOfferMessage(Message),
+
 	/// Wait for a message from the counterparty
-	ReceiveMessage,
-	/// Publish a transaction to the network
-	PublishTx,
-	/// Publish a transaction to the network of the secondary currency
-	PublishTxSecondary(Currency),
+	SellerWaitingForOfferMessage,
+	/// Buyer send to seller Init redeem message
+	BuyerSendInitRedeemMessage(Message),
+	/// Seller waiting for Init Redeem messgae
+	SellerWaitingForInitRedeemMessage,
+	/// Seller sending InitRedeemMessage
+	SellerSendRedeemMessage(Message),
+	/// Buyer waiting for Redeem Message
+	BuyerWaitingForRedeemMessage,
+
+	/// Seller Publishing an MWC lock transaction to the network
+	SellerPublishMwcLockTx,
+	/// Seller Publishing BTC redeem transaction to the network
+	SellerPublishTxSecondaryRedeem(Currency),
 	/// Deposit secondary currency
 	DepositSecondary {
 		/// Type of currency (BTC)
@@ -407,14 +377,18 @@ pub enum Action {
 		address: String,
 	},
 	/// Wait for sufficient confirmations. Lock transaction on MWC network
-	Confirmations {
+	WaitForMwcConfirmations {
+		/// What exactly are we waiting for.
+		name: String,
 		/// Required number of confirmations
 		required: u64,
 		/// Actual number of confirmations
 		actual: u64,
 	},
 	/// Wait for sufficient confirmations on the secondary currency
-	ConfirmationsSecondary {
+	WaitForSecondaryConfirmations {
+		/// What exactly are we waiting for.
+		name: String,
 		/// Type of currency (BTC)
 		currency: Currency,
 		/// Required number of confirmations
@@ -422,138 +396,175 @@ pub enum Action {
 		/// Actual number of confirmations
 		actual: u64,
 	},
+	/// Wait for the MWC redeem tx to be mined
+	SellerWaitForBuyerRedeemPublish {
+		/// Current mwc tip height
+		mwc_tip: u64,
+		/// Locking height
+		lock_height: u64,
+	},
 	/// Wait for the Grin redeem tx to be mined
-	ConfirmationRedeem,
+	WaitForMwcRefundUnlock {
+		/// Current mwc tip height
+		mwc_tip: u64,
+		/// Locking height
+		lock_height: u64,
+	},
+
+	/// Buyer publishing MWC redeem transaction and reveal the secret.
+	BuyerPublishMwcRedeemTx,
+
 	/// Wait for the secondary redeem tx to be mined
 	ConfirmationRedeemSecondary(Currency, String),
-	/// Complete swap
-	Complete,
-	/// Cancel swap
-	Cancel,
-	/// Waiting for mwc refund to pass through
-	WaitingForMwcRefund {
-		/// Required height
-		required: u64,
-		/// Actual height
-		height: u64,
-	},
+
+	/// Seller Publishing MWC Refund Tx to the network
+	SellerPublishMwcRefundTx,
+
+	/// Buyer publishing refund transaction
+	BuyerPublishSecondaryRefundTx(Currency),
+
 	/// Waiting for btc refund to pass through
 	WaitingForBtcRefund {
+		/// Type of currency (BTC)
+		currency: Currency,
 		/// Required time (tiemstamp)
 		required: u64,
 		/// Current (tiemstamp)
 		current: u64,
 	},
-	/// Execute refund
-	Refund,
+}
+
+impl Action {
+	/// Convert action to a name string
+	pub fn get_id_str(&self) -> String {
+		let res = match &self {
+			Action::None => "None",
+			Action::SellerSendOfferMessage(_) => "SellerSendOfferMessage",
+			Action::BuyerSendAcceptOfferMessage(_) => "BuyerSendAcceptOfferMessage",
+			Action::SellerWaitingForOfferMessage => "SellerWaitForOfferMessage",
+			Action::BuyerSendInitRedeemMessage(_) => "BuyerSendInitRedeemMessage",
+			Action::SellerWaitingForInitRedeemMessage => "SellerWaitingForInitRedeemMessage",
+			Action::SellerSendRedeemMessage(_) => "SellerSendRedeemMessage",
+			Action::BuyerWaitingForRedeemMessage => "BuyerWaitingForRedeemMessage",
+			Action::SellerPublishMwcLockTx => "SellerPublishMwcLockTx",
+			Action::SellerPublishTxSecondaryRedeem(_) => "SellerPublishTxSecondaryRedeem",
+			Action::DepositSecondary {
+				currency: _,
+				amount: _,
+				address: _,
+			} => "DepositSecondary",
+			Action::WaitForMwcConfirmations {
+				name: _,
+				required: _,
+				actual: _,
+			} => "WaitForMwcConfirmations",
+			Action::WaitForSecondaryConfirmations {
+				name: _,
+				currency: _,
+				required: _,
+				actual: _,
+			} => "WaitForSecondaryConfirmations",
+			Action::SellerWaitForBuyerRedeemPublish {
+				mwc_tip: _,
+				lock_height: _,
+			} => "SellerWaitForBuyerRedeemPublish",
+			Action::WaitForMwcRefundUnlock {
+				mwc_tip: _,
+				lock_height: _,
+			} => "WaitForMwcRefundUnlock",
+			Action::BuyerPublishMwcRedeemTx => "BuyerPublishMwcRedeemTx",
+			Action::ConfirmationRedeemSecondary(_, _) => "ConfirmationRedeemSecondary",
+			Action::SellerPublishMwcRefundTx => "SellerPublishMwcRefundTx",
+			Action::BuyerPublishSecondaryRefundTx(_) => "BuyerPublishSecondaryRefundTx",
+			Action::WaitingForBtcRefund {
+				currency: _,
+				required: _,
+				current: _,
+			} => "WaitingForBtcRefund",
+		};
+		res.to_string()
+	}
 }
 
 impl fmt::Display for Action {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let disp = match &self {
-			Action::None => "Nothing to do".to_string(),
-			Action::SendMessage(i) => format!("(msg{}) Send Message {}", i, i),
-			Action::ReceiveMessage => {
-				"Waiting for respond from other party (cmd: swap_message)".to_string()
+			Action::None => "None".to_string(),
+			Action::SellerSendOfferMessage(_) => "Sending Offer message".to_string(),
+			Action::BuyerSendAcceptOfferMessage(_) => "Sending Accept Offer message".to_string(),
+			Action::SellerWaitingForOfferMessage => "Waiting for Accept Offer message".to_string(),
+			Action::BuyerSendInitRedeemMessage(_) => "Sending Init Redeem Message".to_string(),
+			Action::SellerWaitingForInitRedeemMessage => {
+				"Waitong for Init Redeem Message".to_string()
 			}
-			Action::PublishTx => "(publish_MWC) Publish a transaction for MWC".to_string(),
-			Action::PublishTxSecondary(currency) => format!(
-				"(publish_{}) Publish a transaction for {}",
-				currency, currency
-			),
+			Action::SellerSendRedeemMessage(_) => "Sending Finalize Redeem Message".to_string(),
+			Action::BuyerWaitingForRedeemMessage => {
+				"Waiting for Finalize Redeem Message".to_string()
+			}
+			Action::SellerPublishMwcLockTx => "Posting MWC lock transaction".to_string(),
+			Action::SellerPublishTxSecondaryRedeem(currency) => {
+				format!("Posting {} redeem transaction", currency)
+			}
 			Action::DepositSecondary {
 				currency,
 				amount,
 				address,
 			} => format!(
-				"Deposit {} {} at {}",
+				"Please deposit exactly {} {} at {}",
 				currency.amount_to_hr_string(*amount, true),
 				currency,
 				address
 			),
-			Action::Confirmations { required, actual } => format!(
-				"Waiting for {} MWC lock confirmations, has {}",
-				required, actual
+			Action::WaitForMwcConfirmations {
+				name,
+				required,
+				actual,
+			} => format!(
+				"{}, waiting for {} MWC lock confirmations, has {}",
+				name, required, actual
 			),
-			Action::ConfirmationsSecondary {
+			Action::WaitForSecondaryConfirmations {
+				name,
 				currency,
 				required,
 				actual,
 			} => format!(
-				"Waiting for {} {} lock confirmations, has {}",
-				required, currency, actual
+				"{}, waiting for {} {} lock confirmations, has {}",
+				name, required, currency, actual
 			),
-			Action::ConfirmationRedeem => {
-				"Waiting for MWC Redeem transaction to be confirmed".to_string()
-			}
+			Action::SellerWaitForBuyerRedeemPublish {
+				mwc_tip: _,
+				lock_height: _,
+			} => "Waiting for Buyer to redeem MWC.".to_string(),
+			Action::WaitForMwcRefundUnlock {
+				mwc_tip,
+				lock_height,
+			} => format!(
+				"Waiting when locked MWC can be refunded. About {} minutes are left",
+				(lock_height.saturating_sub(*mwc_tip))
+			),
+			Action::BuyerPublishMwcRedeemTx => "Posting MWC redeem transaction".to_string(),
 			Action::ConfirmationRedeemSecondary(currency, btc_address) => format!(
 				"Waiting for {} Redeem transaction to be confirmed for {}",
 				currency, btc_address
 			),
-			Action::Complete => "Swap trade is complete".to_string(),
-			Action::Cancel => "(cancel) Swap trade cancelled".to_string(),
-			// Waiting for refund to pass through
-			Action::WaitingForMwcRefund { required, height } => {
-				let blocks_left = required - height;
-				format!(
-					"Waiting for block {} to be ready to post refund slate, {} blocks are left",
-					required, blocks_left
-				)
+			Action::SellerPublishMwcRefundTx => "Posting MWC refund transaction".to_string(),
+			Action::BuyerPublishSecondaryRefundTx(currency) => {
+				format!("Posting {} refund transaction", currency)
 			}
-			Action::WaitingForBtcRefund { required, current } => {
+			Action::WaitingForBtcRefund {
+				currency,
+				required,
+				current,
+			} => {
 				let time_left_sec = required - current;
 				let hours = time_left_sec / 3600;
 				let minutes = (time_left_sec % 3600) / 60;
 				let seconds = time_left_sec % 60;
-				format!("Please wait {} hours {} minutes and {} seconds until you will be able to redeem your BTC", hours, minutes, seconds)
+				format!("Waiting until will be able to refund {}. Waitong time left: {} hours {} minutes and {} seconds", currency, hours, minutes, seconds)
 			}
-			Action::Refund => "(refund) Refund can be issued".to_string(),
 		};
 		write!(f, "{}", disp)
-	}
-}
-
-impl Action {
-	/// String to the
-	pub fn from_cmd(cmd: &str) -> Option<Action> {
-		match cmd {
-			"msg1" => Some(Action::SendMessage(1)),
-			"msg2" => Some(Action::SendMessage(2)),
-			"receive" => Some(Action::ReceiveMessage),
-			"publish_MWC" => Some(Action::PublishTx),
-			"refund" => Some(Action::Refund),
-			"publish_BTC" => Some(Action::PublishTxSecondary(Currency::Btc)),
-			"cancel" => Some(Action::Cancel),
-			_ => None,
-		}
-	}
-
-	/// Action to the command string. Only action that have require some user input, has this maping
-	pub fn to_cmd(&self) -> Option<String> {
-		match &self {
-			Action::None | Action::ConfirmationRedeem | Action::Complete | Action::Cancel => None,
-			Action::DepositSecondary {
-				currency: _,
-				amount: _,
-				address: _,
-			} => None,
-			Action::ConfirmationRedeemSecondary(_currency, _btc_address) => None,
-			Action::Confirmations {
-				required: _,
-				actual: _,
-			} => None,
-			Action::ConfirmationsSecondary {
-				currency: _,
-				required: _,
-				actual: _,
-			} => None,
-			Action::SendMessage(i) => Some(format!("msg{}", i)),
-			Action::ReceiveMessage => Some("receive".to_string()),
-			Action::PublishTx => Some("publish_MWC".to_string()),
-			Action::PublishTxSecondary(currency) => Some(format!("publish_{}", currency)),
-			Action::Refund => Some("refund".to_string()),
-			_ => None,
-		}
 	}
 }
 

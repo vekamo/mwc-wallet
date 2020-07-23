@@ -1149,7 +1149,7 @@ where
 	let sender_pubkey = proof.sender_address.clone().public_key;
 	let msg = tx::payment_proof_message(proof.amount, &proof.excess, sender_pubkey)?;
 
-	let (mut client, parent_key_id, keychain) = {
+	let (client, parent_key_id, keychain) = {
 		wallet_lock!(wallet_inst, w);
 		(
 			w.w2n_client().clone(),

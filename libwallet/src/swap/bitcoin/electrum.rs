@@ -300,7 +300,7 @@ impl ElectrumNodeClient {
 		}
 
 		let (c, t) = self.client.as_mut().unwrap();
-		replace(t, Instant::now());
+		let _ = replace(t, Instant::now());
 		Ok(c)
 	}
 }

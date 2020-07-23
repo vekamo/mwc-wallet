@@ -17,6 +17,7 @@ use super::multisig::{Builder as MultisigBuilder, Hashed};
 use super::ser::*;
 use super::types::*;
 use super::{ErrorKind, Keychain};
+use crate::swap::fsm::state::StateId;
 use crate::{NodeClient, Slate};
 use chrono::{DateTime, Utc};
 use grin_core::core::verifier_cache::LruVerifierCache;
@@ -57,8 +58,8 @@ pub struct Swap {
 	pub seller_lock_first: bool,
 	/// Time when we started swap session
 	pub started: DateTime<Utc>,
-	/// Current status for swap session
-	pub status: Status,
+	/// Current state for this swap session
+	pub state: StateId,
 	/// MWC amount that Seller offer
 	#[serde(with = "secp_ser::string_or_u64")]
 	pub primary_amount: u64,
@@ -82,16 +83,12 @@ pub struct Swap {
 	/// MWC Lock Slate
 	#[serde(deserialize_with = "slate_deser")]
 	pub lock_slate: Slate,
-	/// Number of confirmations that lock state already get
-	pub lock_confirmations: Option<u64>,
 	/// MWC Refund Slate
 	#[serde(deserialize_with = "slate_deser")]
 	pub refund_slate: Slate,
 	#[serde(deserialize_with = "slate_deser")]
 	/// MWC redeem slate
 	pub redeem_slate: Slate,
-	/// Redeem confirmations number
-	pub redeem_confirmations: Option<u64>,
 	/// Signature that is done with multisig
 	#[serde(
 		serialize_with = "option_sig_to_hex",
@@ -108,23 +105,12 @@ pub struct Swap {
 	/// Time interval needed to redeem or execute a refund transaction.
 	pub redeem_time_sec: u64,
 	/// First message that was sent, keep for retry operations
-	pub message1: Option<String>,
+	pub message1: Option<Message>,
 	/// Second message that was sent, keep for retry operations
-	pub message2: Option<String>,
+	pub message2: Option<Message>,
 }
 
 impl Swap {
-	/// Return true if Swap session is finished (not necessary with a success) and not expecting any
-	/// inputs.
-	pub fn is_not_active(&self) -> bool {
-		use Status::*;
-
-		match self.status {
-			Completed | Cancelled | Refunded => true,
-			_ => false,
-		}
-	}
-
 	/// Return true for Seller
 	pub fn is_seller(&self) -> bool {
 		match self.role {
@@ -139,7 +125,7 @@ impl Swap {
 		keychain: &K,
 		context: &Context,
 	) -> Result<(Identifier, u64, Commitment), ErrorKind> {
-		self.expect_seller()?;
+		assert!(self.is_seller());
 		let scontext = context.unwrap_seller()?;
 
 		let identifier = scontext.change_output.clone();
@@ -153,43 +139,6 @@ impl Swap {
 		Ok((identifier, amount, commit))
 	}
 
-	/// Outputs from redeem slate
-	pub fn redeem_output<K: Keychain>(
-		&self,
-		keychain: &K,
-		context: &Context,
-	) -> Result<(Identifier, u64, Commitment), ErrorKind> {
-		self.expect_buyer()?;
-		let bcontext = context.unwrap_buyer()?;
-		if self.status < Status::InitRedeem || self.status > Status::Completed {
-			return Err(ErrorKind::UnexpectedStatus(Status::InitRedeem, self.status));
-		}
-
-		let identifier = bcontext.output.clone();
-		let amount = self.redeem_slate.amount;
-		let commit = keychain.commit(amount, &identifier, SwitchCommitmentType::Regular)?;
-
-		Ok((identifier, amount, commit))
-	}
-
-	pub(super) fn expect_seller(&self) -> Result<(), ErrorKind> {
-		match self.role {
-			Role::Seller(_, _) => Ok(()),
-			_ => Err(ErrorKind::UnexpectedRole(
-				"Swap Fn expect_seller()".to_string(),
-			)),
-		}
-	}
-
-	pub(super) fn expect_buyer(&self) -> Result<(), ErrorKind> {
-		match self.role {
-			Role::Buyer => Ok(()),
-			_ => Err(ErrorKind::UnexpectedRole(
-				"Swap Fn expect_buyer()".to_string(),
-			)),
-		}
-	}
-
 	pub(super) fn unwrap_seller(&self) -> Result<(String, u64), ErrorKind> {
 		match &self.role {
 			Role::Seller(address, change) => Ok((address.clone(), *change)),
@@ -199,17 +148,12 @@ impl Swap {
 		}
 	}
 
-	pub(super) fn expect(&self, status: Status, retry: bool) -> Result<(), ErrorKind> {
-		// retry can be done for prev step, not allow for the future
-		if (retry && self.status >= status) || self.status == status {
-			Ok(())
-		} else {
-			Err(ErrorKind::UnexpectedStatus(status, self.status))
-		}
-	}
-
-	pub(super) fn message(&self, inner: Update) -> Result<Message, ErrorKind> {
-		Ok(Message::new(self.id.clone(), inner, SecondaryUpdate::Empty))
+	pub(super) fn message(
+		&self,
+		inner: Update,
+		inner_secondary: SecondaryUpdate,
+	) -> Result<Message, ErrorKind> {
+		Ok(Message::new(self.id.clone(), inner, inner_secondary))
 	}
 
 	pub(super) fn multisig_secret<K: Keychain>(
@@ -228,25 +172,6 @@ impl Swap {
 
 	pub(super) fn refund_amount(&self) -> u64 {
 		self.primary_amount - self.refund_slate.fee
-	}
-
-	pub(super) fn update_mwc_lock_confirmations<C: NodeClient>(
-		&mut self,
-		secp: &Secp256k1,
-		node_client: &C,
-	) -> Result<u64, ErrorKind> {
-		let commit = self.multisig.commit(secp)?;
-		let outputs = node_client.get_outputs_from_node(&vec![commit])?;
-		let height = node_client.get_chain_tip()?.0;
-		for (commit_out, (_, height_out, _)) in outputs {
-			if commit_out == commit {
-				let confirmations = height.saturating_sub(height_out) + 1;
-				self.lock_confirmations = Some(confirmations);
-				return Ok(confirmations);
-			}
-		}
-
-		Ok(0)
 	}
 
 	pub(super) fn redeem_tx_fields(
@@ -279,7 +204,7 @@ impl Swap {
 
 	pub(super) fn find_redeem_kernel<C: NodeClient>(
 		&self,
-		node_client: &mut C,
+		node_client: &C,
 	) -> Result<Option<(TxKernel, u64)>, ErrorKind> {
 		let excess = &self
 			.redeem_slate
@@ -297,11 +222,6 @@ impl Swap {
 			.map(|(kernel, height, _)| (kernel, height));
 
 		Ok(res)
-	}
-
-	/// Check if MWC funds are available. Checking if lock slate has more confirmation that is needed.
-	pub(super) fn is_mwc_locked(&self) -> bool {
-		self.lock_confirmations.unwrap_or(0) >= self.mwc_confirmations
 	}
 
 	pub(super) fn other_participant_id(&self) -> usize {
@@ -338,7 +258,17 @@ impl Swap {
 		self.get_time_start() + self.message_exchange_time_sec
 	}
 
-	/// Offer message exchange session time limit
+	/// When locking need to be started
+	pub fn get_time_start_lock(&self) -> u64 {
+		// We can get 5% from the total lock time. We have to post fast
+		self.get_time_message_offers()
+			+ std::cmp::max(
+				self.get_timeinterval_mwc_lock(),
+				self.get_timeinterval_btc_lock(),
+			) / 20
+	}
+
+	/// When locking time will be expired
 	pub fn get_time_locking(&self) -> u64 {
 		// for confirmation adding 10% for possible network slow down.
 		self.get_time_message_offers()
@@ -467,4 +397,36 @@ pub fn publish_transaction<C: NodeClient>(
 
 	node_client.post_tx(tx, fluff)?;
 	Ok(())
+}
+
+#[cfg(test)]
+lazy_static! {
+	static ref CURRENT_TEST_TIME: RwLock<Option<i64>> = RwLock::new(None);
+}
+
+#[cfg(test)]
+/// Test current time as a timestamp for testing. Pleas ebe carefull, in production it is never called.
+pub fn set_testing_cur_time(cur_time: i64) {
+	CURRENT_TEST_TIME.write().replace(cur_time);
+}
+
+#[cfg(test)]
+/// Remove test timer control for swaps. Will use current system time instead
+pub fn reset_testing_cur_time() {
+	CURRENT_TEST_TIME.write().take();
+}
+
+#[cfg(test)]
+/// Current time. In release it is just a current time. In debug it is a test controlled time that allows us to validate the edge cases
+pub fn get_cur_time() -> i64 {
+	match *CURRENT_TEST_TIME.read() {
+		Some(time) => time,
+		None => Utc::now().timestamp(),
+	}
+}
+
+#[cfg(not(test))]
+/// Current time for relase allways returns fair value
+pub fn get_cur_time() -> i64 {
+	Utc::now().timestamp()
 }

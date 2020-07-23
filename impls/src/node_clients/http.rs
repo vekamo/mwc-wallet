@@ -181,7 +181,7 @@ impl HTTPNodeClient {
 
 	/// Get kernel implementation
 	fn get_kernel_impl(
-		&mut self,
+		&self,
 		excess: &pedersen::Commitment,
 		min_height: Option<u64>,
 		max_height: Option<u64>,
@@ -465,7 +465,7 @@ impl NodeClient for HTTPNodeClient {
 
 	/// Get kernel implementation
 	fn get_kernel(
-		&mut self,
+		&self,
 		excess: &pedersen::Commitment,
 		min_height: Option<u64>,
 		max_height: Option<u64>,

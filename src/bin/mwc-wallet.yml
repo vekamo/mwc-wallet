@@ -456,6 +456,14 @@ subcommands:
             short: f
             long: file
             takes_value: true
+  - swap_create_from_offer:
+      about:  Create Buyer swap trade from the Offer message that is saved into the file.
+      args:
+        - file:
+            help: Filename where message with trade offer is stored. Please review the offer before accept it.
+            short: f
+            long: file
+            takes_value: true
   - swap_start:
       about: Start MWC atomic swap trading.
       args:
@@ -517,14 +525,6 @@ subcommands:
             long: redeem_time
             takes_value: true
             default_value: "60"
-  - swap_message:
-      about: Process incoming swap message written in the file. Note, file base processing is not usual.
-      args:
-        - file:
-            help: filename with a message
-            short: f
-            long: file
-            takes_value: true
   - swap:
       about: Trade MWC to another currency (BTC) with atomic swap
       args:
@@ -558,20 +558,45 @@ subcommands:
             short: u
             long: dump
             takes_value: false
-        - action:
-            help: Action step to perform. Expected match 'check' output
+        - adjust:
+            help: Modify the swap trade workflow. Normally it is not needed. Sometimes you can use 'cancel'. StateID we not recomment to adjust unless you know ehat you are doing
             short: a
-            long: action
+            long: adjust
             takes_value: true
             possible_values:
-              - continue
-              - msg1
-              - msg2
-              - publish_MWC
-              - publish_BTC
-              - refund
               - cancel
-            default_value: continue
+              - SellerOfferCreated
+              - SellerSendingOffer
+              - SellerWaitingForAcceptanceMessage
+              - SellerWaitingForBuyerLock
+              - SellerPostingLockMwcSlate
+              - SellerWaitingForLockConfirmations
+              - SellerWaitingForInitRedeemMessage
+              - SellerSendingInitRedeemMessage
+              - SellerWaitingForBuyerToRedeemMwc
+              - SellerRedeemSecondaryCurrency
+              - SellerWaitingForRedeemConfirmations
+              - SellerSwapComplete
+              - SellerWaitingForRefundHeight
+              - SellerPostingRefundSlate
+              - SellerWaitingForRefundConfirmations
+              - SellerCancelledRefunded
+              - SellerCancelled
+              - BuyerOfferCreated
+              - BuyerSendingAcceptOfferMessage
+              - BuyerWaitingForSellerToLock
+              - BuyerPostingSecondaryToMultisigAccount
+              - BuyerWaitingForLockConfirmations
+              - BuyerSendingInitRedeemMessage
+              - BuyerWaitingForRespondRedeemMessage
+              - BuyerRedeemMwc
+              - BuyerWaitForRedeemMwcConfirmations
+              - BuyerSwapComplete
+              - BuyerWaitingForRefundTime
+              - BuyerPostingRefundForSecondary
+              - BuyerWaitingForRefundConfirmations
+              - BuyerCancelledRefunded
+              - BuyerCancelled
         - retry:
             help: Retry action action that was executed sucessfully before.
             short: e

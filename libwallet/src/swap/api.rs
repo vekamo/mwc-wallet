@@ -13,15 +13,18 @@
 // limitations under the License.
 
 use super::error::ErrorKind;
-use super::message::Message;
 use super::swap::Swap;
-use super::types::{Action, Context, Currency};
+use super::types::{Context, Currency};
 use super::Keychain;
 use crate::swap::bitcoin::{BtcSwapApi, ElectrumNodeClient};
+use crate::swap::fsm::machine::StateMachine;
+use crate::swap::message::SecondaryUpdate;
 use crate::swap::types::SwapTransactionsConfirmations;
 use crate::NodeClient;
 use grin_core::global;
 use grin_keychain::Identifier;
+use grin_util::Mutex;
+use std::sync::Arc;
 
 /// Swap API trait that is used by both Buyer and Seller.
 /// Every currency that Swap want to support, need to implement
@@ -62,97 +65,42 @@ pub trait SwapApi<K: Keychain>: Sync + Send {
 		secondary_confirmations: u64,
 		message_exchange_time_sec: u64,
 		redeem_time_sec: u64,
-	) -> Result<(Swap, Action), ErrorKind>;
+	) -> Result<Swap, ErrorKind>;
 
-	/// Buyer accepts a swap offer and creates the core Swap Object.
-	/// It is a starting point for Buyer swap workflow.
-	fn accept_swap_offer(
-		&mut self,
-		keychain: &K,
-		context: &Context,
-		message: Message, // Income message with offer form the Seller. Seller Status  Created->Offered
-	) -> Result<(Swap, Action), ErrorKind>;
-
-	/// Check if redeem step is completed. If yes - State will be move to 'Completed'
-	fn completed(
-		&mut self,
-		keychain: &K,
-		swap: &mut Swap,
-		context: &Context,
-	) -> Result<Action, ErrorKind>;
-
-	/// Execute refund. Refund can be executed if swap trade is cancelled. automatically or
-	/// by timeout (Waiting process must be limited to some point)
-	fn refunded(
-		&mut self,
-		keychain: &K,
-		context: &Context,
-		swap: &mut Swap,
-		refund_address: Option<String>,
-		fee_satoshi_per_byte: Option<f32>,
-	) -> Result<(), ErrorKind>;
-
-	/// Cancel the trade. Other party need to be notified with higher level channel.
-	/// It is not mwc-wallet responsibility to say nice good buy to other party.
-	/// Wallet inplemention only swap logic related activity.
-	fn cancelled(&mut self, keychain: &K, swap: &mut Swap) -> Result<(), ErrorKind>;
-
-	/// Check which action should be taken by the user
-	fn required_action(
-		&mut self,
-		keychain: &K,
-		swap: &mut Swap,
-		context: &Context,
-	) -> Result<Action, ErrorKind>;
+	/// get state machine fro this trade.
+	fn get_fsm(&self, keychain: &K, swap: &Swap) -> StateMachine;
 
 	/// Request confirmation numberss for all transactions that are known and in the in the swap
 	fn request_tx_confirmations(
-		&mut self,
-		keychain: &K,
-		swap: &mut Swap,
+		&self,
+		_keychain: &K,
+		swap: &Swap,
 	) -> Result<SwapTransactionsConfirmations, ErrorKind>;
 
-	/// Producing message for another party. Message content is vary and depend on the current state
-	fn message(&mut self, keychain: &K, swap: &Swap) -> Result<Message, ErrorKind>;
-
-	/// Message has been sent to the counter-party, update state accordingly
-	fn message_sent(
-		&mut self,
-		keychain: &K,
+	/// Build secondary update part of the offer message
+	fn build_offer_message_secondary_update(
+		&self,
+		_keychain: &K, // To make compiler happy
 		swap: &mut Swap,
-		context: &Context,
-	) -> Result<Action, ErrorKind>;
+	) -> SecondaryUpdate;
 
-	/// Apply an update Message to the Swap
-	fn receive_message(
-		&mut self,
-		keychain: &K,
+	/// Build secondary update part of the accept offer message
+	fn build_accept_offer_message_secondary_update(
+		&self,
+		_keychain: &K, // To make compiler happy
 		swap: &mut Swap,
-		context: &Context,
-		message: Message,
-	) -> Result<Action, ErrorKind>;
-
-	/// Publish MWC transaction.
-	/// Seller: publishing lock_slate, Status::Accepted
-	/// Buyer:  publishing redeem_slate, Status::Redeem
-	fn publish_transaction(
-		&mut self,
-		keychain: &K,
-		swap: &mut Swap,
-		context: &Context,
-		retry: bool,
-	) -> Result<Action, ErrorKind>;
+	) -> SecondaryUpdate;
 
 	/// Publishing Secinadary (BTC) transactions
 	/// Seller: redeep BTC transaction at State RedeemSecondary
 	fn publish_secondary_transaction(
-		&mut self,
+		&self,
 		keychain: &K,
 		swap: &mut Swap,
 		context: &Context,
 		fee_satoshi_per_byte: Option<f32>,
 		retry: bool,
-	) -> Result<Action, ErrorKind>;
+	) -> Result<(), ErrorKind>;
 }
 
 /// Create an appropriate instance for the Currency
@@ -177,7 +125,10 @@ where
 				electrumx_uri.expect("BTC API requires BTC node client"),
 				!global::is_mainnet(),
 			);
-			Ok(Box::new(BtcSwapApi::new(node_client, btc_node_client)))
+			Ok(Box::new(BtcSwapApi::new(
+				Arc::new(node_client),
+				Arc::new(Mutex::new(btc_node_client)),
+			)))
 		}
 	}
 }

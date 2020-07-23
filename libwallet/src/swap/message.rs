@@ -27,7 +27,7 @@ use grin_util::secp::Signature;
 use uuid::Uuid;
 
 /// Swap message that is used for Seller/Buyer interaction
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Message {
 	/// Swap session UUID
 	pub id: Uuid,
@@ -57,9 +57,17 @@ impl Message {
 		match self.inner {
 			Update::Offer(u) => Ok((self.id, u, self.inner_secondary)),
 			_ => Err(ErrorKind::UnexpectedMessageType(format!(
-				"Fn unwrap_offer() expecting Update::Offer, get {:?}",
+				"expecting Update::Offer, get {:?}",
 				self.inner
 			))),
+		}
+	}
+
+	/// Return true is it is Offer message
+	pub fn is_offer(&self) -> bool {
+		match &self.inner {
+			Update::Offer(_u) => true,
+			_ => false,
 		}
 	}
 
@@ -70,7 +78,7 @@ impl Message {
 		match self.inner {
 			Update::AcceptOffer(u) => Ok((self.id, u, self.inner_secondary)),
 			_ => Err(ErrorKind::UnexpectedMessageType(format!(
-				"Fn unwrap_accept_offer() expecting Update::AcceptOffer, get {:?}",
+				"expecting Update::AcceptOffer, get {:?}",
 				self.inner
 			))),
 		}
@@ -83,7 +91,7 @@ impl Message {
 		match self.inner {
 			Update::InitRedeem(u) => Ok((self.id, u, self.inner_secondary)),
 			_ => Err(ErrorKind::UnexpectedMessageType(format!(
-				"Fn unwrap_init_redeem() expecting Update::InitRedeem, get {:?}",
+				"expecting Update::InitRedeem, get {:?}",
 				self.inner
 			))),
 		}
@@ -94,7 +102,7 @@ impl Message {
 		match self.inner {
 			Update::Redeem(u) => Ok((self.id, u, self.inner_secondary)),
 			_ => Err(ErrorKind::UnexpectedMessageType(format!(
-				"Fn unwrap_redeem() expecting Update::Redeem, get {:?}",
+				"expecting Update::Redeem, get {:?}",
 				self.inner
 			))),
 		}
@@ -116,22 +124,22 @@ impl Message {
 }
 
 /// Swap core data of the Seller/Buyer message
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Update {
 	/// Empty data placeholder
 	None,
-	/// Seller to Buyer, Status::Created  Seller creates initial offer
+	/// Seller to Buyer, Seller creates initial offer
 	Offer(OfferUpdate),
 	/// Buyer sending back accepted offer
 	AcceptOffer(AcceptOfferUpdate),
-	/// Buyer to Seller, Status::Locked,  start working on Reedem slate
+	/// Buyer to Seller, start working on Reedem slate
 	InitRedeem(InitRedeemUpdate),
-	/// Seller to Buyer, Status::InitRedeem, working on Reedem slate
+	/// Seller to Buyer, working on Reedem slate
 	Redeem(RedeemUpdate),
 }
 
 /// Seller, Status::Created  Seller creates initial offer
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OfferUpdate {
 	/// Swap starting time.
 	pub start_time: DateTime<Utc>,
@@ -170,7 +178,7 @@ pub struct OfferUpdate {
 }
 
 /// Buyer, Status::Offered  Buyer responded for offer
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AcceptOfferUpdate {
 	/// Buyer part of multisig
 	pub multisig: MultisigParticipant,
@@ -184,7 +192,7 @@ pub struct AcceptOfferUpdate {
 }
 
 /// Buyer, Status::Locked   Buyer building the redeem slate
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InitRedeemUpdate {
 	/// redeem slate, construction in the progress
 	pub redeem_slate: VersionedSlate,
@@ -194,7 +202,7 @@ pub struct InitRedeemUpdate {
 }
 
 /// Seller, Status::InitRedeem.  Sending it's part needed for redeem transaction
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RedeemUpdate {
 	/// Needed data to build redeem transaction
 	pub redeem_participant: TxParticipant,

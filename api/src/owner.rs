@@ -25,7 +25,8 @@ use crate::impls::create_sender;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::api_impl::owner_updater::{start_updater_log_thread, StatusMessage};
 use crate::libwallet::api_impl::{owner, owner_swap, owner_updater};
-use crate::libwallet::swap::types::{Action, Status, SwapTransactionsConfirmations};
+use crate::libwallet::swap::fsm::state::{StateId, StateProcessRespond};
+use crate::libwallet::swap::types::{Action, SwapTransactionsConfirmations};
 use crate::libwallet::swap::{message::Message, swap::Swap};
 use crate::libwallet::{
 	AcctPathMapping, Error, ErrorKind, InitTxArgs, IssueInvoiceTxArgs, NodeClient,
@@ -38,6 +39,8 @@ use crate::util::{from_hex, static_secp_instance, Mutex, ZeroingString};
 use grin_wallet_util::grin_util::secp::key::PublicKey;
 use grin_wallet_util::OnionV3Address;
 use std::convert::TryFrom;
+use std::fs::File;
+use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Arc;
@@ -2326,6 +2329,37 @@ where
 		owner_swap::swap_start(self.wallet_inst.clone(), keychain_mask, params)
 	}
 
+	pub fn swap_create_from_offer(
+		&self,
+		keychain_mask: Option<&SecretKey>,
+		message_filename: String,
+	) -> Result<String, Error> {
+		// Updating wallet state first because we need to select outputs.
+		let mut file = File::open(message_filename.clone()).map_err(|e| {
+			ErrorKind::SwapError(format!("Unable to open file {}, {}", message_filename, e))
+		})?;
+		let mut contents = String::new();
+		file.read_to_string(&mut contents).map_err(|e| {
+			ErrorKind::SwapError(format!(
+				"Unable to read a message from the file {}, {}",
+				message_filename, e
+			))
+		})?;
+
+		// processing the message with a regular API.
+		// but first let's check if the message type matching expected
+		let message = Message::from_json(&contents)?;
+		if !message.is_offer() {
+			return Err(ErrorKind::SwapError(
+				"Expected offer message, get different one".to_string(),
+			)
+			.into());
+		}
+
+		owner_swap::swap_income_message(self.wallet_inst.clone(), keychain_mask, &contents)?;
+		Ok(message.id.to_string())
+	}
+
 	/// List all available swap operations. SwapId & Status
 	pub fn swap_list(
 		&self,
@@ -2351,6 +2385,21 @@ where
 		owner_swap::swap_get(self.wallet_inst.clone(), keychain_mask, &swap_id)
 	}
 
+	/// Adjust the sate of swap trade
+	pub fn swap_adjust(
+		&self,
+		keychain_mask: Option<&SecretKey>,
+		swap_id: String,
+		adjust_cmd: String,
+	) -> Result<(StateId, Action), Error> {
+		owner_swap::swap_adjust(
+			self.wallet_inst.clone(),
+			keychain_mask,
+			&swap_id,
+			&adjust_cmd,
+		)
+	}
+
 	/// Dump swap file content
 	pub fn swap_dump(
 		&self,
@@ -2365,7 +2414,7 @@ where
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		swap_id: String,
-	) -> Result<(Status, Action), Error> {
+	) -> Result<(StateId, Action), Error> {
 		owner_swap::get_swap_status_action(self.wallet_inst.clone(), keychain_mask, &swap_id)
 	}
 
@@ -2378,50 +2427,22 @@ where
 		owner_swap::get_swap_tx_tstatus(self.wallet_inst.clone(), keychain_mask, &swap_id)
 	}
 
-	/// Fetch swap message to send to the other party
-	pub fn fetch_swap_message(
-		&self,
-		keychain_mask: Option<&SecretKey>,
-		swap_id: String,
-	) -> Result<Message, Error> {
-		owner_swap::fetch_swap_message(self.wallet_inst.clone(), keychain_mask, &swap_id)
-	}
-
-	pub fn swap_process(
+	pub fn swap_process<F>(
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		swap_id: &str,
-		action: Action,
-		method: Option<String>,
-		destination: Option<String>,
+		message_sender: F,
+		destination: Option<String>, // destination is used for several commands with different meaning
 		fee_satoshi_per_byte: Option<f32>,
-	) -> Result<(), Error> {
+	) -> Result<StateProcessRespond, Error>
+	where
+		F: FnOnce(Message) -> Result<(), crate::libwallet::Error> + 'static,
+	{
 		owner_swap::swap_process(
 			self.wallet_inst.clone(),
 			keychain_mask,
 			swap_id,
-			action,
-			method,
-			destination,
-			fee_satoshi_per_byte,
-		)
-	}
-
-	pub fn swap_retry(
-		&self,
-		keychain_mask: Option<&SecretKey>,
-		swap_id: &str,
-		action: Action,
-		method: Option<String>,
-		destination: Option<String>,
-		fee_satoshi_per_byte: Option<f32>,
-	) -> Result<(), Error> {
-		owner_swap::swap_retry(
-			self.wallet_inst.clone(),
-			keychain_mask,
-			swap_id,
-			action,
-			method,
+			message_sender,
 			destination,
 			fee_satoshi_per_byte,
 		)

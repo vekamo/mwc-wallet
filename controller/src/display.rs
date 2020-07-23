@@ -15,7 +15,7 @@
 use crate::core::core::{self, amount_to_hr_string};
 use crate::core::global;
 use crate::libwallet::swap::swap::Swap;
-use crate::libwallet::swap::types::{Action, Role, Status};
+use crate::libwallet::swap::types::{Action, Role};
 use crate::libwallet::{
 	AcctPathMapping, Error, OutputCommitMapping, OutputStatus, TxLogEntry, WalletInfo,
 };
@@ -23,6 +23,7 @@ use crate::libwallet::{
 use crate::util;
 use chrono::prelude::*;
 use colored::*;
+use grin_wallet_libwallet::swap::fsm::state::StateId;
 use grin_wallet_libwallet::swap::types::SwapTransactionsConfirmations;
 use prettytable;
 
@@ -639,7 +640,7 @@ pub fn swap_trades(trades: Vec<(String, String)>) {
 /// Display list of wallet accounts in a pretty way
 pub fn swap_trade(
 	swap: Swap,
-	status: &Status,
+	state: &StateId,
 	action: &Action,
 	tx_conf: &SwapTransactionsConfirmations,
 ) -> Result<(), Error> {
@@ -804,8 +805,8 @@ pub fn swap_trade(
 	// Status info
 	println!("--------------------------------");
 	println!("Started: {}", swap.started);
-	println!("Status: {}", status);
-	println!("Action: {}", action);
+	println!("State:   {}", state);
+	println!("Action:  {}", action);
 
 	Ok(())
 }

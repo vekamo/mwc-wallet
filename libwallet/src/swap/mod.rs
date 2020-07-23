@@ -27,6 +27,9 @@ pub mod message;
 /// schnorr signature routine
 pub mod multisig;
 
+/// Finite State Machine that handle swap workflow
+pub mod fsm;
+
 /// Swap buyer API (selling MWC for BTC)
 pub mod buyer;
 /// Swap Seller API (selling BTC for MWC)
@@ -53,27 +56,30 @@ pub(crate) use self::seller::SellApi;
 
 pub use grin_keychain::Keychain;
 
+#[cfg(test)]
 use std::sync::atomic::{AtomicBool, Ordering};
 
 const CURRENT_VERSION: u8 = 1;
 
+#[cfg(test)]
 lazy_static! {
 	/// Flag to set test mode
 	static ref TEST_MODE: AtomicBool = AtomicBool::new(false);
 }
 
+#[cfg(test)]
 /// Set the test mode
 pub fn set_test_mode(mode: bool) {
 	TEST_MODE.store(mode, Ordering::Relaxed);
 }
 
+#[cfg(test)]
 /// Check if we are in test mode
 pub fn is_test_mode() -> bool {
 	TEST_MODE.load(Ordering::Relaxed)
 }
 
 #[cfg(test)]
-
 mod tests {
 	use crate::grin_util::{Mutex, RwLock};
 	use crate::NodeClient;
@@ -97,6 +103,7 @@ mod tests {
 	use super::message::Message;
 	use super::types::*;
 	use super::*;
+	use crate::swap::fsm::state::{Input, StateId};
 	use grin_core::global;
 	use grin_core::global::ChainTypes;
 
@@ -356,7 +363,7 @@ mod tests {
 			unimplemented!()
 		}
 		fn get_kernel(
-			&mut self,
+			&self,
 			excess: &Commitment,
 			_min_height: Option<u64>,
 			_max_height: Option<u64>,
@@ -373,13 +380,18 @@ mod tests {
 	#[test]
 	fn test_refund_tx_lock() {
 		set_test_mode(true);
+		swap::set_testing_cur_time(1567632152);
+
 		let kc_sell = keychain(1);
 		let ctx_sell = context_sell(&kc_sell);
 		let secondary_redeem_address = btc_address(&kc_sell);
 		let height = 100_000;
 
-		let mut api_sell = BtcSwapApi::new(TestNodeClient::new(height), TestBtcNodeClient::new(1));
-		let (swap, _) = api_sell
+		let mut api_sell = BtcSwapApi::new(
+			Arc::new(TestNodeClient::new(height)),
+			Arc::new(Mutex::new(TestBtcNodeClient::new(1))),
+		);
+		let mut swap = api_sell
 			.create_swap_offer(
 				&kc_sell,
 				&ctx_sell,
@@ -394,16 +406,29 @@ mod tests {
 				3600,
 			)
 			.unwrap();
-		let message = api_sell.message(&kc_sell, &swap).unwrap();
+		let mut fsm_sell = api_sell.get_fsm(&kc_sell, &swap);
+		let tx_state = api_sell
+			.request_tx_confirmations(&kc_sell, &mut swap)
+			.unwrap();
+
+		let message = match fsm_sell
+			.process(Input::Check, &mut swap, &ctx_sell, &tx_state)
+			.unwrap()
+			.action
+			.unwrap()
+		{
+			Action::SellerSendOfferMessage(message) => message,
+			_ => panic!("Unexpected action"),
+		};
 
 		// Simulate short refund lock time by passing height+4h
 		let kc_buy = keychain(2);
 		let ctx_buy = context_buy(&kc_buy);
-		let mut api_buy = BtcSwapApi::new(
-			TestNodeClient::new(height + 12 * 60), // we can tolerate up to half lock time interval
-			TestBtcNodeClient::new(1),
-		);
-		let res = api_buy.accept_swap_offer(&kc_buy, &ctx_buy, message);
+		let nc = TestNodeClient::new(height + 12 * 60);
+
+		let (id, offer, secondary_update) = message.unwrap_offer().unwrap();
+		let res = BuyApi::accept_swap_offer(&kc_buy, &ctx_buy, id, offer, secondary_update, &nc);
+
 		assert_eq!(
 			res.err().unwrap(),
 			ErrorKind::InvalidMessageData(
@@ -415,6 +440,7 @@ mod tests {
 	#[test]
 	fn test_btc_swap() {
 		set_test_mode(true);
+		swap::set_testing_cur_time(1567632152);
 		global::set_mining_mode(ChainTypes::Floonet);
 		let write_json = false;
 
@@ -430,9 +456,12 @@ mod tests {
 		let btc_amount_2 = 1_000_000;
 		let btc_amount = btc_amount_1 + btc_amount_2;
 
+		// When test was stored:  Utc.ymd(2019, 9, 4).and_hms_micro(21, 22, 32, 581245)
+
 		// Seller: create swap offer
-		let mut api_sell = BtcSwapApi::new(nc.clone(), btc_nc.clone());
-		let (mut swap_sell, action) = api_sell
+		let mut api_sell =
+			BtcSwapApi::new(Arc::new(nc.clone()), Arc::new(Mutex::new(btc_nc.clone())));
+		let mut swap_sell = api_sell
 			.create_swap_offer(
 				&kc_sell,
 				&ctx_sell,
@@ -447,14 +476,31 @@ mod tests {
 				3600,
 			)
 			.unwrap();
-		assert_eq!(action, Action::SendMessage(1));
-		assert_eq!(swap_sell.status, Status::Created);
-		let message_1 = api_sell.message(&kc_sell, &swap_sell).unwrap();
-		let action = api_sell
-			.message_sent(&kc_sell, &mut swap_sell, &ctx_sell)
+
+		let mut fsm_sell = api_sell.get_fsm(&kc_sell, &swap_sell);
+		let tx_conf = &api_sell
+			.request_tx_confirmations(&kc_sell, &swap_sell)
 			.unwrap();
-		assert_eq!(action, Action::ReceiveMessage);
-		assert_eq!(swap_sell.status, Status::Offered);
+		let sell_resp = fsm_sell
+			.process(Input::Check, &mut swap_sell, &ctx_sell, tx_conf)
+			.unwrap();
+
+		assert_eq!(swap_sell.state, StateId::SellerSendingOffer);
+		let message_1: Message = match sell_resp.action.unwrap() {
+			Action::SellerSendOfferMessage(message) => message,
+			_ => panic!("Unexpected action"),
+		};
+		let tx_conf = api_sell
+			.request_tx_confirmations(&kc_sell, &swap_sell)
+			.unwrap();
+		let sell_resp = fsm_sell
+			.process(Input::execute(), &mut swap_sell, &ctx_sell, &tx_conf)
+			.unwrap();
+		assert_eq!(
+			sell_resp.action.unwrap().get_id_str(),
+			"SellerWaitForOfferMessage"
+		);
+		assert_eq!(swap_sell.state, StateId::SellerWaitingForAcceptanceMessage);
 
 		if write_json {
 			write(
@@ -498,20 +544,40 @@ mod tests {
 		let ctx_buy = context_buy(&kc_buy);
 
 		// Buyer: accept swap offer
-		let mut api_buy = BtcSwapApi::new(nc.clone(), btc_nc.clone());
-		let (mut swap_buy, action) = api_buy
-			.accept_swap_offer(&kc_buy, &ctx_buy, message_1)
+		let api_buy = BtcSwapApi::new(Arc::new(nc.clone()), Arc::new(Mutex::new(btc_nc.clone())));
+
+		let (id, offer, secondary_update) = message_1.unwrap_offer().unwrap();
+		let mut swap_buy =
+			BuyApi::accept_swap_offer(&kc_buy, &ctx_buy, id, offer, secondary_update, &nc).unwrap();
+
+		let mut fsm_buy = api_buy.get_fsm(&kc_buy, &swap_buy);
+		let tx_conf = api_buy
+			.request_tx_confirmations(&kc_buy, &swap_buy)
 			.unwrap();
-		assert_eq!(swap_buy.status, Status::Offered);
-		assert_eq!(action, Action::SendMessage(1));
-		let message_2 = api_buy.message(&kc_buy, &swap_buy).unwrap();
-		let action = api_buy
-			.message_sent(&kc_buy, &mut swap_buy, &ctx_buy)
+		let buy_resp = fsm_buy
+			.process(Input::Check, &mut swap_buy, &ctx_buy, &tx_conf)
 			.unwrap();
 
+		assert_eq!(swap_buy.state, StateId::BuyerSendingAcceptOfferMessage);
+		let message_2 = match buy_resp.action.unwrap() {
+			Action::BuyerSendAcceptOfferMessage(message) => message,
+			_ => panic!("Unexpected action"),
+		};
+		let tx_conf = api_buy
+			.request_tx_confirmations(&kc_buy, &swap_buy)
+			.unwrap();
+		let buy_resp = fsm_buy
+			.process(Input::execute(), &mut swap_buy, &ctx_buy, &tx_conf)
+			.unwrap();
+		assert_eq!(swap_buy.state, StateId::BuyerWaitingForSellerToLock);
+
 		// Expected to wait for the Seller to deposit MWC and wait for 1 block
-		match action {
-			Action::Confirmations { required, actual } => {
+		match buy_resp.action.unwrap() {
+			Action::WaitForMwcConfirmations {
+				name: _,
+				required,
+				actual,
+			} => {
 				assert_eq!(required, 1);
 				assert_eq!(actual, 0);
 			}
@@ -519,15 +585,23 @@ mod tests {
 		}
 
 		// !!!!!!!!!!!!!!!!!!!!!!
-		// Here we are changing lock order because we want to keep tests original. Waitinmg case is covered, can go normally
+		// Here we are changing lock order because we want to keep tests original. Waiting case is covered, can go normally
 		swap_buy.seller_lock_first = false;
-		swap_sell.seller_lock_first = false;
-		let action = api_buy
-			.required_action(&kc_buy, &mut swap_buy, &ctx_buy)
+		swap_sell.seller_lock_first = true;
+		let tx_conf = api_buy
+			.request_tx_confirmations(&kc_buy, &swap_buy)
+			.unwrap();
+		let buy_resp = fsm_buy
+			.process(Input::Check, &mut swap_buy, &ctx_buy, &tx_conf)
 			.unwrap();
 
+		assert_eq!(
+			swap_buy.state,
+			StateId::BuyerPostingSecondaryToMultisigAccount
+		);
+
 		// Buyer: should deposit bitcoin
-		let address = match action {
+		let address = match buy_resp.action.unwrap() {
 			Action::DepositSecondary {
 				currency: _,
 				amount,
@@ -538,7 +612,6 @@ mod tests {
 			}
 			_ => panic!("Invalid action"),
 		};
-		assert_eq!(swap_buy.status, Status::Accepted);
 		let address = Address::from_str(&address).unwrap();
 
 		// Buyer: first deposit
@@ -553,11 +626,17 @@ mod tests {
 		};
 		let txid_1 = tx_1.txid();
 		btc_nc.push_transaction(&tx_1);
-
-		match api_buy
-			.required_action(&kc_buy, &mut swap_buy, &ctx_buy)
-			.unwrap()
-		{
+		let tx_conf = api_buy
+			.request_tx_confirmations(&kc_buy, &swap_buy)
+			.unwrap();
+		let buy_resp = fsm_buy
+			.process(Input::Check, &mut swap_buy, &ctx_buy, &tx_conf)
+			.unwrap();
+		assert_eq!(
+			swap_buy.state,
+			StateId::BuyerPostingSecondaryToMultisigAccount
+		);
+		match buy_resp.action.unwrap() {
 			Action::DepositSecondary {
 				currency: _,
 				amount,
@@ -579,11 +658,17 @@ mod tests {
 		};
 		let txid_2 = tx_2.txid();
 		btc_nc.push_transaction(&tx_2);
-		match api_buy
-			.required_action(&kc_buy, &mut swap_buy, &ctx_buy)
-			.unwrap()
-		{
-			Action::ConfirmationsSecondary {
+		let tx_conf = api_buy
+			.request_tx_confirmations(&kc_buy, &swap_buy)
+			.unwrap();
+		let buy_resp = fsm_buy
+			.process(Input::Check, &mut swap_buy, &ctx_buy, &tx_conf)
+			.unwrap();
+		assert_eq!(swap_buy.state, StateId::BuyerWaitingForLockConfirmations);
+
+		match buy_resp.action.unwrap() {
+			Action::WaitForSecondaryConfirmations {
+				name: _,
 				currency: _,
 				required: _,
 				actual,
@@ -593,11 +678,16 @@ mod tests {
 		btc_nc.mine_blocks(5);
 
 		// Buyer: wait for Grin confirmations
-		match api_buy
-			.required_action(&kc_buy, &mut swap_buy, &ctx_buy)
-			.unwrap()
-		{
-			Action::Confirmations {
+		let tx_conf = api_buy
+			.request_tx_confirmations(&kc_buy, &swap_buy)
+			.unwrap();
+		let buy_resp = fsm_buy
+			.process(Input::Check, &mut swap_buy, &ctx_buy, &tx_conf)
+			.unwrap();
+		assert_eq!(swap_buy.state, StateId::BuyerWaitingForLockConfirmations);
+		match buy_resp.action.unwrap() {
+			Action::WaitForMwcConfirmations {
+				name: _,
 				required: _,
 				actual,
 			} => assert_eq!(actual, 0),
@@ -606,11 +696,16 @@ mod tests {
 
 		// Check if buyer has correct confirmed outputs
 		{
-			let btc_data = swap_buy.secondary_data.unwrap_btc().unwrap();
-			assert_eq!(btc_data.confirmed_outputs.len(), 2);
+			let script = api_buy.script(&swap_buy).unwrap();
+			let (pending_amount, confirmed_amount, _, conf_outputs) =
+				api_buy.btc_balance(&swap_buy, &script, 1).unwrap();
+
+			assert_eq!(pending_amount, 0);
+			assert_eq!(confirmed_amount, btc_amount_1 + btc_amount_2);
+			assert_eq!(conf_outputs.len(), 2);
 			let mut match_1 = 0;
 			let mut match_2 = 0;
-			for output in &btc_data.confirmed_outputs {
+			for output in &conf_outputs {
 				if output.out_point.txid == txid_1 {
 					match_1 += 1;
 				}
@@ -654,19 +749,40 @@ mod tests {
 		}
 
 		// Seller: receive accepted offer
-		let action = api_sell
-			.receive_message(&kc_sell, &mut swap_sell, &ctx_sell, message_2)
+		assert_eq!(swap_sell.state, StateId::SellerWaitingForAcceptanceMessage);
+		let tx_conf = api_sell
+			.request_tx_confirmations(&kc_sell, &swap_sell)
 			.unwrap();
-		assert_eq!(action, Action::PublishTx);
-		assert_eq!(swap_sell.status, Status::Accepted);
-		let action = api_sell
-			.publish_transaction(&kc_sell, &mut swap_sell, &ctx_sell, false)
+		let sell_resp = fsm_sell
+			.process(
+				Input::IncomeMessage(message_2),
+				&mut swap_sell,
+				&ctx_sell,
+				&tx_conf,
+			)
 			.unwrap();
-		match action {
-			Action::Confirmations {
-				required: _,
+		assert_eq!(
+			sell_resp.action.unwrap().get_id_str(),
+			"SellerPublishMwcLockTx"
+		);
+		assert_eq!(swap_sell.state, StateId::SellerPostingLockMwcSlate);
+
+		let tx_conf = api_sell
+			.request_tx_confirmations(&kc_sell, &swap_sell)
+			.unwrap();
+		let sell_resp = fsm_sell
+			.process(Input::execute(), &mut swap_sell, &ctx_sell, &tx_conf)
+			.unwrap();
+		assert_eq!(swap_sell.state, StateId::SellerWaitingForLockConfirmations);
+		match sell_resp.action.unwrap() {
+			Action::WaitForMwcConfirmations {
+				name: _,
+				required,
 				actual,
-			} => assert_eq!(actual, 0),
+			} => {
+				assert_eq!(required, 30);
+				assert_eq!(actual, 0)
+			}
 			_ => panic!("Invalid action"),
 		}
 
@@ -685,26 +801,40 @@ mod tests {
 
 		// Seller: wait for Grin confirmations
 		nc.mine_blocks(10);
-		let action = api_sell
-			.required_action(&kc_sell, &mut swap_sell, &ctx_sell)
+		let tx_conf = api_sell
+			.request_tx_confirmations(&kc_sell, &swap_sell)
 			.unwrap();
-		match action {
-			Action::Confirmations {
-				required: _,
+		let sell_resp = fsm_sell
+			.process(Input::Check, &mut swap_sell, &ctx_sell, &tx_conf)
+			.unwrap();
+		assert_eq!(swap_sell.state, StateId::SellerWaitingForLockConfirmations);
+		match sell_resp.action.unwrap() {
+			Action::WaitForMwcConfirmations {
+				name: _,
+				required,
 				actual,
-			} => assert_eq!(actual, 10),
+			} => {
+				assert_eq!(required, 30);
+				assert_eq!(actual, 10)
+			}
 			_ => panic!("Invalid action"),
 		}
-
-		// Buyer: wait for less Grin confirmations
-		match api_buy
-			.required_action(&kc_sell, &mut swap_buy, &ctx_buy)
-			.unwrap()
-		{
-			Action::Confirmations {
-				required: _,
+		let tx_conf = api_buy
+			.request_tx_confirmations(&kc_buy, &swap_buy)
+			.unwrap();
+		let buy_resp = fsm_buy
+			.process(Input::Check, &mut swap_buy, &ctx_buy, &tx_conf)
+			.unwrap();
+		assert_eq!(swap_buy.state, StateId::BuyerWaitingForLockConfirmations);
+		match buy_resp.action.unwrap() {
+			Action::WaitForMwcConfirmations {
+				name: _,
+				required,
 				actual,
-			} => assert_eq!(actual, 10),
+			} => {
+				assert_eq!(required, 30);
+				assert_eq!(actual, 10)
+			}
 			_ => panic!("Invalid action"),
 		}
 
@@ -716,15 +846,23 @@ mod tests {
 
 		// Seller: wait BTC confirmations
 		nc.mine_blocks(20);
-		let action = api_sell
-			.required_action(&kc_sell, &mut swap_sell, &ctx_sell)
+		let tx_conf = api_sell
+			.request_tx_confirmations(&kc_sell, &swap_sell)
 			.unwrap();
-		match action {
-			Action::ConfirmationsSecondary {
+		let sell_resp = fsm_sell
+			.process(Input::Check, &mut swap_sell, &ctx_sell, &tx_conf)
+			.unwrap();
+		assert_eq!(swap_sell.state, StateId::SellerWaitingForLockConfirmations);
+		match sell_resp.action.unwrap() {
+			Action::WaitForSecondaryConfirmations {
+				name: _,
 				currency: _,
-				required: _,
+				required,
 				actual,
-			} => assert_eq!(actual, 5),
+			} => {
+				assert_eq!(required, 6);
+				assert_eq!(actual, 5)
+			}
 			_ => panic!("Invalid action"),
 		}
 		btc_nc.mine_block();
@@ -742,16 +880,37 @@ mod tests {
 			);
 		}
 
-		// Buyer: start redeem
-		let action = api_buy
-			.required_action(&kc_buy, &mut swap_buy, &ctx_buy)
+		// Checking if both seller & Buyer are moved to the redeem message exchange step
+		let tx_conf = api_sell
+			.request_tx_confirmations(&kc_sell, &swap_sell)
 			.unwrap();
-		assert_eq!(action, Action::SendMessage(2));
-		assert_eq!(swap_buy.status, Status::Locked);
-		let message_3 = api_buy.message(&kc_buy, &swap_buy).unwrap();
-		api_buy
-			.message_sent(&kc_buy, &mut swap_buy, &ctx_buy)
+		let sell_resp = fsm_sell
+			.process(Input::Check, &mut swap_sell, &ctx_sell, &tx_conf)
 			.unwrap();
+		let tx_conf = api_buy
+			.request_tx_confirmations(&kc_buy, &swap_buy)
+			.unwrap();
+		let buy_resp = fsm_buy
+			.process(Input::Check, &mut swap_buy, &ctx_buy, &tx_conf)
+			.unwrap();
+
+		assert_eq!(swap_sell.state, StateId::SellerWaitingForInitRedeemMessage);
+		assert_eq!(swap_buy.state, StateId::BuyerSendingInitRedeemMessage);
+		assert_eq!(
+			sell_resp.action.unwrap().get_id_str(),
+			"SellerWaitingForInitRedeemMessage"
+		);
+		let message_3 = match buy_resp.action.unwrap() {
+			Action::BuyerSendInitRedeemMessage(message) => message,
+			_ => panic!("Unexpected action"),
+		};
+		let tx_conf = api_buy
+			.request_tx_confirmations(&kc_buy, &swap_buy)
+			.unwrap();
+		fsm_buy
+			.process(Input::execute(), &mut swap_buy, &ctx_buy, &tx_conf)
+			.unwrap();
+		assert_eq!(swap_buy.state, StateId::BuyerWaitingForRespondRedeemMessage);
 
 		if write_json {
 			write(
@@ -776,24 +935,47 @@ mod tests {
 		}
 
 		// Seller: sign redeem
-		let action = api_sell
-			.required_action(&kc_sell, &mut swap_sell, &ctx_sell)
+		let tx_conf = api_sell
+			.request_tx_confirmations(&kc_sell, &swap_sell)
 			.unwrap();
-		assert_eq!(action, Action::ReceiveMessage);
-		assert_eq!(swap_sell.status, Status::Locked);
-		let action = api_sell
-			.receive_message(&kc_sell, &mut swap_sell, &ctx_sell, message_3)
+		let sell_resp = fsm_sell
+			.process(Input::Check, &mut swap_sell, &ctx_sell, &tx_conf)
 			.unwrap();
-		assert_eq!(action, Action::SendMessage(2));
-		assert_eq!(swap_sell.status, Status::InitRedeem);
-		let message_4 = api_sell.message(&kc_sell, &swap_sell).unwrap();
-		let action = api_sell
-			.message_sent(&kc_sell, &mut swap_sell, &ctx_sell)
-			.unwrap();
+		assert_eq!(swap_sell.state, StateId::SellerWaitingForInitRedeemMessage);
+		assert_eq!(
+			sell_resp.action.unwrap().get_id_str(),
+			"SellerWaitingForInitRedeemMessage"
+		);
 
+		let tx_conf = api_sell
+			.request_tx_confirmations(&kc_sell, &swap_sell)
+			.unwrap();
+		let sell_resp = fsm_sell
+			.process(
+				Input::IncomeMessage(message_3),
+				&mut swap_sell,
+				&ctx_sell,
+				&tx_conf,
+			)
+			.unwrap();
+		assert_eq!(swap_sell.state, StateId::SellerSendingInitRedeemMessage);
+		let message_4 = match sell_resp.action.unwrap() {
+			Action::SellerSendRedeemMessage(message) => message,
+			_ => panic!("Unexpected action"),
+		};
+
+		let tx_conf = api_sell
+			.request_tx_confirmations(&kc_sell, &swap_sell)
+			.unwrap();
+		let sell_resp = fsm_sell
+			.process(Input::execute(), &mut swap_sell, &ctx_sell, &tx_conf)
+			.unwrap();
 		// Seller: wait for buyer's on-chain redeem tx
-		assert_eq!(action, Action::ConfirmationRedeem);
-		assert_eq!(swap_sell.status, Status::Redeem);
+		assert_eq!(swap_sell.state, StateId::SellerWaitingForBuyerToRedeemMwc);
+		assert_eq!(
+			sell_resp.action.unwrap().get_id_str(),
+			"SellerWaitForBuyerRedeemPublish"
+		);
 
 		if write_json {
 			write(
@@ -818,32 +1000,71 @@ mod tests {
 		}
 
 		// Buyer: redeem
-		let action = api_buy
-			.required_action(&kc_buy, &mut swap_buy, &ctx_buy)
+		let tx_conf = api_buy
+			.request_tx_confirmations(&kc_buy, &swap_buy)
 			.unwrap();
-		assert_eq!(action, Action::ReceiveMessage);
-		assert_eq!(swap_buy.status, Status::InitRedeem);
-		let action = api_buy
-			.receive_message(&kc_buy, &mut swap_buy, &ctx_buy, message_4)
+		let buy_resp = fsm_buy
+			.process(Input::Check, &mut swap_buy, &ctx_buy, &tx_conf)
 			.unwrap();
-		assert_eq!(action, Action::PublishTx);
-		assert_eq!(swap_buy.status, Status::Redeem);
-		let action = api_buy
-			.publish_transaction(&kc_buy, &mut swap_buy, &ctx_buy, false)
-			.unwrap();
-		assert_eq!(action, Action::ConfirmationRedeem);
+		assert_eq!(swap_buy.state, StateId::BuyerWaitingForRespondRedeemMessage);
+		assert_eq!(
+			buy_resp.action.unwrap().get_id_str(),
+			"BuyerWaitingForRedeemMessage"
+		);
 
-		// Buyer: complete!
+		let tx_conf = api_buy
+			.request_tx_confirmations(&kc_buy, &swap_buy)
+			.unwrap();
+		let buy_resp = fsm_buy
+			.process(
+				Input::IncomeMessage(message_4),
+				&mut swap_buy,
+				&ctx_buy,
+				&tx_conf,
+			)
+			.unwrap();
+		assert_eq!(swap_buy.state, StateId::BuyerRedeemMwc);
+		assert_eq!(
+			buy_resp.action.unwrap().get_id_str(),
+			"BuyerPublishMwcRedeemTx"
+		);
+
+		let tx_conf = &api_buy
+			.request_tx_confirmations(&kc_buy, &swap_buy)
+			.unwrap();
+		let buy_resp = fsm_buy
+			.process(Input::execute(), &mut swap_buy, &ctx_buy, &tx_conf)
+			.unwrap();
+		assert_eq!(swap_buy.state, StateId::BuyerWaitForRedeemMwcConfirmations);
+		assert_eq!(
+			buy_resp.action.unwrap().get_id_str(),
+			"WaitForMwcConfirmations"
+		);
+
+		// Buyer: almost done, just need to wait for confirmations
 		nc.mine_block();
-		let action = api_buy
-			.required_action(&kc_buy, &mut swap_buy, &ctx_buy)
-			.unwrap();
-		assert_eq!(action, Action::Complete);
-		// At this point, buyer would add Grin to their outputs
-		let action = api_buy.completed(&kc_buy, &mut swap_buy, &ctx_buy).unwrap();
-		assert_eq!(action, Action::None);
-		assert_eq!(swap_buy.status, Status::Completed);
 
+		let tx_conf = api_buy
+			.request_tx_confirmations(&kc_buy, &swap_buy)
+			.unwrap();
+		let buy_resp = fsm_buy
+			.process(Input::Check, &mut swap_buy, &ctx_buy, &tx_conf)
+			.unwrap();
+		assert_eq!(swap_buy.state, StateId::BuyerWaitForRedeemMwcConfirmations);
+		match buy_resp.action.unwrap() {
+			Action::WaitForMwcConfirmations {
+				name: _,
+				required,
+				actual,
+			} => {
+				assert_eq!(actual, 1);
+				assert_eq!(required, 30);
+			}
+			_ => panic!("Invalid action"),
+		}
+
+		// At this point, buyer would add Grin to their outputs
+		// Now seller can redeem BTC
 		if write_json {
 			write(
 				"swap_test/swap_buy_3.json",
@@ -858,11 +1079,17 @@ mod tests {
 		}
 
 		// Seller: publish BTC tx
-		let action = api_sell
-			.required_action(&kc_sell, &mut swap_sell, &ctx_sell)
+		let tx_conf = api_sell
+			.request_tx_confirmations(&kc_sell, &swap_sell)
 			.unwrap();
-		assert_eq!(action, Action::PublishTxSecondary(Currency::Btc));
-		assert_eq!(swap_sell.status, Status::RedeemSecondary);
+		let sell_resp = fsm_sell
+			.process(Input::Check, &mut swap_sell, &ctx_sell, &tx_conf)
+			.unwrap();
+		assert_eq!(swap_sell.state, StateId::SellerRedeemSecondaryCurrency);
+		assert_eq!(
+			sell_resp.action.unwrap().get_id_str(),
+			"SellerPublishTxSecondaryRedeem"
+		);
 
 		if write_json {
 			write(
@@ -877,26 +1104,77 @@ mod tests {
 			);
 		}
 
-		// Seller: wait for BTC confirmations
-		let action = api_sell
-			.publish_secondary_transaction(&kc_sell, &mut swap_sell, &ctx_sell, Some(10.0), false)
+		// Seller: publishing and wait for BTC confirmations
+		let tx_conf = api_sell
+			.request_tx_confirmations(&kc_sell, &swap_sell)
 			.unwrap();
-		match action {
-			Action::ConfirmationRedeemSecondary(_, _) => {}
+		let sell_resp = fsm_sell
+			.process(Input::execute(), &mut swap_sell, &ctx_sell, &tx_conf)
+			.unwrap();
+		assert_eq!(
+			swap_sell.state,
+			StateId::SellerWaitingForRedeemConfirmations
+		);
+		match sell_resp.action.unwrap() {
+			Action::WaitForSecondaryConfirmations {
+				name: _,
+				currency: _,
+				required,
+				actual,
+			} => {
+				assert_eq!(required, 6);
+				assert_eq!(actual, 0)
+			}
 			_ => panic!("Invalid action"),
-		};
+		}
 
-		// Seller: complete!
 		btc_nc.mine_block();
-		let action = api_sell
-			.required_action(&kc_sell, &mut swap_sell, &ctx_sell)
+		// still waiting
+		let tx_conf = api_sell
+			.request_tx_confirmations(&kc_sell, &swap_sell)
 			.unwrap();
-		assert_eq!(action, Action::Complete);
-		let action = api_sell
-			.completed(&kc_sell, &mut swap_sell, &ctx_sell)
+		let sell_resp = fsm_sell
+			.process(Input::Check, &mut swap_sell, &ctx_sell, &tx_conf)
 			.unwrap();
-		assert_eq!(action, Action::None);
-		assert_eq!(swap_sell.status, Status::Completed);
+		assert_eq!(
+			swap_sell.state,
+			StateId::SellerWaitingForRedeemConfirmations
+		);
+		match sell_resp.action.unwrap() {
+			Action::WaitForSecondaryConfirmations {
+				name: _,
+				currency: _,
+				required,
+				actual,
+			} => {
+				assert_eq!(required, 6);
+				assert_eq!(actual, 1)
+			}
+			_ => panic!("Invalid action"),
+		}
+
+		// Let's mine more blocks, so both Buyer and Seller will come to complete state
+		nc.mine_blocks(30);
+		btc_nc.mine_blocks(6);
+
+		let tx_conf = api_sell
+			.request_tx_confirmations(&kc_sell, &swap_sell)
+			.unwrap();
+		let sell_resp = fsm_sell
+			.process(Input::Check, &mut swap_sell, &ctx_sell, &tx_conf)
+			.unwrap();
+		let tx_conf = &api_buy
+			.request_tx_confirmations(&kc_buy, &swap_buy)
+			.unwrap();
+		let buy_resp = fsm_buy
+			.process(Input::Check, &mut swap_buy, &ctx_buy, &tx_conf)
+			.unwrap();
+
+		// Seller & Buyer: complete!
+		assert_eq!(swap_sell.state, StateId::SellerSwapComplete);
+		assert_eq!(swap_buy.state, StateId::BuyerSwapComplete);
+		assert!(sell_resp.action.is_none());
+		assert!(buy_resp.action.is_none());
 
 		if write_json {
 			write(

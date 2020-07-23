@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::multisig;
-use super::types::Status;
 use failure::Fail;
 use grin_core::core::committed;
 use grin_util::secp;
@@ -36,12 +35,6 @@ pub enum ErrorKind {
 	/// Unexpected role. Business logic is broken
 	#[fail(display = "Swap Unexpected role, {}", _0)]
 	UnexpectedRole(String),
-	/// Unexpected status. Business logic is broken
-	#[fail(
-		display = "Swap Unexpected status. Expected: {:?}, actual: {:?}",
-		_0, _1
-	)]
-	UnexpectedStatus(Status, Status),
 	/// Not enough MWC to start swap
 	#[fail(display = "Insufficient funds. Required: {}, available: {}", _0, _1)]
 	InsufficientFunds(u64, u64),
@@ -117,6 +110,12 @@ pub enum ErrorKind {
 	/// Message validation error. Likely somebody trying to cheat with as
 	#[fail(display = "Invalid Message data, {}", _0)]
 	InvalidMessageData(String),
+	/// Invalid Swap state input
+	#[fail(display = "Invalid Swap state input, {}", _0)]
+	InvalidSwapStateInput(String),
+	/// Invalid Swap state input
+	#[fail(display = "Swap state machine error, {}", _0)]
+	SwapStateMachineError(String),
 	/// Generic error
 	#[fail(display = "Swap generic error, {}", _0)]
 	Generic(String),

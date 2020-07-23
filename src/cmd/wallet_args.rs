@@ -973,7 +973,7 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<command::SwapStartArgs
 pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseError> {
 	let verbose = args.is_present("verbose");
 	let swap_id = args.value_of("swap_id").map(|s| String::from(s));
-	let action = args.value_of("action").map(|s| String::from(s));
+	let adjust = args.value_of("adjust").map(|s| String::from(s));
 	let retry = args.value_of("retry").map(|s| String::from(s));
 	let method = args.value_of("method").map(|s| String::from(s));
 	let destination = args.value_of("dest").map(|s| String::from(s));
@@ -993,6 +993,8 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		command::SwapSubcommand::Process
 	} else if args.is_present("dump") {
 		command::SwapSubcommand::Dump
+	} else if adjust.is_some() {
+		command::SwapSubcommand::Adjust
 	} else {
 		return Err(ParseError::ArgumentError(format!(
 			"Please define some action to do"
@@ -1003,7 +1005,7 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		subcommand,
 		verbose,
 		swap_id,
-		action,
+		adjust,
 		retry,
 		method,
 		destination,
@@ -1375,6 +1377,10 @@ where
 			let a = arg_parse!(parse_swap_start_args(&args));
 			command::swap_start(owner_api, km, a)
 		}
+		("swap_create_from_offer", Some(args)) => {
+			let mwc_amount = arg_parse!(parse_required(args, "file"));
+			command::swap_create_from_offer(owner_api, km, mwc_amount.to_string())
+		}
 		("swap", Some(args)) => {
 			let a = arg_parse!(parse_swap_args(&args));
 			command::swap(
@@ -1386,11 +1392,6 @@ where
 				&global_wallet_args.clone(),
 				a,
 			)
-		}
-		("swap_message", Some(args)) => {
-			let message_filename = parse_required(args, "file")
-				.map_err(|e| ErrorKind::ArgumentError(format!("{}", e)))?;
-			command::swap_message(owner_api, km, message_filename)
 		}
 		(cmd, _) => {
 			return Err(ErrorKind::ArgumentError(format!(

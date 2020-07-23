@@ -12,24 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(test)]
+use super::is_test_mode;
 use super::message::*;
 use super::multisig::{Builder as MultisigBuilder, ParticipantData as MultisigParticipant};
-use super::swap::{publish_transaction, signature_as_secret, tx_add_input, tx_add_output, Swap};
+use super::swap;
+use super::swap::{signature_as_secret, tx_add_input, tx_add_output, Swap};
 use super::types::*;
-use super::{is_test_mode, ErrorKind, Keychain, CURRENT_VERSION};
-use crate::{NodeClient, ParticipantData as TxParticipant, Slate, SlateVersion, VersionedSlate};
-use chrono::{TimeZone, Utc};
-use grin_core::core::verifier_cache::LruVerifierCache;
-use grin_core::core::Weighting;
+use super::{ErrorKind, Keychain, CURRENT_VERSION};
+use crate::swap::fsm::state::StateId;
+use crate::{ParticipantData as TxParticipant, Slate, SlateVersion, VersionedSlate};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use grin_core::libtx::{build, proof, tx_fee};
 use grin_keychain::{BlindSum, BlindingFactor};
 use grin_util::secp::aggsig;
 use grin_util::secp::key::{PublicKey, SecretKey};
 use grin_util::secp::pedersen::{Commitment, RangeProof};
-use grin_util::RwLock;
 use rand::thread_rng;
-use std::mem;
-use std::sync::Arc;
+#[cfg(test)]
 use uuid::Uuid;
 
 /// Seller API. Bunch of methods that cover seller action for MWC swap
@@ -56,6 +56,7 @@ impl SellApi {
 		message_exchange_time_sec: u64,
 		redeem_time_sec: u64,
 	) -> Result<Swap, ErrorKind> {
+		#[cfg(test)]
 		let test_mode = is_test_mode();
 		let scontext = context.unwrap_seller()?;
 		let multisig = MultisigBuilder::new(
@@ -67,19 +68,20 @@ impl SellApi {
 			None,
 		);
 
-		let started = if test_mode {
-			Utc.ymd(2019, 9, 4).and_hms_micro(21, 22, 32, 581245)
-		} else {
-			Utc::now()
-		};
+		let now_ts = swap::get_cur_time();
+		let started = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now_ts, 0), Utc);
 
 		let ls = Slate::blank(2);
 
+		#[cfg(test)]
 		let id = if test_mode {
 			Uuid::parse_str("4fc16adb-9f32-4441-b0c1-b4de076a1972").unwrap()
 		} else {
 			ls.id.clone()
 		};
+
+		#[cfg(not(test))]
+		let id = ls.id.clone();
 
 		let mut swap = Swap {
 			id,
@@ -89,7 +91,7 @@ impl SellApi {
 			role: Role::Seller("".to_string(), 0), // will be updated later
 			seller_lock_first,
 			started,
-			status: Status::Created,
+			state: StateId::SellerOfferCreated,
 			primary_amount,
 			secondary_amount,
 			secondary_currency,
@@ -98,10 +100,8 @@ impl SellApi {
 			participant_id: 0,
 			multisig,
 			lock_slate: ls,
-			lock_confirmations: None,
 			refund_slate: Slate::blank(2),
 			redeem_slate: Slate::blank(2),
-			redeem_confirmations: None,
 			adaptor_signature: None,
 			mwc_confirmations,
 			secondary_confirmations,
@@ -116,15 +116,19 @@ impl SellApi {
 
 		// Lock slate
 		let mut lock_slate = &mut swap.lock_slate;
+
+		#[cfg(test)]
 		if test_mode {
 			lock_slate.id = Uuid::parse_str("55b79f54-c40d-45e1-9544-a52dcf426db2").unwrap();
 		}
+
 		lock_slate.fee = tx_fee(scontext.inputs.len(), 2, 1, None);
 		lock_slate.amount = primary_amount;
 		lock_slate.height = height;
 
 		// Refund slate
 		let mut refund_slate = &mut swap.refund_slate;
+		#[cfg(test)]
 		if test_mode {
 			refund_slate.id = Uuid::parse_str("703fac15-913c-4e66-a7c2-5f648ca4ca7d").unwrap();
 		}
@@ -145,6 +149,7 @@ impl SellApi {
 
 		// Redeem slate
 		let mut redeem_slate = &mut swap.redeem_slate;
+		#[cfg(test)]
 		if test_mode {
 			redeem_slate.id = Uuid::parse_str("fc750aae-035f-4c6c-bb0c-05aabc764f8e").unwrap();
 		}
@@ -184,8 +189,7 @@ impl SellApi {
 		context: &Context,
 		accept_offer: AcceptOfferUpdate,
 	) -> Result<(), ErrorKind> {
-		swap.expect_seller()?;
-		swap.expect(Status::Offered, false)?;
+		assert!(swap.is_seller());
 
 		// Finalize multisig proof
 		let proof = Self::finalize_multisig(keychain, swap, context, accept_offer.multisig)?;
@@ -209,7 +213,6 @@ impl SellApi {
 		)?;
 
 		swap.redeem_public = Some(accept_offer.redeem_public);
-		swap.status = Status::Accepted;
 
 		Ok(())
 	}
@@ -225,11 +228,7 @@ impl SellApi {
 		context: &Context,
 		init_redeem: InitRedeemUpdate,
 	) -> Result<(), ErrorKind> {
-		swap.expect_seller()?;
-		match swap.status {
-			Status::Accepted | Status::Locked => {}
-			s => return Err(ErrorKind::UnexpectedStatus(Status::Locked, s)),
-		}
+		assert!(swap.is_seller());
 
 		// This function should only be called once
 		if swap.adaptor_signature.is_some() {
@@ -266,11 +265,6 @@ impl SellApi {
 		swap.adaptor_signature = Some(init_redeem.adaptor_signature);
 
 		Self::sign_redeem_slate(keychain, swap, context)?;
-
-		// If the multisig outputs are already locked, we can start the redeem stage
-		if swap.status == Status::Locked {
-			swap.status = Status::InitRedeem;
-		}
 
 		Ok(())
 	}
@@ -322,215 +316,49 @@ impl SellApi {
 		Ok(redeem)
 	}
 
-	/// Generate a message for Buyer
-	pub fn message(swap: &Swap) -> Result<Message, ErrorKind> {
-		match swap.status {
-			Status::Created => Self::offer_message(swap),
-			Status::InitRedeem => Self::redeem_message(swap),
-			_ => Err(ErrorKind::UnexpectedAction(format!(
-				"Seller Fn message() unexpected status {:?}",
-				swap.status
-			))),
-		}
-	}
-
-	/// Update swap state after a message has been sent succesfully
-	pub fn message_sent(swap: &mut Swap) -> Result<(), ErrorKind> {
-		match swap.status {
-			Status::Created => swap.status = Status::Offered,
-			Status::InitRedeem => swap.status = Status::Redeem,
-			_ => {
-				return Err(ErrorKind::UnexpectedAction(format!(
-					"Seller Fn message_sent() unexpected status {:?}",
-					swap.status
-				)))
-			}
-		};
-
-		Ok(())
-	}
-
-	/// Publish lock slate to the Node
-	pub fn publish_transaction<C: NodeClient>(
-		node_client: &C,
-		swap: &mut Swap,
-		retry: bool,
-	) -> Result<(), ErrorKind> {
-		if retry {
-			publish_transaction(node_client, &swap.lock_slate.tx, false)?;
-			swap.lock_confirmations = Some(0);
-			return Ok(());
-		}
-
-		match swap.status {
-			Status::Accepted => {
-				if swap.lock_confirmations.is_some() {
-					// Tx already published
-					return Err(ErrorKind::UnexpectedAction(
-						"Seller Fn publish_transaction() lock is not initialized".to_string(),
-					));
-				}
-				publish_transaction(node_client, &swap.lock_slate.tx, false)?;
-				swap.lock_confirmations = Some(0);
-				Ok(())
-			}
-			_ => Err(ErrorKind::UnexpectedAction(format!(
-				"Seller Fn publish_transaction() unexpected status {:?}",
-				swap.status
-			))),
-		}
-	}
-
-	/// Required action based on current swap state
-	pub fn required_action<C: NodeClient>(
-		node_client: &mut C,
-		swap: &mut Swap,
-	) -> Result<Action, ErrorKind> {
-		if swap.status == Status::Locked && swap.adaptor_signature.is_some() {
-			// There's a race condition between receiving the message from the buyer and
-			// updating the status to Locked based on the number of confirmations
-			// If we are here, we received the message before the lock
-			// so we can update the status to start the redeem
-			swap.status = Status::InitRedeem;
-		}
-
-		let action = match swap.status {
-			Status::Created => Action::SendMessage(1),
-			Status::Offered => Action::ReceiveMessage,
-			Status::Accepted => unreachable!(), // Should be handled by currency specific API
-			Status::Locked => Action::ReceiveMessage,
-			Status::InitRedeem => Action::SendMessage(2),
-			Status::Redeem => {
-				if swap.redeem_confirmations.unwrap_or(0) == 0 {
-					match swap.find_redeem_kernel(node_client)? {
-						Some((kernel, h)) => {
-							let height = node_client.get_chain_tip()?.0;
-							swap.redeem_confirmations = Some(height.saturating_sub(h) + 1);
-
-							// Replace kernel
-							mem::replace(
-								swap.redeem_slate
-									.tx
-									.kernels_mut()
-									.get_mut(0)
-									.ok_or(ErrorKind::UnexpectedAction("Seller Fn required_action() redeem slate not initialized, kernels are empty".to_string()))?,
-								kernel,
-							);
-
-							// Currency specific API should claim the funds on the secondary chain
-							// But from the perspective of this API, we're done
-							Action::Complete
-						}
-						None => Action::ConfirmationRedeem,
-					}
-				} else {
-					Action::Complete
-				}
-			}
-			Status::RedeemSecondary => {
-				match swap.secondary_currency {
-					Currency::Btc => {
-						let btc_data = swap.secondary_data.unwrap_btc()?;
-						if btc_data.redeem_confirmations.is_none() {
-							Action::PublishTxSecondary(swap.secondary_currency)
-						} else {
-							// We can't update confirmations from here. Assuming that everything is fine
-							// User in any case can resubmit BTC transaction
-							if btc_data.redeem_confirmations.unwrap() < 1 {
-								Action::ConfirmationRedeemSecondary(
-									swap.secondary_currency,
-									swap.unwrap_seller()?.0,
-								)
-							} else {
-								swap.status = Status::Completed; // We are done
-								Action::Complete
-							}
-						}
-					}
-				}
-			}
-			Status::Cancelled => {
-				if swap.lock_confirmations.is_none() {
-					// Funds are not locked. Nothing need to be done
-					Action::None
-				} else {
-					let height = node_client.get_chain_tip()?.0;
-					if height < swap.refund_slate.lock_height {
-						Action::WaitingForMwcRefund {
-							required: swap.refund_slate.lock_height,
-							height,
-						}
-					} else {
-						// Refund can be issued
-						Action::Refund
-					}
-				}
-			}
-			_ => Action::None,
-		};
-		Ok(action)
-	}
-
 	/// Generate Offer message
-	pub fn offer_message(swap: &Swap) -> Result<Message, ErrorKind> {
-		swap.expect_seller()?;
-		swap.expect(Status::Created, false)?;
-		swap.message(Update::Offer(OfferUpdate {
-			start_time: swap.started,
-			version: swap.version,
-			network: swap.network,
-			seller_lock_first: swap.seller_lock_first,
-			primary_amount: swap.primary_amount,
-			secondary_amount: swap.secondary_amount,
-			secondary_currency: swap.secondary_currency,
-			multisig: swap.multisig.export()?,
-			lock_slate: VersionedSlate::into_version(
-				swap.lock_slate.clone(),
-				SlateVersion::V2, // V2 should satify our needs, dont adding extra
-			),
-			refund_slate: VersionedSlate::into_version(
-				swap.refund_slate.clone(),
-				SlateVersion::V2, // V2 should satify our needs, dont adding extra
-			),
-			redeem_participant: swap.redeem_slate.participant_data[swap.participant_id].clone(),
-			mwc_confirmations: swap.mwc_confirmations,
-			secondary_confirmations: swap.secondary_confirmations,
-			message_exchange_time_sec: swap.message_exchange_time_sec,
-			redeem_time_sec: swap.redeem_time_sec,
-		}))
+	pub fn offer_message(
+		swap: &Swap,
+		secondary_update: SecondaryUpdate,
+	) -> Result<Message, ErrorKind> {
+		assert!(swap.is_seller());
+		swap.message(
+			Update::Offer(OfferUpdate {
+				start_time: swap.started,
+				version: swap.version,
+				network: swap.network,
+				seller_lock_first: swap.seller_lock_first,
+				primary_amount: swap.primary_amount,
+				secondary_amount: swap.secondary_amount,
+				secondary_currency: swap.secondary_currency,
+				multisig: swap.multisig.export()?,
+				lock_slate: VersionedSlate::into_version(
+					swap.lock_slate.clone(),
+					SlateVersion::V2, // V2 should satify our needs, dont adding extra
+				),
+				refund_slate: VersionedSlate::into_version(
+					swap.refund_slate.clone(),
+					SlateVersion::V2, // V2 should satify our needs, dont adding extra
+				),
+				redeem_participant: swap.redeem_slate.participant_data[swap.participant_id].clone(),
+				mwc_confirmations: swap.mwc_confirmations,
+				secondary_confirmations: swap.secondary_confirmations,
+				message_exchange_time_sec: swap.message_exchange_time_sec,
+				redeem_time_sec: swap.redeem_time_sec,
+			}),
+			secondary_update,
+		)
 	}
 
 	/// Generate redeem message
 	pub fn redeem_message(swap: &Swap) -> Result<Message, ErrorKind> {
-		swap.expect_seller()?;
-		swap.expect(Status::InitRedeem, false)?;
-		swap.message(Update::Redeem(RedeemUpdate {
-			redeem_participant: swap.redeem_slate.participant_data[swap.participant_id].clone(),
-		}))
-	}
-
-	/// Publish MWC transaction to the node
-	pub fn publish_refund<C: NodeClient>(
-		node_client: &C,
-		swap: &mut Swap,
-	) -> Result<(), ErrorKind> {
-		match swap.status {
-			Status::Cancelled | Status::Refunded => {
-				// check if refund slate is ready
-				swap.refund_slate.tx.validate(Weighting::AsTransaction,Arc::new(RwLock::new(LruVerifierCache::new())))
-					.map_err(|e| ErrorKind::UnexpectedAction(format!("refund_slate is not valid, {}", e)))?;
-
-				// Check if locking is valid
-				let tip = node_client.get_chain_tip()?.0;
-				if swap.refund_slate.lock_height > tip {
-					return Err( ErrorKind::UnexpectedAction(format!("Refund slate lock height {} is higher than the tip {}. Please wait until block {} will be mained.", swap.refund_slate.lock_height, tip, tip)) );
-				}
-
-				publish_transaction(node_client, &swap.refund_slate.tx, false)?;
-				Ok(())
-			}
-			_ => Err(ErrorKind::UnexpectedAction(format!("Buyer Fn publish_refund() can be called form Cancelled status only, current status: {:?}", swap.status ))),
-		}
+		assert!(swap.is_seller());
+		swap.message(
+			Update::Redeem(RedeemUpdate {
+				redeem_participant: swap.redeem_slate.participant_data[swap.participant_id].clone(),
+			}),
+			SecondaryUpdate::Empty,
+		)
 	}
 
 	// ----------------------------------------------------------------------------------------------
@@ -629,14 +457,16 @@ impl SellApi {
 		}
 		elems.push(build::output(change, scontext.change_output.clone()));
 		slate.add_transaction_elements(keychain, &proof::ProofBuilder::new(keychain), elems)?;
-		slate.tx.offset = if is_test_mode() {
-			BlindingFactor::from_hex(
+		slate.tx.offset =
+			BlindingFactor::from_secret_key(SecretKey::new(keychain.secp(), &mut thread_rng()));
+
+		#[cfg(test)]
+		if is_test_mode() {
+			slate.tx.offset = BlindingFactor::from_hex(
 				"d9da697c9c8bf7ff85116dd401f53e4d58bc0155fb6db56b15a99aa8884a44e9",
 			)
 			.unwrap()
-		} else {
-			BlindingFactor::from_secret_key(SecretKey::new(keychain.secp(), &mut thread_rng()))
-		};
+		}
 
 		let mut sec_key = Self::lock_tx_secret(keychain, swap, context)?;
 		let slate = &mut swap.lock_slate;
@@ -729,14 +559,16 @@ impl SellApi {
 		slate
 			.add_transaction_elements(keychain, &proof::ProofBuilder::new(keychain), elems)?
 			.secret_key(keychain.secp())?;
-		slate.tx.offset = if is_test_mode() {
-			BlindingFactor::from_hex(
+		slate.tx.offset =
+			BlindingFactor::from_secret_key(SecretKey::new(keychain.secp(), &mut thread_rng()));
+
+		#[cfg(test)]
+		if is_test_mode() {
+			slate.tx.offset = BlindingFactor::from_hex(
 				"53ac7d0ad9833568cf63dfa8aa607e2b27be525111b1e0de92aa0caa50f838ae",
 			)
-			.unwrap()
-		} else {
-			BlindingFactor::from_secret_key(SecretKey::new(keychain.secp(), &mut thread_rng()))
-		};
+			.unwrap();
+		}
 
 		let mut sec_key = Self::refund_tx_secret(keychain, swap, context)?;
 		let slate = &mut swap.refund_slate;

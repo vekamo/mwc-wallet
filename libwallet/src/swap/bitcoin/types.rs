@@ -15,16 +15,18 @@
 use super::client::Output;
 use crate::swap::message::SecondaryUpdate;
 use crate::swap::ser::*;
+use crate::swap::swap;
 use crate::swap::types::{Network, SecondaryData};
 use crate::swap::{ErrorKind, Keychain};
 use bitcoin::blockdata::opcodes::{all::*, OP_FALSE, OP_TRUE};
 use bitcoin::blockdata::script::Builder;
 use bitcoin::consensus::Encodable;
 use bitcoin::network::constants::Network as BtcNetwork;
+#[cfg(test)]
+use bitcoin::OutPoint;
 use bitcoin::{Address, Script, Transaction, TxIn, TxOut, VarInt};
 use bitcoin_hashes::sha256d;
 use byteorder::{ByteOrder, LittleEndian};
-use chrono::Utc;
 use grin_keychain::{Identifier, SwitchCommitmentType};
 use grin_util::secp::key::{PublicKey, SecretKey};
 use grin_util::secp::{Message, Secp256k1, Signature};
@@ -53,14 +55,8 @@ pub struct BtcData {
 	pub refund: Option<PublicKey>,
 	/// Refund transaction Hash
 	pub refund_tx: Option<sha256d::Hash>,
-	/// BTC outputs that Buyer useing for the swap
-	pub confirmed_outputs: Vec<Output>,
-	/// Will be True if BTC coins are have enough confirmations are locked at that account.
-	pub locked: bool,
 	/// BTX redeem transaction hash, needed for checking if it is posted
 	pub redeem_tx: Option<sha256d::Hash>,
-	/// Number of confirmations that redeem transaction already get.
-	pub redeem_confirmations: Option<u64>,
 }
 
 impl BtcData {
@@ -81,10 +77,7 @@ impl BtcData {
 			cosign,
 			refund: None,
 			refund_tx: None,
-			confirmed_outputs: Vec::new(),
-			locked: false,
 			redeem_tx: None,
-			redeem_confirmations: None,
 		})
 	}
 
@@ -103,10 +96,7 @@ impl BtcData {
 			cosign: offer.cosign,
 			refund: Some(PublicKey::from_secret_key(keychain.secp(), &key)?),
 			refund_tx: None,
-			confirmed_outputs: Vec::new(),
-			locked: false,
 			redeem_tx: None,
-			redeem_confirmations: None,
 		})
 	}
 
@@ -131,7 +121,7 @@ impl BtcData {
 		btc_lock_time: u64,
 	) -> Result<Script, ErrorKind> {
 		// Don't lock for more than 4 weeks. 4 weeks + 2 day, because max locking is expecting 2 weeks and 1 day to do the swap and 1 extra day for Byer
-		if btc_lock_time > (Utc::now().timestamp() + 3600 * 24 * (7 * 4 + 2)) as u64 {
+		if btc_lock_time > (swap::get_cur_time() + 3600 * 24 * (7 * 4 + 2)) as u64 {
 			return Err(ErrorKind::Generic(
 				"BTC locking time interval is larger than 4 weeks. Rejecting, looks like a scam."
 					.to_string(),
@@ -185,11 +175,12 @@ impl BtcData {
 	fn build_input_outputs(
 		&self,
 		redeem_address: &Address,
+		conf_outputs: &Vec<Output>,
 	) -> Result<(Vec<TxIn>, Vec<TxOut>, u64), ErrorKind> {
 		// Input(s)
-		let mut input = Vec::with_capacity(self.confirmed_outputs.len());
+		let mut input = Vec::with_capacity(conf_outputs.len());
 		let mut total_amount = 0;
-		for o in &self.confirmed_outputs {
+		for o in conf_outputs {
 			total_amount += o.value;
 			input.push(TxIn {
 				previous_output: o.out_point.clone(),
@@ -224,8 +215,10 @@ impl BtcData {
 		fee_sat_per_byte: f32,
 		cosign_secret: &SecretKey,
 		redeem_secret: &SecretKey,
+		conf_outputs: &Vec<Output>,
 	) -> Result<(BtcTtansaction, Transaction, usize, usize), ErrorKind> {
-		let (input, output, total_amount) = self.build_input_outputs(redeem_address)?;
+		let (input, output, total_amount) =
+			self.build_input_outputs(redeem_address, conf_outputs)?;
 
 		let mut tx = Transaction {
 			version: 2,
@@ -308,8 +301,10 @@ impl BtcData {
 		fee_sat_per_byte: f32,
 		btc_lock_time: u64,
 		buyer_btc_secret: &SecretKey,
+		conf_outputs: &Vec<Output>,
 	) -> Result<BtcTtansaction, ErrorKind> {
-		let (input, output, total_amount) = self.build_input_outputs(refund_address)?;
+		let (input, output, total_amount) =
+			self.build_input_outputs(refund_address, conf_outputs)?;
 		let mut tx = Transaction {
 			version: 2,
 			lock_time: btc_lock_time as u32, // let's make the lock time equal to the script lock.
@@ -378,15 +373,13 @@ impl BtcData {
 	}
 
 	/// Seller apply respond for the Buyer.
-	pub(crate) fn accept_offer_update(&self) -> Result<BtcUpdate, ErrorKind> {
-		Ok(BtcUpdate::AcceptOffer(BtcAcceptOfferUpdate {
+	pub(crate) fn accept_offer_update(&self) -> BtcUpdate {
+		BtcUpdate::AcceptOffer(BtcAcceptOfferUpdate {
 			refund: self
 				.refund
-				.ok_or(ErrorKind::UnexpectedMessageType(
-					"BTC refund pubkey is not defined at BtcAcceptOfferUpdate payload".to_string(),
-				))?
+				.expect("BTC refund pubkey is not defined at BtcAcceptOfferUpdate payload")
 				.clone(),
-		}))
+		})
 	}
 }
 
@@ -405,7 +398,7 @@ pub struct BtcBuyerContext {
 }
 
 /// Messages regarding BTC part of the deal
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum BtcUpdate {
 	/// Seller send offer to Buyer. Here is details about BTC deal
 	Offer(BtcOfferUpdate),
@@ -441,7 +434,7 @@ impl BtcUpdate {
 }
 
 /// Seller send offer to Buyer. Here is details about BTC deal
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct BtcOfferUpdate {
 	/// Public key to do cosign with Schnorr signature.
 	#[serde(serialize_with = "pubkey_to_hex", deserialize_with = "pubkey_from_hex")]
@@ -449,7 +442,7 @@ pub struct BtcOfferUpdate {
 }
 
 /// Buyer message back to Seller. Offer is accepted
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct BtcAcceptOfferUpdate {
 	/// Buyer public key for refund
 	#[serde(serialize_with = "pubkey_to_hex", deserialize_with = "pubkey_from_hex")]
@@ -469,7 +462,6 @@ mod tests {
 	use super::*;
 	use bitcoin::util::address::Payload;
 	use bitcoin::util::key::PublicKey as BTCPublicKey;
-	use bitcoin::OutPoint;
 	use bitcoin_hashes::{hash160, Hash};
 	use grin_util::from_hex;
 	use grin_util::secp::key::PublicKey;
@@ -503,10 +495,7 @@ mod tests {
 				.unwrap(),
 			),
 			refund_tx: None,
-			confirmed_outputs: Vec::new(),
-			locked: false,
 			redeem_tx: None,
-			redeem_confirmations: None,
 		};
 
 		let input_script = data
@@ -542,16 +531,13 @@ mod tests {
 		let refund = SecretKey::new(&secp, rng);
 		let redeem = SecretKey::new(&secp, rng);
 
-		let lock_time = Utc::now().timestamp() as u64;
+		let lock_time = swap::get_cur_time() as u64;
 
-		let mut data = BtcData {
+		let data = BtcData {
 			cosign: PublicKey::from_secret_key(&secp, &cosign).unwrap(),
 			refund: Some(PublicKey::from_secret_key(&secp, &refund).unwrap()),
 			refund_tx: None,
-			confirmed_outputs: Vec::new(),
-			locked: false,
 			redeem_tx: None,
-			redeem_confirmations: None,
 		};
 		let input_script = data
 			.script(
@@ -566,6 +552,9 @@ mod tests {
 		// Create a bunch of funding transactions
 		let count = rng.gen_range(3, 7);
 		let mut funding_txs = HashMap::with_capacity(count);
+
+		let mut confirmed_outputs = Vec::new();
+
 		for i in 0..count {
 			let value = (i as u64 + 1) * 1_000_000;
 
@@ -600,7 +589,7 @@ mod tests {
 			};
 
 			let txid = tx.txid();
-			data.confirmed_outputs.push(Output {
+			confirmed_outputs.push(Output {
 				out_point: OutPoint {
 					txid: txid.clone(),
 					vout: vout as u32,
@@ -628,6 +617,7 @@ mod tests {
 				10.0,
 				&cosign,
 				&redeem,
+				&confirmed_outputs,
 			)
 			.unwrap();
 		let diff = (est_size as i64 - actual_size as i64).abs() as usize;
