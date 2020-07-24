@@ -30,8 +30,8 @@ use crate::util::{Mutex, ZeroingString};
 use crate::{controller, display};
 use grin_wallet_impls::adapters::create_swap_message_sender;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
-use grin_wallet_libwallet::swap::types::Action;
 use grin_wallet_libwallet::swap::message::Message;
+use grin_wallet_libwallet::swap::types::Action;
 use grin_wallet_libwallet::{Slate, TxLogEntry};
 use serde_json as json;
 use std::fs::File;
@@ -156,6 +156,7 @@ where
 						&config.api_listen_addr(),
 						g_args.tls_conf.clone(),
 						tor_config.use_tor_listener,
+						config.grinbox_address_index(),
 					);
 					if let Err(e) = res {
 						error!("Error starting http listener: {}", e);
@@ -1577,6 +1578,7 @@ where
 											&config2.api_listen_addr(),
 											g_args2.tls_conf.clone(),
 											tor_config.unwrap().use_tor_listener,
+											config2.grinbox_address_index(),
 										);
 										if let Err(e) = res {
 											error!("Error starting http listener: {}", e);
