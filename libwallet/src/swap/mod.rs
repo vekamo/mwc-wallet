@@ -58,7 +58,7 @@ pub use grin_keychain::Keychain;
 
 #[cfg(test)]
 use std::sync::atomic::{AtomicBool, Ordering};
-
+#[cfg(test)]
 use serial_test::serial;
 
 const CURRENT_VERSION: u8 = 1;

@@ -31,7 +31,6 @@ use crate::{controller, display};
 use grin_wallet_impls::adapters::create_swap_message_sender;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::swap::message::Message;
-use grin_wallet_libwallet::swap::types::Action;
 use grin_wallet_libwallet::{Slate, TxLogEntry};
 use serde_json as json;
 use std::fs::File;
