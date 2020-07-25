@@ -249,17 +249,17 @@ impl Swap {
 	// Time management functions
 
 	/// Trade starting time
-	pub fn get_time_start(&self) -> u64 {
-		self.started.timestamp() as u64
+	pub fn get_time_start(&self) -> i64 {
+		self.started.timestamp()
 	}
 
 	/// Offer message exchange session time limit
-	pub fn get_time_message_offers(&self) -> u64 {
-		self.get_time_start() + self.message_exchange_time_sec
+	pub fn get_time_message_offers(&self) -> i64 {
+		self.get_time_start() + self.message_exchange_time_sec as i64
 	}
 
 	/// When locking need to be started
-	pub fn get_time_start_lock(&self) -> u64 {
+	pub fn get_time_start_lock(&self) -> i64 {
 		// We can get 5% from the total lock time. We have to post fast
 		self.get_time_message_offers()
 			+ std::cmp::max(
@@ -269,7 +269,7 @@ impl Swap {
 	}
 
 	/// When locking time will be expired
-	pub fn get_time_locking(&self) -> u64 {
+	pub fn get_time_locking(&self) -> i64 {
 		// for confirmation adding 10% for possible network slow down.
 		self.get_time_message_offers()
 			+ std::cmp::max(
@@ -279,37 +279,37 @@ impl Swap {
 	}
 
 	/// Second period of the message exchange
-	pub fn get_time_message_redeem(&self) -> u64 {
-		self.get_time_locking() + self.message_exchange_time_sec
+	pub fn get_time_message_redeem(&self) -> i64 {
+		self.get_time_locking() + self.message_exchange_time_sec as i64
 	}
 
 	/// MWC redeem time
-	pub fn get_time_mwc_redeem(&self) -> u64 {
-		self.get_time_message_redeem() + self.redeem_time_sec
+	pub fn get_time_mwc_redeem(&self) -> i64 {
+		self.get_time_message_redeem() + self.redeem_time_sec as i64
 	}
 
 	/// MWC locking time
-	pub fn get_time_mwc_lock(&self) -> u64 {
+	pub fn get_time_mwc_lock(&self) -> i64 {
 		// Add 10% for network instability
 		self.get_time_mwc_redeem() + self.get_timeinterval_mwc_lock()
 	}
 
 	/// mwc refund time
-	pub fn get_time_mwc_refund(&self) -> u64 {
+	pub fn get_time_mwc_refund(&self) -> i64 {
 		// Add 10% for network instability
-		self.get_time_mwc_lock() + self.redeem_time_sec
+		self.get_time_mwc_lock() + self.redeem_time_sec as i64
 	}
 
 	/// BTC lock time
-	pub fn get_time_btc_lock(&self) -> u64 {
+	pub fn get_time_btc_lock(&self) -> i64 {
 		self.get_time_mwc_refund()
-			+ self.redeem_time_sec
+			+ self.redeem_time_sec as i64
 			+ self.get_timeinterval_mwc_lock()
 			+ self.get_timeinterval_btc_lock()
 	}
 
 	/// btc redeem time limit
-	pub fn get_time_btc_redeem_limit(&self) -> u64 {
+	pub fn get_time_btc_redeem_limit(&self) -> i64 {
 		self.get_time_btc_lock() - self.get_timeinterval_btc_lock()
 	}
 
@@ -317,15 +317,16 @@ impl Swap {
 	// Time periof functions
 
 	/// MWC locking time interval
-	pub fn get_timeinterval_mwc_lock(&self) -> u64 {
+	pub fn get_timeinterval_mwc_lock(&self) -> i64 {
 		// adding extra 10% for chain instability
-		self.mwc_confirmations * 60 * 11 / 10
+		self.mwc_confirmations as i64 * 60 * 11 / 10
 	}
 
 	/// BTC locking time interval
-	pub fn get_timeinterval_btc_lock(&self) -> u64 {
+	pub fn get_timeinterval_btc_lock(&self) -> i64 {
 		// adding extra 10% for chain instability
-		self.secondary_confirmations * self.secondary_currency.block_time_period_sec() * 11 / 10
+		self.secondary_confirmations as i64 * self.secondary_currency.block_time_period_sec() * 11
+			/ 10
 	}
 }
 
@@ -407,7 +408,7 @@ lazy_static! {
 #[cfg(test)]
 /// Test current time as a timestamp for testing. Pleas ebe carefull, in production it is never called.
 pub fn set_testing_cur_time(cur_time: i64) {
-	CURRENT_TEST_TIME.write().replace(cur_time);
+	CURRENT_TEST_TIME.write().replace(cur_time.clone());
 }
 
 #[cfg(test)]

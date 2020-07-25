@@ -86,7 +86,7 @@ where
 					"swap.redeem_public value is not defined. Method BtcSwapApi::script"
 						.to_string(),
 				))?,
-			swap.get_time_btc_lock(),
+			swap.get_time_btc_lock() as u64,
 		)?)
 	}
 
@@ -609,7 +609,9 @@ where
 					kc.clone(),
 					swap_api.clone(),
 				)),
-				Box::new(seller_swap::SellerWaitingForRedeemConfirmations::new()),
+				Box::new(seller_swap::SellerWaitingForRedeemConfirmations::new(
+					swap_api.clone(),
+				)),
 				Box::new(seller_swap::SellerSwapComplete::new()),
 				Box::new(seller_swap::SellerWaitingForRefundHeight::new(
 					swap_api.clone(),

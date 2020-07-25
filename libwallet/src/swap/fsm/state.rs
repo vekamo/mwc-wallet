@@ -241,13 +241,13 @@ pub struct StateProcessRespond {
 	pub next_state_id: StateId,
 	/// next action that is expected from the user
 	pub action: Option<Action>,
-	/// time limit for this action
+	/// time limit (seconds timestamp) for this action
 	pub time_limit: Option<i64>,
 }
 
 impl StateProcessRespond {
 	/// build reult foor state only, no action
-	pub fn from_state(next_state_id: StateId) -> Self {
+	pub fn new(next_state_id: StateId) -> Self {
 		StateProcessRespond {
 			next_state_id,
 			action: None,
@@ -255,12 +255,21 @@ impl StateProcessRespond {
 		}
 	}
 
-	/// build result for state and action
-	pub fn from_state_action(next_state_id: StateId, action: Action) -> Self {
+	/// Specify action for respond
+	pub fn action(self, action: Action) -> Self {
 		StateProcessRespond {
-			next_state_id,
+			next_state_id: self.next_state_id,
 			action: Some(action),
-			time_limit: None,
+			time_limit: self.time_limit,
+		}
+	}
+
+	/// Specify time limit for respond
+	pub fn time_limit(self, tl: i64) -> Self {
+		StateProcessRespond {
+			next_state_id: self.next_state_id,
+			action: self.action,
+			time_limit: Some(tl),
 		}
 	}
 }

@@ -74,8 +74,8 @@ impl State for SellerOfferCreated {
 		_tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::from_state(StateId::SellerCancelled)),
-			Input::Check => Ok(StateProcessRespond::from_state(StateId::SellerSendingOffer)),
+			Input::Cancel => Ok(StateProcessRespond::new(StateId::SellerCancelled)),
+			Input::Check => Ok(StateProcessRespond::new(StateId::SellerSendingOffer)),
 			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
 				"SellerOfferCreated get {:?}",
 				input
@@ -146,26 +146,28 @@ where
 		_tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::from_state(StateId::SellerCancelled)),
+			Input::Cancel => Ok(StateProcessRespond::new(StateId::SellerCancelled)),
 			Input::Check => {
 				if swap.message1.is_none() {
-					if swap::get_cur_time() < swap.get_time_message_offers() as i64 {
+					let time_limit = swap.get_time_message_offers();
+					if swap::get_cur_time() < time_limit {
 						if self.message.is_none() {
 							let sec_update = self
 								.swap_api
 								.build_offer_message_secondary_update(&*self.keychain, swap);
 							self.message = Some(SellApi::offer_message(swap, sec_update)?);
 						}
-						Ok(StateProcessRespond::from_state_action(
-							StateId::SellerSendingOffer,
-							Action::SellerSendOfferMessage(self.message.clone().unwrap()),
-						))
+						Ok(StateProcessRespond::new(StateId::SellerSendingOffer)
+							.action(Action::SellerSendOfferMessage(
+								self.message.clone().unwrap(),
+							))
+							.time_limit(time_limit))
 					} else {
-						Ok(StateProcessRespond::from_state(StateId::SellerCancelled))
+						Ok(StateProcessRespond::new(StateId::SellerCancelled))
 					}
 				} else {
 					// Probably it is a rerun because of some reset. We should tolerate that
-					Ok(StateProcessRespond::from_state(
+					Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForAcceptanceMessage,
 					))
 				}
@@ -178,7 +180,7 @@ where
 				debug_assert!(self.message.is_some()); // Check expected to be called first
 				swap.message1 = Some(self.message.clone().unwrap());
 
-				Ok(StateProcessRespond::from_state(
+				Ok(StateProcessRespond::new(
 					StateId::SellerWaitingForAcceptanceMessage,
 				))
 			}
@@ -228,23 +230,23 @@ impl<K: Keychain> State for SellerWaitingForAcceptanceMessage<K> {
 		_tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::from_state(StateId::SellerCancelled)),
+			Input::Cancel => Ok(StateProcessRespond::new(StateId::SellerCancelled)),
 			Input::Check => {
 				if swap.redeem_public.is_none() {
-					if swap::get_cur_time() < swap.get_time_message_offers() as i64 {
-						Ok(StateProcessRespond::from_state_action(
-							StateId::SellerWaitingForAcceptanceMessage,
-							Action::SellerWaitingForOfferMessage,
-						))
+					let time_limit = swap.get_time_message_offers();
+					if swap::get_cur_time() < time_limit {
+						Ok(
+							StateProcessRespond::new(StateId::SellerWaitingForAcceptanceMessage)
+								.action(Action::SellerWaitingForOfferMessage)
+								.time_limit(time_limit),
+						)
 					} else {
 						// cancelling
-						Ok(StateProcessRespond::from_state(StateId::SellerCancelled))
+						Ok(StateProcessRespond::new(StateId::SellerCancelled))
 					}
 				} else {
 					// Probably it is a rerun because of some reset. We should tolerate that
-					Ok(StateProcessRespond::from_state(
-						StateId::SellerWaitingForBuyerLock,
-					))
+					Ok(StateProcessRespond::new(StateId::SellerWaitingForBuyerLock))
 				}
 			}
 			Input::IncomeMessage(message) => {
@@ -256,9 +258,7 @@ impl<K: Keychain> State for SellerWaitingForAcceptanceMessage<K> {
 				let btc_data = swap.secondary_data.unwrap_btc_mut()?;
 				btc_data.accepted_offer(btc_update)?;
 				debug_assert!(swap.redeem_public.is_some());
-				Ok(StateProcessRespond::from_state(
-					StateId::SellerWaitingForBuyerLock,
-				))
+				Ok(StateProcessRespond::new(StateId::SellerWaitingForBuyerLock))
 			}
 			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
 				"SellerWaitingForAcceptanceMessage get {:?}",
@@ -305,36 +305,32 @@ impl State for SellerWaitingForBuyerLock {
 		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::from_state(StateId::SellerCancelled)),
+			Input::Cancel => Ok(StateProcessRespond::new(StateId::SellerCancelled)),
 			Input::Check => {
 				// Check the deadline for locking
-				if swap::get_cur_time() > swap.get_time_start_lock() as i64 {
+				let time_limit = swap.get_time_start_lock();
+				if swap::get_cur_time() > time_limit {
 					// cancelling
-					return Ok(StateProcessRespond::from_state(StateId::SellerCancelled));
+					return Ok(StateProcessRespond::new(StateId::SellerCancelled));
 				}
 
 				if swap.seller_lock_first {
 					// Skipping this step. Buyer waiting for us to start locking
-					Ok(StateProcessRespond::from_state(
-						StateId::SellerPostingLockMwcSlate,
-					))
+					Ok(StateProcessRespond::new(StateId::SellerPostingLockMwcSlate))
 				} else {
 					let conf = tx_conf.secondary_lock_conf.unwrap_or(0);
 
 					if conf < 1 {
-						Ok(StateProcessRespond::from_state_action(
-							StateId::SellerWaitingForBuyerLock,
-							Action::WaitForSecondaryConfirmations {
+						Ok(StateProcessRespond::new(StateId::SellerWaitingForBuyerLock)
+							.action(Action::WaitForSecondaryConfirmations {
 								name: "Buyer to lock funds".to_string(),
 								currency: swap.secondary_currency,
 								required: 1,
 								actual: conf,
-							},
-						))
+							})
+							.time_limit(time_limit))
 					} else {
-						Ok(StateProcessRespond::from_state(
-							StateId::SellerPostingLockMwcSlate,
-						))
+						Ok(StateProcessRespond::new(StateId::SellerPostingLockMwcSlate))
 					}
 				}
 			}
@@ -401,40 +397,40 @@ where
 		_context: &Context,
 		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
+		let time_limit = swap.get_time_start_lock();
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::from_state(StateId::SellerCancelled)), // Locking is not done yet, we can cancel easy way
+			Input::Cancel => Ok(StateProcessRespond::new(StateId::SellerCancelled)), // Locking is not done yet, we can cancel easy way
 			Input::Check => {
 				// Check if mwc lock is already done
 				if tx_conf.mwc_lock_conf.is_some() {
 					// Going to the next step... MWC lock is already published.
-					return Ok(StateProcessRespond::from_state(
+					return Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForLockConfirmations,
 					));
 				}
 
 				// Check the deadline for locking
-				if swap::get_cur_time() > swap.get_time_start_lock() as i64 {
+				if swap::get_cur_time() > time_limit {
 					// cancelling because of timeout
-					return Ok(StateProcessRespond::from_state(StateId::SellerCancelled));
+					return Ok(StateProcessRespond::new(StateId::SellerCancelled));
 				}
 
-				Ok(StateProcessRespond::from_state_action(
-					StateId::SellerPostingLockMwcSlate,
-					Action::SellerPublishMwcLockTx,
-				))
+				Ok(StateProcessRespond::new(StateId::SellerPostingLockMwcSlate)
+					.action(Action::SellerPublishMwcLockTx)
+					.time_limit(time_limit))
 			}
 			Input::Execute {
 				refund_address: _,
 				fee_satoshi_per_byte: _,
 			} => {
 				// Executing the MWC lock transaction
-				if swap::get_cur_time() > swap.get_time_start_lock() as i64 {
+				if swap::get_cur_time() > time_limit {
 					// cancelling because of timeout. The last Chance to cancel easy way.
-					return Ok(StateProcessRespond::from_state(StateId::SellerCancelled));
+					return Ok(StateProcessRespond::new(StateId::SellerCancelled));
 				}
 				// Posting the transaction
 				swap::publish_transaction(&*self.swap_api.node_client, &swap.lock_slate.tx, false)?;
-				Ok(StateProcessRespond::from_state(
+				Ok(StateProcessRespond::new(
 					StateId::SellerWaitingForLockConfirmations,
 				))
 			}
@@ -483,20 +479,22 @@ impl State for SellerWaitingForLockConfirmations {
 		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::from_state(
+			Input::Cancel => Ok(StateProcessRespond::new(
 				StateId::SellerWaitingForRefundHeight,
 			)), // Long cancellation path
 			Input::Check => {
 				let mwc_lock = tx_conf.mwc_lock_conf.unwrap_or(0);
 				let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
 
+				let time_limit = swap.get_time_message_redeem();
+
 				if mwc_lock < swap.mwc_confirmations
 					|| secondary_lock < swap.secondary_confirmations
 				{
 					// Checking for a deadline. Note time_message_redeem is fine, we can borrow time from that operation and still be safe
-					if swap::get_cur_time() > swap.get_time_message_redeem() as i64 {
+					if swap::get_cur_time() > time_limit {
 						// cancelling because of timeout
-						return Ok(StateProcessRespond::from_state(
+						return Ok(StateProcessRespond::new(
 							StateId::SellerWaitingForRefundHeight,
 						));
 					}
@@ -504,29 +502,31 @@ impl State for SellerWaitingForLockConfirmations {
 
 				// Waiting for own funds first. For seller it is MWC
 				if mwc_lock < swap.mwc_confirmations {
-					return Ok(StateProcessRespond::from_state_action(
+					return Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForLockConfirmations,
-						Action::WaitForMwcConfirmations {
-							name: "MWC Lock transaction".to_string(),
-							required: swap.mwc_confirmations,
-							actual: mwc_lock,
-						},
-					));
+					)
+					.action(Action::WaitForMwcConfirmations {
+						name: "MWC Lock transaction".to_string(),
+						required: swap.mwc_confirmations,
+						actual: mwc_lock,
+					})
+					.time_limit(time_limit));
 				}
 
 				if secondary_lock < swap.secondary_confirmations {
-					return Ok(StateProcessRespond::from_state_action(
+					return Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForLockConfirmations,
-						Action::WaitForSecondaryConfirmations {
-							name: format!("{} Locking Account", swap.secondary_currency),
-							currency: swap.secondary_currency,
-							required: swap.secondary_confirmations,
-							actual: secondary_lock,
-						},
-					));
+					)
+					.action(Action::WaitForSecondaryConfirmations {
+						name: format!("{} Locking Account", swap.secondary_currency),
+						currency: swap.secondary_currency,
+						required: swap.secondary_confirmations,
+						actual: secondary_lock,
+					})
+					.time_limit(time_limit));
 				}
 
-				Ok(StateProcessRespond::from_state(
+				Ok(StateProcessRespond::new(
 					StateId::SellerWaitingForInitRedeemMessage,
 				))
 			}
@@ -576,25 +576,27 @@ impl<K: Keychain> State for SellerWaitingForInitRedeemMessage<K> {
 		_tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::from_state(
+			Input::Cancel => Ok(StateProcessRespond::new(
 				StateId::SellerWaitingForRefundHeight,
 			)),
 			Input::Check => {
 				if swap.adaptor_signature.is_some() {
 					// Was already processed. Can go to the next step
-					return Ok(StateProcessRespond::from_state(
+					return Ok(StateProcessRespond::new(
 						StateId::SellerSendingInitRedeemMessage,
 					));
 				}
 
-				if swap::get_cur_time() < swap.get_time_message_redeem() as i64 {
-					Ok(StateProcessRespond::from_state_action(
-						StateId::SellerWaitingForInitRedeemMessage,
-						Action::SellerWaitingForInitRedeemMessage,
-					))
+				let time_limit = swap.get_time_message_redeem();
+				if swap::get_cur_time() < time_limit {
+					Ok(
+						StateProcessRespond::new(StateId::SellerWaitingForInitRedeemMessage)
+							.action(Action::SellerWaitingForInitRedeemMessage)
+							.time_limit(time_limit),
+					)
 				} else {
 					// cancelling
-					Ok(StateProcessRespond::from_state(
+					Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForRefundHeight,
 					))
 				}
@@ -604,7 +606,7 @@ impl<K: Keychain> State for SellerWaitingForInitRedeemMessage<K> {
 				let (_, init_redeem, _) = message.unwrap_init_redeem()?;
 				SellApi::init_redeem(&*self.keychain, swap, context, init_redeem)?;
 				debug_assert!(swap.adaptor_signature.is_some());
-				Ok(StateProcessRespond::from_state(
+				Ok(StateProcessRespond::new(
 					StateId::SellerSendingInitRedeemMessage,
 				))
 			}
@@ -653,27 +655,31 @@ impl State for SellerSendingInitRedeemMessage {
 		_tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::from_state(
+			Input::Cancel => Ok(StateProcessRespond::new(
 				StateId::SellerWaitingForRefundHeight,
 			)), // Last chance to quit
 			Input::Check => {
 				if swap.message2.is_none() {
-					if swap::get_cur_time() < swap.get_time_message_redeem() as i64 {
+					let time_limit = swap.get_time_message_redeem();
+					if swap::get_cur_time() < time_limit {
 						if self.message.is_none() {
 							self.message = Some(SellApi::redeem_message(swap)?);
 						}
-						Ok(StateProcessRespond::from_state_action(
-							StateId::SellerSendingInitRedeemMessage,
-							Action::SellerSendRedeemMessage(self.message.clone().unwrap()),
-						))
+						Ok(
+							StateProcessRespond::new(StateId::SellerSendingInitRedeemMessage)
+								.action(Action::SellerSendRedeemMessage(
+									self.message.clone().unwrap(),
+								))
+								.time_limit(time_limit),
+						)
 					} else {
-						Ok(StateProcessRespond::from_state(
+						Ok(StateProcessRespond::new(
 							StateId::SellerWaitingForRefundHeight,
 						))
 					}
 				} else {
 					// Probably it is a rerun because of some reset. We should tolerate that
-					Ok(StateProcessRespond::from_state(
+					Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForAcceptanceMessage,
 					))
 				}
@@ -686,7 +692,7 @@ impl State for SellerSendingInitRedeemMessage {
 				debug_assert!(self.message.is_some()); // Check expected to be called first
 				swap.message2 = Some(self.message.clone().unwrap());
 
-				Ok(StateProcessRespond::from_state(
+				Ok(StateProcessRespond::new(
 					StateId::SellerWaitingForBuyerToRedeemMwc,
 				))
 			}
@@ -774,13 +780,6 @@ where
 		_tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => {
-				debug_assert!(false);
-				println!("It is too late to quit. Please wait for buyer to redeem MWC and de ready to refund your locked MWC");
-				Ok(StateProcessRespond::from_state(
-					StateId::SellerWaitingForBuyerToRedeemMwc,
-				))
-			}
 			Input::Check => {
 				// Check the deadline for locking
 				//
@@ -788,26 +787,30 @@ where
 				if height > swap.refund_slate.lock_height {
 					info!("Waiting too long for the Buyer to redeem, time to get refund.");
 					// Time to to get my MWC back with a refund.
-					return Ok(StateProcessRespond::from_state(
+					return Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForRefundHeight,
 					));
 				}
 
 				if check_mwc_redeem(swap, &*self.swap_api.node_client)? {
 					// Buyer did a redeem, we can continue processing and redeem BTC
-					return Ok(StateProcessRespond::from_state(
+					return Ok(StateProcessRespond::new(
 						StateId::SellerRedeemSecondaryCurrency,
 					));
 				}
 
 				// Still waiting...
-				Ok(StateProcessRespond::from_state_action(
-					StateId::SellerWaitingForBuyerToRedeemMwc,
-					Action::SellerWaitForBuyerRedeemPublish {
-						mwc_tip: height,
-						lock_height: swap.lock_slate.lock_height,
-					},
-				))
+				Ok(
+					StateProcessRespond::new(StateId::SellerWaitingForBuyerToRedeemMwc)
+						.action(Action::SellerWaitForBuyerRedeemPublish {
+							mwc_tip: height,
+							lock_height: swap.lock_slate.lock_height,
+						})
+						.time_limit(
+							swap::get_cur_time()
+								+ (swap.lock_slate.lock_height.saturating_sub(height) * 60) as i64,
+						),
+				)
 			}
 			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
 				"SellerWaitingForBuyerToRedeemMwc get {:?}",
@@ -824,6 +827,26 @@ where
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Greedy approach, check the deadline for locking
+// It is fair because that code will work only of Buyer delay a lot the redeeming on MWC transaction.
+// One of the reasons to delay is attack.
+fn post_refund_if_possible<'a, C: NodeClient + 'a, B: BtcNodeClient + 'a>(
+	swap_api: Arc<BtcSwapApi<'a, C, B>>,
+	swap: &Swap,
+	tx_conf: &SwapTransactionsConfirmations,
+) -> Result<(), ErrorKind> {
+	let (height, _, _) = swap_api.node_client.get_chain_tip()?;
+	if height > swap.refund_slate.lock_height && tx_conf.mwc_refund_conf.is_none() {
+		let res = swap::publish_transaction(&*swap_api.node_client, &swap.refund_slate.tx, false);
+		if let Err(e) = res {
+			info!("MWC refund can be issued even likely it will fail. Trying to post it. get an error {}", e);
+		} else {
+			info!("MWC refund can be was issued, even it was expected to fail");
+		}
+	}
+	Ok(())
+}
 
 /// State SellerRedeemSecondaryCurrency
 pub struct SellerRedeemSecondaryCurrency<'a, C, B, K>
@@ -875,37 +898,29 @@ where
 		input: Input,
 		swap: &mut Swap,
 		context: &Context,
-		_tx_conf: &SwapTransactionsConfirmations,
+		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => {
-				debug_assert!(false);
-				println!("It is too late to quit. Buyer already redeem your MWC, now you have to redeem BTC");
-				Ok(StateProcessRespond::from_state(
-					StateId::SellerRedeemSecondaryCurrency,
-				))
-			}
 			Input::Check => {
 				// Be greedy, check the deadline for locking
-				let (height, _, _) = self.swap_api.node_client.get_chain_tip()?;
-				if height > swap.lock_slate.lock_height {
-					info!("MWC refund can be issued. It suppose to fail, but let's issue it.");
-					// TODO  let's post issue mwc refund slate, it suppose to fails if there is no attack. In case of attack - it can save us.
-				}
+				post_refund_if_possible(self.swap_api.clone(), swap, tx_conf)?;
 
 				if !check_mwc_redeem(swap, &*self.swap_api.node_client)? {
 					debug_assert!(false); // That shouldn't happen
 					  // Some strange bugs, let's go back to the waiting
-					return Ok(StateProcessRespond::from_state(
+					return Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForBuyerToRedeemMwc,
 					));
 				}
 
 				// Ready to redeem BTC.
-				Ok(StateProcessRespond::from_state_action(
-					StateId::SellerRedeemSecondaryCurrency,
-					Action::SellerPublishTxSecondaryRedeem(swap.secondary_currency),
-				))
+				Ok(
+					StateProcessRespond::new(StateId::SellerRedeemSecondaryCurrency)
+						.action(Action::SellerPublishTxSecondaryRedeem(
+							swap.secondary_currency,
+						))
+						.time_limit(swap.get_time_btc_lock() - swap.get_timeinterval_btc_lock()),
+				)
 			}
 			Input::Execute {
 				refund_address: _,
@@ -919,7 +934,7 @@ where
 					false,
 				)?;
 				debug_assert!(swap.secondary_data.unwrap_btc()?.redeem_tx.is_some());
-				Ok(StateProcessRespond::from_state(
+				Ok(StateProcessRespond::new(
 					StateId::SellerWaitingForRedeemConfirmations,
 				))
 			}
@@ -940,15 +955,34 @@ where
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// State SellerWaitingForRedeemConfirmations
-pub struct SellerWaitingForRedeemConfirmations {}
-impl SellerWaitingForRedeemConfirmations {
+pub struct SellerWaitingForRedeemConfirmations<'a, C, B>
+where
+	C: NodeClient + 'a,
+	B: BtcNodeClient + 'a,
+{
+	swap_api: Arc<BtcSwapApi<'a, C, B>>,
+	phantom: PhantomData<&'a C>,
+}
+
+impl<'a, C, B> SellerWaitingForRedeemConfirmations<'a, C, B>
+where
+	C: NodeClient + 'a,
+	B: BtcNodeClient + 'a,
+{
 	/// Create a new instance
-	pub fn new() -> Self {
-		Self {}
+	pub fn new(swap_api: Arc<BtcSwapApi<'a, C, B>>) -> Self {
+		Self {
+			swap_api,
+			phantom: PhantomData,
+		}
 	}
 }
 
-impl State for SellerWaitingForRedeemConfirmations {
+impl<'a, C, B> State for SellerWaitingForRedeemConfirmations<'a, C, B>
+where
+	C: NodeClient + 'a,
+	B: BtcNodeClient + 'a,
+{
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerWaitingForRedeemConfirmations
 	}
@@ -968,34 +1002,28 @@ impl State for SellerWaitingForRedeemConfirmations {
 		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => {
-				debug_assert!(false);
-				println!("It is too late to quit. Trade is almost done");
-				Ok(StateProcessRespond::from_state(
-					StateId::SellerWaitingForRedeemConfirmations,
-				))
-			}
 			Input::Check => {
-				// Check the deadline for locking
-				// TODO   Check if need to do a retry.
+				// Be greedy, check the deadline for locking
+				post_refund_if_possible(self.swap_api.clone(), swap, tx_conf)?;
 
 				// Just waiting
 				if let Some(conf) = tx_conf.secondary_redeem_conf {
 					if conf >= swap.secondary_confirmations {
 						// We are done
-						return Ok(StateProcessRespond::from_state(StateId::SellerSwapComplete));
+						return Ok(StateProcessRespond::new(StateId::SellerSwapComplete));
 					}
 				}
 
-				return Ok(StateProcessRespond::from_state_action(
-					StateId::SellerWaitingForRedeemConfirmations,
-					Action::WaitForSecondaryConfirmations {
-						name: "Redeem Transaction".to_string(),
-						currency: swap.secondary_currency,
-						required: swap.secondary_confirmations,
-						actual: tx_conf.secondary_redeem_conf.unwrap_or(0),
-					},
-				));
+				return Ok(
+					StateProcessRespond::new(StateId::SellerWaitingForRedeemConfirmations).action(
+						Action::WaitForSecondaryConfirmations {
+							name: "Redeem Transaction".to_string(),
+							currency: swap.secondary_currency,
+							required: swap.secondary_confirmations,
+							actual: tx_conf.secondary_redeem_conf.unwrap_or(0),
+						},
+					),
+				);
 			}
 			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
 				"SellerWaitingForRedeemConfirmations get {:?}",
@@ -1041,7 +1069,7 @@ impl State for SellerSwapComplete {
 		_tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Check => Ok(StateProcessRespond::from_state(StateId::SellerSwapComplete)),
+			Input::Check => Ok(StateProcessRespond::new(StateId::SellerSwapComplete)),
 			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
 				"SellerSwapComplete get {:?}",
 				input
@@ -1087,7 +1115,7 @@ impl State for SellerCancelled {
 		_tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Check => Ok(StateProcessRespond::from_state(StateId::SellerCancelled)),
+			Input::Check => Ok(StateProcessRespond::new(StateId::SellerCancelled)),
 			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
 				"SellerCancelled get {:?}",
 				input
@@ -1157,7 +1185,7 @@ where
 		match input {
 			Input::Cancel => {
 				debug_assert!(false);
-				Ok(StateProcessRespond::from_state(
+				Ok(StateProcessRespond::new(
 					StateId::SellerWaitingForRefundHeight,
 				))
 			}
@@ -1166,19 +1194,18 @@ where
 				//
 				let (height, _, _) = self.swap_api.node_client.get_chain_tip()?;
 				if height > swap.lock_slate.lock_height {
-					return Ok(StateProcessRespond::from_state(
-						StateId::SellerPostingRefundSlate,
-					));
+					return Ok(StateProcessRespond::new(StateId::SellerPostingRefundSlate));
 				}
 
 				// Still waiting...
-				Ok(StateProcessRespond::from_state_action(
-					StateId::SellerWaitingForBuyerToRedeemMwc,
-					Action::WaitForMwcRefundUnlock {
-						mwc_tip: height,
-						lock_height: swap.lock_slate.lock_height,
-					},
-				))
+				Ok(
+					StateProcessRespond::new(StateId::SellerWaitingForBuyerToRedeemMwc).action(
+						Action::WaitForMwcRefundUnlock {
+							mwc_tip: height,
+							lock_height: swap.lock_slate.lock_height,
+						},
+					),
+				)
 			}
 			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
 				"SellerWaitingForRefundHeight get {:?}",
@@ -1247,15 +1274,13 @@ where
 				// Check if mwc lock is already done
 				if tx_conf.mwc_refund_conf.is_some() {
 					// already published.
-					return Ok(StateProcessRespond::from_state(
+					return Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForRefundConfirmations,
 					));
 				}
 
-				Ok(StateProcessRespond::from_state_action(
-					StateId::SellerPostingRefundSlate,
-					Action::SellerPublishMwcRefundTx,
-				))
+				Ok(StateProcessRespond::new(StateId::SellerPostingRefundSlate)
+					.action(Action::SellerPublishMwcRefundTx))
 			}
 			Input::Execute {
 				refund_address: _,
@@ -1269,7 +1294,7 @@ where
 					&swap.refund_slate.tx,
 					false,
 				)?;
-				Ok(StateProcessRespond::from_state(
+				Ok(StateProcessRespond::new(
 					StateId::SellerWaitingForRefundConfirmations,
 				))
 			}
@@ -1323,19 +1348,18 @@ impl State for SellerWaitingForRefundConfirmations {
 				let refund_conf = tx_conf.mwc_refund_conf.unwrap_or(0);
 				if refund_conf > swap.mwc_confirmations {
 					// already published.
-					return Ok(StateProcessRespond::from_state(
-						StateId::SellerCancelledRefunded,
-					));
+					return Ok(StateProcessRespond::new(StateId::SellerCancelledRefunded));
 				}
 
-				Ok(StateProcessRespond::from_state_action(
-					StateId::SellerWaitingForRefundConfirmations,
-					Action::WaitForMwcConfirmations {
-						name: "MWC Refund".to_string(),
-						required: swap.mwc_confirmations,
-						actual: refund_conf,
-					},
-				))
+				Ok(
+					StateProcessRespond::new(StateId::SellerWaitingForRefundConfirmations).action(
+						Action::WaitForMwcConfirmations {
+							name: "MWC Refund".to_string(),
+							required: swap.mwc_confirmations,
+							actual: refund_conf,
+						},
+					),
+				)
 			}
 			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
 				"SellerWaitingForRefundConfirmations get {:?}",
@@ -1381,9 +1405,7 @@ impl State for SellerCancelledRefunded {
 		_tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Check => Ok(StateProcessRespond::from_state(
-				StateId::SellerCancelledRefunded,
-			)),
+			Input::Check => Ok(StateProcessRespond::new(StateId::SellerCancelledRefunded)),
 			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
 				"SellerCancelled get {:?}",
 				input

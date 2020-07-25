@@ -24,8 +24,6 @@ use libwallet::{InitTxArgs, Slate};
 use std::thread;
 use std::time::Duration;
 
-use grin_wallet_util::OnionV3Address;
-
 #[macro_use]
 mod common;
 use common::{clean_output_dir, create_wallet_proxy, setup};

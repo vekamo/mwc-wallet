@@ -135,7 +135,7 @@ impl SellApi {
 		refund_slate.fee = tx_fee(1, 1, 1, None);
 		refund_slate.height = height;
 		// Calculating lock height from locking time. For MWC the mining speed is about 1 minute
-		refund_slate.lock_height = height + (mwc_lock_time - start_time) / 60 + 1;
+		refund_slate.lock_height = height + (mwc_lock_time - start_time) as u64 / 60 + 1;
 		refund_slate.amount = primary_amount.saturating_sub(refund_slate.fee);
 
 		// Don't lock for more than 30 days.

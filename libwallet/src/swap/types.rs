@@ -92,7 +92,7 @@ impl Currency {
 	}
 
 	/// Block period for this coin (seconds)
-	pub fn block_time_period_sec(&self) -> u64 {
+	pub fn block_time_period_sec(&self) -> i64 {
 		match self {
 			Currency::Btc => 10 * 60,
 		}
