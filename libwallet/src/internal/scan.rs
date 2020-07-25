@@ -796,6 +796,13 @@ where
 			if !(tx.tx_log.confirmed || tx.tx_log.is_cancelled())
 				|| tx.tx_log.output_height >= start_height
 			{
+				// Skipping old coinbase transaction that are not confirmed
+				if tx.tx_log.tx_type == TxLogEntryType::ConfirmedCoinbase
+					&& tx.tx_log.output_height < end_height.saturating_sub(500)
+				{
+					continue;
+				}
+
 				if let Some(kernel) = &tx.tx_log.kernel_excess {
 					// Note!!!! Test framework doesn't support None for params. So assuming that value must be provided
 					let start_height = cmp::max(start_height, 1); // API to tests don't support 0 or smaller

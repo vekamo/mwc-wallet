@@ -57,9 +57,9 @@ pub(crate) use self::seller::SellApi;
 pub use grin_keychain::Keychain;
 
 #[cfg(test)]
-use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(test)]
 use serial_test::serial;
+#[cfg(test)]
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const CURRENT_VERSION: u8 = 1;
 

@@ -207,8 +207,8 @@ impl Client {
 	pub async fn post_async<IN, OUT>(
 		&self,
 		url: &str,
-		input: &IN,
 		api_secret: Option<String>,
+		input: &IN,
 	) -> Result<OUT, Error>
 	where
 		IN: Serialize,
