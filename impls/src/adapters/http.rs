@@ -173,6 +173,10 @@ impl HttpDataSender {
 			return Err(ErrorKind::ClientCallback(report).into());
 		}
 
+		if supported_slate_versions.contains(&"V3B".to_owned()) {
+			return Ok(SlateVersion::V3B);
+		}
+
 		if supported_slate_versions.contains(&"V3".to_owned()) {
 			return Ok(SlateVersion::V3);
 		}
@@ -293,11 +297,11 @@ impl SlateSender for HttpDataSender {
 		let url_str = self.set_up_tor_send_process()?;
 
 		let slate_send = match self.check_other_version(&url_str, None)? {
-			SlateVersion::V3 => VersionedSlate::into_version(slate.clone(), SlateVersion::V3),
-			SlateVersion::V2 => {
+			SlateVersion::V3B => VersionedSlate::into_version(slate.clone(), SlateVersion::V3),
+			SlateVersion::V2 | SlateVersion::V3 => {
 				let mut slate = slate.clone();
 				if slate.payment_proof.is_some() {
-					return Err(ErrorKind::ClientCallback("Payment proof requested, but other wallet does not support payment proofs. Please urge other user to upgrade, or re-send tx without a payment proof".into()).into());
+					return Err(ErrorKind::ClientCallback("Payment proof requested, but other wallet does not support payment proofs or tor payment proof. Please urge other user to upgrade, or re-send tx without a payment proof".into()).into());
 				}
 				if slate.ttl_cutoff_height.is_some() {
 					warn!("Slate TTL value will be ignored and removed by other wallet, as other wallet does not support this feature. Please urge other user to upgrade");
@@ -367,7 +371,9 @@ impl SlateSender for HttpDataSender {
 			return Err(ErrorKind::ClientCallback(report).into());
 		}
 
-		if res["result"]["Ok"]["version_info"]["version"] == json!(3) && res["result"]["Ok"]["ttl_cutoff_height"] == json!(null) {
+		if res["result"]["Ok"]["version_info"]["version"] == json!(3)
+			&& res["result"]["Ok"]["ttl_cutoff_height"] == json!(null)
+		{
 			res["result"]["Ok"]["ttl_cutoff_height"] = json!(u64::MAX);
 		}
 		let slate_value = res["result"]["Ok"].clone();
