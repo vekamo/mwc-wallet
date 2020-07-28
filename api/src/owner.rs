@@ -2409,13 +2409,15 @@ where
 		owner_swap::swap_dump(self.wallet_inst.clone(), keychain_mask, &swap_id)
 	}
 
-	/// Get swap state and action
-	pub fn get_swap_status_action(
+	/// Refresh and get a status and current expected action for the swap.
+	/// return: <state>, <Action>, <time limit>
+	/// time limit shows when this action will be expired
+	pub fn update_swap_status_action(
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		swap_id: String,
-	) -> Result<(StateId, Action), Error> {
-		owner_swap::get_swap_status_action(self.wallet_inst.clone(), keychain_mask, &swap_id)
+	) -> Result<(StateId, Action, Option<i64>), Error> {
+		owner_swap::update_swap_status_action(self.wallet_inst.clone(), keychain_mask, &swap_id)
 	}
 
 	/// Get a status of the transactions that involved into the swap.

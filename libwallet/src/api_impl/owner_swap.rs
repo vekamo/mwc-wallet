@@ -257,12 +257,14 @@ where
 	Ok(dump_res)
 }
 
-/// Get a status and action for the swap.
-pub fn get_swap_status_action<'a, L, C, K>(
+/// Refresh and get a status and current expected action for the swap.
+/// return: <state>, <Action>, <time limit>
+/// time limit shows when this action will be expired
+pub fn update_swap_status_action<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	swap_id: &str,
-) -> Result<(StateId, Action), Error>
+) -> Result<(StateId, Action, Option<i64>), Error>
 where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
@@ -283,7 +285,11 @@ where
 	// Action might update the states. Need to save it
 	trades::store_swap_trade(&context, &swap, &skey)?;
 
-	Ok((resp.next_state_id, resp.action.unwrap_or(Action::None)))
+	Ok((
+		resp.next_state_id,
+		resp.action.unwrap_or(Action::None),
+		resp.time_limit,
+	))
 }
 
 /// Get a status of the transactions that involved into the swap.

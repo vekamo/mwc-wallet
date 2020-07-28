@@ -414,9 +414,6 @@ pub enum Action {
 	/// Buyer publishing MWC redeem transaction and reveal the secret.
 	BuyerPublishMwcRedeemTx,
 
-	/// Wait for the secondary redeem tx to be mined
-	ConfirmationRedeemSecondary(Currency, String),
-
 	/// Seller Publishing MWC Refund Tx to the network
 	SellerPublishMwcRefundTx,
 
@@ -435,6 +432,22 @@ pub enum Action {
 }
 
 impl Action {
+	/// Return true if this action require execution (swap --process) from the user.
+	pub fn can_execute(&self) -> bool {
+		match &self {
+			Action::SellerSendOfferMessage(_)
+			| Action::BuyerSendAcceptOfferMessage(_)
+			| Action::BuyerSendInitRedeemMessage(_)
+			| Action::SellerSendRedeemMessage(_)
+			| Action::SellerPublishMwcLockTx
+			| Action::SellerPublishTxSecondaryRedeem(_)
+			| Action::BuyerPublishMwcRedeemTx
+			| Action::SellerPublishMwcRefundTx
+			| Action::BuyerPublishSecondaryRefundTx(_) => true,
+			_ => false,
+		}
+	}
+
 	/// Convert action to a name string
 	pub fn get_id_str(&self) -> String {
 		let res = match &self {
@@ -473,7 +486,6 @@ impl Action {
 				lock_height: _,
 			} => "WaitForMwcRefundUnlock",
 			Action::BuyerPublishMwcRedeemTx => "BuyerPublishMwcRedeemTx",
-			Action::ConfirmationRedeemSecondary(_, _) => "ConfirmationRedeemSecondary",
 			Action::SellerPublishMwcRefundTx => "SellerPublishMwcRefundTx",
 			Action::BuyerPublishSecondaryRefundTx(_) => "BuyerPublishSecondaryRefundTx",
 			Action::WaitingForBtcRefund {
@@ -544,10 +556,6 @@ impl fmt::Display for Action {
 				(lock_height.saturating_sub(*mwc_tip))
 			),
 			Action::BuyerPublishMwcRedeemTx => "Posting MWC redeem transaction".to_string(),
-			Action::ConfirmationRedeemSecondary(currency, btc_address) => format!(
-				"Waiting for {} Redeem transaction to be confirmed for {}",
-				currency, btc_address
-			),
 			Action::SellerPublishMwcRefundTx => "Posting MWC refund transaction".to_string(),
 			Action::BuyerPublishSecondaryRefundTx(currency) => {
 				format!("Posting {} refund transaction", currency)

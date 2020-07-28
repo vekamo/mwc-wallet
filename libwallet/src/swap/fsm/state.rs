@@ -160,6 +160,17 @@ impl fmt::Display for StateId {
 }
 
 impl StateId {
+	/// return true if this state is final and swap trade is done
+	pub fn is_final_state(&self) -> bool {
+		match self {
+			StateId::SellerSwapComplete
+			| StateId::BuyerSwapComplete
+			| StateId::SellerCancelled
+			| StateId::BuyerCancelled => true,
+			_ => false,
+		}
+	}
+
 	/// Convert string name to State instance
 	pub fn from_cmd_str(str: &str) -> Result<Self, ErrorKind> {
 		match str {

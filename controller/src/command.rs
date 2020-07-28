@@ -23,8 +23,7 @@ use crate::impls::{create_sender, SlateGetter as _};
 use crate::impls::{PathToSlate, SlatePutter};
 use crate::keychain;
 use crate::libwallet::{
-	swap::fsm::state::StateId, InitTxArgs, IssueInvoiceTxArgs, NodeClient, PaymentProof,
-	WalletLCProvider,
+	InitTxArgs, IssueInvoiceTxArgs, NodeClient, PaymentProof, WalletLCProvider,
 };
 use crate::util::secp::key::SecretKey;
 use crate::util::{Mutex, ZeroingString};
@@ -32,6 +31,7 @@ use crate::{controller, display};
 use grin_wallet_impls::adapters::create_swap_message_sender;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::swap::message::Message;
+use grin_wallet_libwallet::swap::types::Action;
 use grin_wallet_libwallet::{Slate, TxLogEntry};
 use serde_json as json;
 use std::fs::File;
@@ -1510,8 +1510,8 @@ where
 					Ok(swap) => {
 						let conf_status =
 							api.get_swap_tx_tstatus(keychain_mask, swap_id.clone())?;
-						let (status, action) =
-							api.get_swap_status_action(keychain_mask, swap_id.clone())?;
+						let (status, action, _time_limit) =
+							api.update_swap_status_action(keychain_mask, swap_id.clone())?;
 
 						display::swap_trade(swap, &status, &action, &conf_status)?;
 						Ok(())
@@ -1632,9 +1632,6 @@ where
 						Ok(())
 					};
 
-				let (curr_state, curr_action) =
-					api.get_swap_status_action(keychain_mask, swap_id.clone())?;
-				println!("BEFORE::::state = {}, action = {}", curr_state, curr_action);
 				let result = api.swap_process(
 					keychain_mask,
 					&swap_id,
@@ -1642,12 +1639,17 @@ where
 					args.destination,
 					args.fee_satoshi_per_byte,
 				);
-				let (new_state, new_action) =
-					api.get_swap_status_action(keychain_mask, swap_id.clone())?;
-				println!("AFTER::::state = {}, action = {}", new_state, new_action);
 
 				match result {
-					Ok(_) => Ok(()),
+					Ok(res) => {
+						// TODO del me before relase
+						println!(
+							"AFTER::::state = {}, action = {}",
+							res.next_state_id,
+							res.action.unwrap_or(Action::None)
+						);
+						Ok(())
+					}
 					Err(e) => {
 						error!("Unable to process Swap {}: {}", swap_id, e);
 						Err(ErrorKind::LibWallet(format!(
@@ -1739,6 +1741,7 @@ where
 						Ok(())
 					};
 
+				/*  No need to do initial execution. loop covers all cases well
 				let mut result = api.swap_process(
 					keychain_mask,
 					&swap_id,
@@ -1747,67 +1750,60 @@ where
 					args.fee_satoshi_per_byte,
 				);
 				let (mut curr_state, mut curr_action) =
-					api.get_swap_status_action(keychain_mask, swap_id.clone())?;
+					api.get_swap_status_action(keychain_mask, swap_id.clone())?;*/
 
+				// TODO - here we will need to print execution plan. It is not finalized yet,that functionality will be soon implented for 'swap --check'
+
+				// NOTE - we can't process errors with '?' here. We can't exit, we must try forever or until we get a final state
 				loop {
-					match curr_state {
-						StateId::SellerSwapComplete | StateId::BuyerSwapComplete => {
-							break;
-						}
-						StateId::SellerWaitingForAcceptanceMessage
-						| StateId::SellerWaitingForBuyerLock
-						| StateId::SellerWaitingForLockConfirmations
-						| StateId::SellerWaitingForInitRedeemMessage
-						| StateId::SellerWaitingForBuyerToRedeemMwc
-						| StateId::SellerWaitingForRedeemConfirmations
-						| StateId::BuyerWaitingForSellerToLock
-						| StateId::BuyerWaitingForLockConfirmations
-						| StateId::BuyerWaitingForRespondRedeemMessage
-						| StateId::BuyerWaitForRedeemMwcConfirmations
-						| StateId::BuyerPostingSecondaryToMultisigAccount => {
-							thread::sleep(Duration::from_millis(60000));
-						}
-						StateId::SellerSendingOffer
-						| StateId::SellerPostingLockMwcSlate
-						| StateId::SellerSendingInitRedeemMessage
-						| StateId::SellerRedeemSecondaryCurrency
-						| StateId::BuyerSendingAcceptOfferMessage
-						| StateId::BuyerSendingInitRedeemMessage
-						| StateId::BuyerRedeemMwc => {
-							result = api.swap_process(
-								keychain_mask,
-								&swap_id,
-								message_sender.clone(),
-								args.destination.clone(),
-								args.fee_satoshi_per_byte,
-							);
-						}
-						_ => {
-							println!(
-								"Unexpected state id {} in auto swap, action: {}",
-								curr_state, curr_action
-							);
-							break;
-						}
+					// we can't exit by error from the loop.
+					let (curr_state, curr_action, _time_limit) =
+						match api.update_swap_status_action(keychain_mask, swap_id.clone()) {
+							Ok(res) => res,
+							Err(e) => {
+								error!("Error during Swap {}: {}", swap_id, e);
+								thread::sleep(Duration::from_millis(10000));
+								continue;
+							}
+						};
+
+					// In case of final state - we are exiting.
+					if curr_state.is_final_state() {
+						break;
 					}
-					let (new_state, new_action) =
-						api.get_swap_status_action(keychain_mask, swap_id.clone())?;
-					curr_state = new_state;
-					curr_action = new_action;
-					println!("{}", curr_state);
+
+					// If actin require execution - it must be executed
+					if curr_action.can_execute() {
+						match api.swap_process(
+							keychain_mask,
+							&swap_id,
+							message_sender.clone(),
+							args.destination.clone(),
+							args.fee_satoshi_per_byte,
+						) {
+							Ok(_) => (),
+							Err(e) => error!("Error during Swap {}: {}", swap_id, e),
+						}
+						// We can execute in the row. Internal guarantees that we will never do retry to the same action unless it is an error
+						// The sleep here for possible error
+						thread::sleep(Duration::from_millis(10000));
+						continue;
+					}
+
+					// TODO we need to print change and I think better for action, not for state.
+					// In this case there will be a nice progress.
+					// TODO  get_swap_status_action now returns _time_limit - it is a timestamp for the action. I will add function to show it.
+					// Action need to be executed before.
+
+					//curr_state = new_state;
+					//curr_action = new_action;
+					// TODO - we need to print only if action/state was changed. Sometimes Action is None, so the state has meaning.
+					println!("{}, {}", curr_state, curr_action);
+
+					thread::sleep(Duration::from_millis(60000));
 				}
 
-				match result {
-					Ok(_) => Ok(()),
-					Err(e) => {
-						error!("Unable to process Swap {}: {}", swap_id, e);
-						Err(ErrorKind::LibWallet(format!(
-							"Unable to process Swap {}: {}",
-							swap_id, e
-						))
-						.into())
-					}
-				}
+				Ok(())
 			})?;
 			//}
 			Ok(())
