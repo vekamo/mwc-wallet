@@ -38,7 +38,11 @@ pub const GRIN_BLOCK_HEADER_VERSION: u16 = 3;
 /// Existing versions of the slate
 #[derive(EnumIter, Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub enum SlateVersion {
-	/// V3 (most current)
+	/// V3b (most current) the difference between V3b and V3 is that the way to do payment proof is different
+	/// V3b support both mqs public key and dalek public key; V3 only support mqs public key.
+	/// they have the same format of slate though.
+	V3B,
+	/// V3
 	V3,
 	/// V2 (2.0.0 - Onwards)
 	V2,
@@ -67,6 +71,7 @@ impl VersionedSlate {
 	/// convert this slate type to a specified older version
 	pub fn into_version(slate: Slate, version: SlateVersion) -> VersionedSlate {
 		match version {
+			SlateVersion::V3B => VersionedSlate::V3(slate.into()),
 			SlateVersion::V3 => VersionedSlate::V3(slate.into()),
 			// Left here as a reminder of what needs to be inserted on
 			// the release of a new slate
@@ -106,6 +111,7 @@ impl VersionedCoinbase {
 	/// convert this coinbase data to a specific versioned representation for the json api.
 	pub fn into_version(cb: CbData, version: SlateVersion) -> VersionedCoinbase {
 		match version {
+			SlateVersion::V3B => VersionedCoinbase::V3(cb.into()),
 			SlateVersion::V3 => VersionedCoinbase::V3(cb.into()),
 			SlateVersion::V2 => VersionedCoinbase::V2(cb.into()),
 		}

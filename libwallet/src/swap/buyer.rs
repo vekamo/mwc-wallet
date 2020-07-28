@@ -67,7 +67,7 @@ impl BuyApi {
 		let now_ts = swap::get_cur_time();
 
 		// Tolerating 15 seconds clock difference. We don't want surprises with clocks.
-		if offer.start_time.timestamp() > now_ts + 15 {
+		if offer.start_time.timestamp() > (now_ts + 15) {
 			return Err(ErrorKind::InvalidMessageData(
 				"Buyer/Seller clock are out of sync".to_string(),
 			));
@@ -251,7 +251,7 @@ impl BuyApi {
 		};
 
 		// Minimum mwc heights
-		let expected_lock_height = height + (swap.get_time_mwc_lock() - now_ts as u64) / 60;
+		let expected_lock_height = height + (swap.get_time_mwc_lock() - now_ts) as u64 / 60;
 
 		if swap.refund_slate.lock_height < expected_lock_height * 9 / 10 {
 			return Err(ErrorKind::InvalidMessageData(

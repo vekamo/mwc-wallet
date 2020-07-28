@@ -156,6 +156,7 @@ where
 						&config.api_listen_addr(),
 						g_args.tls_conf.clone(),
 						tor_config.use_tor_listener,
+						config.grinbox_address_index(),
 					);
 					if let Err(e) = res {
 						error!("Error starting http listener: {}", e);
@@ -1578,6 +1579,7 @@ where
 											&config2.api_listen_addr(),
 											g_args2.tls_conf.clone(),
 											tor_config.unwrap().use_tor_listener,
+											config2.grinbox_address_index(),
 										);
 										if let Err(e) = res {
 											error!("Error starting http listener: {}", e);

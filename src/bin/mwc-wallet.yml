@@ -521,7 +521,7 @@ subcommands:
             takes_value: true
             default_value: "60"
         - redeem_time:
-            help: How much time (minutes) is reserved for execution of redeem or refund transaction. Please reserve enough time for this operation, otherwise you become an easy target for attacks.
+            help: How much time (minutes) is reserved for execution of redeem or refund transaction. Please reserve enough time for this operation, if you go out of time, your swap trade will be cancelled.
             long: redeem_time
             takes_value: true
             default_value: "60"

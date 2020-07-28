@@ -279,8 +279,8 @@ impl HTTPNodeClient {
 			for req in &reqs {
 				tasks.push(self.client.post_async::<Request, Response>(
 					url.as_str(),
-					req,
 					self.node_api_secret(),
+					req,
 				));
 			}
 
@@ -291,7 +291,7 @@ impl HTTPNodeClient {
 		let res = scope(|s| {
 			let handle = s.spawn(|_| {
 				let mut rt = Builder::new()
-					.threaded_scheduler()
+					.basic_scheduler()
 					.enable_all()
 					.build()
 					.unwrap();
@@ -574,7 +574,7 @@ impl NodeClient for HTTPNodeClient {
 
 		let mut result_blocks: Vec<api::BlockPrintable> = Vec::new();
 		let mut rt = Builder::new()
-			.threaded_scheduler()
+			.basic_scheduler()
 			.enable_all()
 			.build()
 			.unwrap();

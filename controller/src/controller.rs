@@ -92,6 +92,7 @@ fn check_middleware(
 pub fn get_tor_address<L, C, K>(
         wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
         keychain_mask: Arc<Mutex<Option<SecretKey>>>,
+		address_index: u32,
 ) -> Result<String, Error>
 where
         L: WalletLCProvider<'static, C, K> + 'static,
@@ -105,7 +106,7 @@ where
 	let w_inst = lc.wallet_inst()?;
 	let k = w_inst.keychain((&mask).as_ref())?;
 	let parent_key_id = w_inst.parent_key_id();
-	let sec_key = address::address_from_derivation_path(&k, &parent_key_id, 0).map_err(|e| {
+	let sec_key = address::address_from_derivation_path(&k, &parent_key_id, address_index).map_err(|e| {
 		ErrorKind::TorConfig(format!("Unable to build key for onion address, {}", e))
 	})?;
 	Ok(format!("{}", OnionV3Address::from_private(&sec_key.0).unwrap()))
@@ -117,6 +118,7 @@ pub fn init_tor_listener<L, C, K>(
 	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
 	addr: &str,
 	tor_base: Option<&str>,
+	address_index:u32,
 ) -> Result<tor_process::TorProcess, Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
@@ -137,7 +139,7 @@ where
 		format!("{}/tor/listener", lc.get_top_level_directory()?)
 	};
 
-	let sec_key = address::address_from_derivation_path(&k, &parent_key_id, 0).map_err(|e| {
+	let sec_key = address::address_from_derivation_path(&k, &parent_key_id, address_index).map_err(|e| {
 		ErrorKind::TorConfig(format!("Unable to build key for onion address, {}", e))
 	})?;
 	let onion_address = OnionV3Address::from_private(&sec_key.0)
@@ -832,6 +834,7 @@ pub fn foreign_listener<L, C, K>(
 	addr: &str,
 	tls_config: Option<TLSConfig>,
 	use_tor: bool,
+	address_index: u32,
 ) -> Result<(), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
@@ -846,7 +849,7 @@ where
 	}
 	// need to keep in scope while the main listener is running
 	let _tor_process = match use_tor {
-		true => match init_tor_listener(wallet.clone(), keychain_mask.clone(), addr, None) {
+		true => match init_tor_listener(wallet.clone(), keychain_mask.clone(), addr, None, address_index) {
 			Ok(tp) => Some(tp),
 			Err(e) => {
 				warn!("Unable to start TOR listener; Check that TOR executable is installed and on your path");

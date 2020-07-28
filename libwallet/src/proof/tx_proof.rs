@@ -80,9 +80,9 @@ pub struct TxProof {
 	pub version: Option<String>,
 	/// this is the encrypted slate message
 	pub slate_message: Option<String>,
-	/// tor proof signature
+	/// Tor (Dalek ed25519) signature
 	pub tor_proof_signature: Option<String>,
-	/// tor sender address
+	/// Tor Sender address
 	pub tor_sender_address: Option<String>,
 }
 

@@ -912,7 +912,7 @@ fn replicate_tx_fluff_failure() {
 	let client1_w = HTTPWalletCommAdapter::new();
 	let wallet1 = create_wallet("target/tmp/tx_fluff/wallet1", client1.clone());
 	let _wallet1_handle = thread::spawn(move || {
-		controller::foreign_listener(wallet1, "127.0.0.1:33000", None)
+		controller::foreign_listener(wallet1, "127.0.0.1:33000", None, 0)
 			.unwrap_or_else(|e| panic!("Error creating wallet1 listener: {:?}", e,));
 	});
 
@@ -920,7 +920,7 @@ fn replicate_tx_fluff_failure() {
 	let client2 = HTTPNodeClient::new("http://127.0.0.1:23001", None);
 	let wallet2 = create_wallet("target/tmp/tx_fluff/wallet2", client2.clone());
 	let _wallet2_handle = thread::spawn(move || {
-		controller::foreign_listener(wallet2, "127.0.0.1:33001", None)
+		controller::foreign_listener(wallet2, "127.0.0.1:33001", None, 0)
 			.unwrap_or_else(|e| panic!("Error creating wallet2 listener: {:?}", e,));
 	});
 

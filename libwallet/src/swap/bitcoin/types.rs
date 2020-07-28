@@ -299,7 +299,7 @@ impl BtcData {
 		refund_address: &Address,
 		input_script: &Script,
 		fee_sat_per_byte: f32,
-		btc_lock_time: u64,
+		btc_lock_time: i64,
 		buyer_btc_secret: &SecretKey,
 		conf_outputs: &Vec<Output>,
 	) -> Result<BtcTtansaction, ErrorKind> {

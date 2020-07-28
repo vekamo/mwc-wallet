@@ -734,15 +734,9 @@ where
 
 #[cfg(test)]
 mod test {
-	use super::*;
-	use rand::rngs::mock::StepRng;
-
 	use crate::grin_core::core::KernelFeatures;
 	use crate::grin_core::libtx::{build, ProofBuilder};
-	use crate::grin_keychain::{
-		BlindSum, BlindingFactor, ExtKeychain, ExtKeychainPath, Keychain, SwitchCommitmentType,
-	};
-	use crate::grin_util::{secp, static_secp_instance};
+	use crate::grin_keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment

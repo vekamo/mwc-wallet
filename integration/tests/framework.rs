@@ -302,13 +302,18 @@ impl LocalServerContainer {
 	pub fn run_wallet(&mut self, _duration_in_mills: u64) {
 		let wallet = self.make_wallet_for_tests();
 
-		wallet::controller::foreign_listener(wallet, &self.wallet_config.api_listen_addr(), None)
-			.unwrap_or_else(|e| {
-				panic!(
-					"Error creating wallet listener: {:?} Config: {:?}",
-					e, self.wallet_config
-				)
-			});
+		wallet::controller::foreign_listener(
+			wallet,
+			&self.wallet_config.api_listen_addr(),
+			None,
+			0,
+		)
+		.unwrap_or_else(|e| {
+			panic!(
+				"Error creating wallet listener: {:?} Config: {:?}",
+				e, self.wallet_config
+			)
+		});
 
 		self.wallet_is_running = true;
 	}

@@ -681,7 +681,7 @@ pub fn swap_trade(
 		println!("Seller refund is active");
 	}
 
-	let now_ts = Utc::now().timestamp() as u64;
+	let now_ts = Utc::now().timestamp();
 	let btc_lock_time = swap.get_time_btc_lock();
 	if now_ts < btc_lock_time {
 		let buyer_lock_time = btc_lock_time - now_ts;
