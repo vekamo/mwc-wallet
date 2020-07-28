@@ -1510,10 +1510,10 @@ where
 					Ok(swap) => {
 						let conf_status =
 							api.get_swap_tx_tstatus(keychain_mask, swap_id.clone())?;
-						let (status, action, _time_limit) =
+						let (status, action, time_limit) =
 							api.update_swap_status_action(keychain_mask, swap_id.clone())?;
 
-						display::swap_trade(swap, &status, &action, &conf_status)?;
+						display::swap_trade(swap, &status, &action, &time_limit, &conf_status)?;
 						Ok(())
 					}
 					Err(e) => {

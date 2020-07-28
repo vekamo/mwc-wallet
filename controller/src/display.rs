@@ -14,7 +14,7 @@
 
 use crate::core::core::{self, amount_to_hr_string};
 use crate::core::global;
-use crate::libwallet::swap::swap::Swap;
+use crate::libwallet::swap::swap;
 use crate::libwallet::swap::types::{Action, Role};
 use crate::libwallet::{
 	AcctPathMapping, Error, OutputCommitMapping, OutputStatus, TxLogEntry, WalletInfo,
@@ -639,9 +639,10 @@ pub fn swap_trades(trades: Vec<(String, String)>) {
 
 /// Display list of wallet accounts in a pretty way
 pub fn swap_trade(
-	swap: Swap,
+	swap: swap::Swap,
 	state: &StateId,
 	action: &Action,
+	time_limit: &Option<i64>,
 	tx_conf: &SwapTransactionsConfirmations,
 ) -> Result<(), Error> {
 	println!("Swap ID: {}", swap.id);
@@ -806,7 +807,15 @@ pub fn swap_trade(
 	println!("--------------------------------");
 	println!("Started: {}", swap.started);
 	println!("State:   {}", state);
-	println!("Action:  {}", action);
+
+	// Calculate the action deadline time.
+
+	let expired_str = swap::left_from_time_limit(time_limit);
+	if expired_str.is_empty() {
+		println!("Action:  {}", action);
+	} else {
+		println!("Action:  {}, {}", action, expired_str);
+	}
 
 	Ok(())
 }

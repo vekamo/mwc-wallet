@@ -443,3 +443,28 @@ pub fn get_cur_time() -> i64 {
 pub fn get_cur_time() -> i64 {
 	Utc::now().timestamp()
 }
+
+/// Print how much time left from the time limit
+pub fn left_from_time_limit(time_limit: &Option<i64>) -> String {
+	match time_limit {
+		Some(time_limit) => {
+			let left_sec = time_limit - get_cur_time();
+			if left_sec <= 0 {
+				"expired".to_string()
+			} else {
+				if left_sec > 3600 {
+					format!(
+						"expired in {} hours {} minutes",
+						left_sec / 3600,
+						(left_sec % 3600) / 60
+					)
+				} else if left_sec > 60 {
+					format!("expired in {} minutes", left_sec / 60)
+				} else {
+					format!("expired in {} seconds", left_sec)
+				}
+			}
+		}
+		None => "".to_string(),
+	}
+}
