@@ -135,9 +135,9 @@ where
 		match input {
 			Input::Cancel => Ok(StateProcessRespond::new(StateId::BuyerCancelled)),
 			Input::Check => {
-				let time_limit = swap::get_cur_time();
+				let time_limit = swap.get_time_message_offers();
 				if swap.message1.is_none() {
-					if time_limit < swap.get_time_message_offers() as i64 {
+					if swap::get_cur_time() < time_limit {
 						if self.message.is_none() {
 							let sec_update = self
 								.swap_api
@@ -168,6 +168,7 @@ where
 				debug_assert!(swap.message1.is_none());
 				debug_assert!(self.message.is_some()); // Check expected to be called first
 				swap.message1 = Some(self.message.clone().unwrap());
+				swap.posted_msg1 = Some(swap::get_cur_time());
 				Ok(StateProcessRespond::new(
 					StateId::BuyerWaitingForSellerToLock,
 				))
@@ -423,6 +424,21 @@ where
 			Input::Check => {
 				let mwc_lock = tx_conf.mwc_lock_conf.unwrap_or(0);
 				let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
+
+				if tx_conf.secondary_lock_amount < swap.secondary_amount {
+					// Need to deposit more. Something happens? Likely will be cancelled because of timeout.
+					return Ok(StateProcessRespond::new(
+						StateId::BuyerPostingSecondaryToMultisigAccount,
+					));
+				}
+
+				if tx_conf.secondary_lock_amount > swap.secondary_amount {
+					// Posted too much, bayer probably will cancel the deal, let's be in sync
+					return Ok(StateProcessRespond::new(
+						StateId::SellerWaitingForRefundHeight,
+					));
+				}
+
 				let time_limit = swap.get_time_message_redeem();
 				if mwc_lock < swap.mwc_confirmations
 					|| secondary_lock < swap.secondary_confirmations
@@ -461,7 +477,11 @@ where
 				}
 
 				// If we got here, funds have been locked on both chains with sufficient confirmations
-				BuyApi::init_redeem(&*self.keychain, swap, context)?;
+				// On the first run - let's update the swap data
+				if swap.redeem_slate.participant_data.len() <= 1 || swap.adaptor_signature.is_none()
+				{
+					BuyApi::init_redeem(&*self.keychain, swap, context)?;
+				}
 
 				Ok(StateProcessRespond::new(
 					StateId::BuyerSendingInitRedeemMessage,
@@ -509,11 +529,22 @@ impl State for BuyerSendingInitRedeemMessage {
 		input: Input,
 		swap: &mut Swap,
 		_context: &Context,
-		_tx_conf: &SwapTransactionsConfirmations,
+		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
 			Input::Cancel => Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime)), // Last chance to quit
 			Input::Check => {
+				// Check first if everything is still locked...
+				let mwc_lock = tx_conf.mwc_lock_conf.unwrap_or(0);
+				let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
+				if mwc_lock < swap.mwc_confirmations
+					|| secondary_lock < swap.secondary_confirmations
+				{
+					return Ok(StateProcessRespond::new(
+						StateId::BuyerWaitingForLockConfirmations,
+					));
+				}
+
 				let time_limit = swap.get_time_message_redeem();
 				if swap.message2.is_none() {
 					if swap::get_cur_time() < time_limit {
@@ -592,11 +623,22 @@ impl<K: Keychain> State for BuyerWaitingForRespondRedeemMessage<K> {
 		input: Input,
 		swap: &mut Swap,
 		context: &Context,
-		_tx_conf: &SwapTransactionsConfirmations,
+		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
 			Input::Cancel => Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime)),
 			Input::Check => {
+				// Check first if everything is still locked...
+				let mwc_lock = tx_conf.mwc_lock_conf.unwrap_or(0);
+				let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
+				if mwc_lock < swap.mwc_confirmations
+					|| secondary_lock < swap.secondary_confirmations
+				{
+					return Ok(StateProcessRespond::new(
+						StateId::BuyerWaitingForLockConfirmations,
+					));
+				}
+
 				if swap
 					.refund_slate
 					.tx
@@ -713,7 +755,7 @@ where
 		_context: &Context,
 		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
-		let time_limit = swap.get_time_message_redeem();
+		let time_limit = swap.get_time_mwc_redeem();
 		match input {
 			Input::Cancel => Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime)),
 			Input::Check => {
@@ -729,6 +771,17 @@ where
 					return Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime));
 				}
 
+				// Check if everything is still locked...
+				let mwc_lock = tx_conf.mwc_lock_conf.unwrap_or(0);
+				let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
+				if mwc_lock < swap.mwc_confirmations
+					|| secondary_lock < swap.secondary_confirmations
+				{
+					return Ok(StateProcessRespond::new(
+						StateId::BuyerWaitingForLockConfirmations,
+					));
+				}
+
 				// Still waiting...
 				Ok(StateProcessRespond::new(StateId::BuyerRedeemMwc)
 					.action(Action::BuyerPublishMwcRedeemTx)
@@ -742,7 +795,20 @@ where
 					// too late, exiting
 					return Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime));
 				}
+
+				// Check if everything is still locked...
+				let mwc_lock = tx_conf.mwc_lock_conf.unwrap_or(0);
+				let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
+				if mwc_lock < swap.mwc_confirmations
+					|| secondary_lock < swap.secondary_confirmations
+				{
+					return Ok(StateProcessRespond::new(
+						StateId::BuyerWaitingForLockConfirmations,
+					));
+				}
+
 				publish_transaction(&*self.swap_api.node_client, &swap.redeem_slate.tx, false)?;
+				swap.posted_redeem = Some(swap::get_cur_time());
 				Ok(StateProcessRespond::new(
 					StateId::BuyerWaitForRedeemMwcConfirmations,
 				))
@@ -800,6 +866,14 @@ impl State for BuyerWaitForRedeemMwcConfirmations {
 				if conf >= swap.secondary_confirmations {
 					// We are done
 					return Ok(StateProcessRespond::new(StateId::BuyerSwapComplete));
+				}
+
+				if tx_conf.mwc_redeem_conf.is_none()
+					&& swap.posted_redeem.unwrap_or(0)
+						< swap::get_cur_time() - super::state::POST_MWC_RETRY_PERIOD
+				{
+					// We can retry to post
+					return Ok(StateProcessRespond::new(StateId::BuyerRedeemMwc));
 				}
 
 				return Ok(
@@ -959,7 +1033,7 @@ impl State for BuyerWaitingForRefundTime {
 
 				// Should be impossible scenarion. But somehow the slate was posted. In any case we
 				// have nothing loose, that slate is ours in any case.
-				debug_assert!(tx_conf.mwc_redeem_conf.is_some());
+				debug_assert!(tx_conf.mwc_redeem_conf.is_none());
 
 				let cur_time = swap::get_cur_time();
 				let time_limit = swap.get_time_btc_lock();
@@ -1054,7 +1128,7 @@ where
 				}
 
 				// Check if refund is already issued
-				if tx_conf.secondary_refund_conf.unwrap_or(0) > 0 {
+				if tx_conf.secondary_refund_conf.is_some() {
 					return Ok(StateProcessRespond::new(
 						StateId::BuyerWaitingForRefundConfirmations,
 					));
@@ -1077,6 +1151,7 @@ where
 					refund_address.clone(),
 					fee_satoshi_per_byte.clone(),
 				)?;
+				swap.posted_refund = Some(swap::get_cur_time());
 				Ok(StateProcessRespond::new(
 					StateId::BuyerWaitingForRefundConfirmations,
 				))
@@ -1127,11 +1202,20 @@ impl State for BuyerWaitingForRefundConfirmations {
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
 			Input::Check => {
-				// Check if mwc lock is already done
-				let refund_conf = tx_conf.secondary_refund_conf.unwrap_or(0);
-				if refund_conf > swap.secondary_confirmations {
-					// already published.
-					return Ok(StateProcessRespond::new(StateId::BuyerCancelledRefunded));
+				if let Some(conf) = tx_conf.secondary_refund_conf {
+					if conf >= swap.secondary_confirmations {
+						// We are done
+						return Ok(StateProcessRespond::new(StateId::BuyerCancelledRefunded));
+					}
+				} else {
+					// might need to retry
+					if swap.posted_refund.unwrap_or(0)
+						< swap::get_cur_time() - super::state::POST_SECONDARY_RETRY_PERIOD
+					{
+						return Ok(StateProcessRespond::new(
+							StateId::BuyerPostingRefundForSecondary,
+						));
+					}
 				}
 
 				Ok(
@@ -1140,7 +1224,7 @@ impl State for BuyerWaitingForRefundConfirmations {
 							name: format!("{} Refund", swap.secondary_currency),
 							currency: swap.secondary_currency,
 							required: swap.secondary_confirmations,
-							actual: refund_conf,
+							actual: tx_conf.secondary_refund_conf.unwrap_or(0),
 						},
 					),
 				)

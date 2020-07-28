@@ -89,6 +89,8 @@ pub struct Swap {
 	#[serde(deserialize_with = "slate_deser")]
 	/// MWC redeem slate
 	pub redeem_slate: Slate,
+	/// Redeem slate was updated. Seller spot it on the blockchain and get the kernel updated.
+	pub redeem_kernel_updated: bool,
 	/// Signature that is done with multisig
 	#[serde(
 		serialize_with = "option_sig_to_hex",
@@ -108,6 +110,16 @@ pub struct Swap {
 	pub message1: Option<Message>,
 	/// Second message that was sent, keep for retry operations
 	pub message2: Option<Message>,
+	/// timestamp when message 1 was send
+	pub posted_msg1: Option<i64>,
+	/// timestamp when message 2 was send
+	pub posted_msg2: Option<i64>,
+	/// timestamp when lock transaction was posted
+	pub posted_lock: Option<i64>,
+	/// timestamp when redeem transaction was posted
+	pub posted_redeem: Option<i64>,
+	/// timestamp when refund transaction was posted
+	pub posted_refund: Option<i64>,
 }
 
 impl Swap {

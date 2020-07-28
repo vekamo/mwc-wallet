@@ -102,6 +102,7 @@ impl SellApi {
 			lock_slate: ls,
 			refund_slate: Slate::blank(2),
 			redeem_slate: Slate::blank(2),
+			redeem_kernel_updated: false,
 			adaptor_signature: None,
 			mwc_confirmations,
 			secondary_confirmations,
@@ -109,6 +110,11 @@ impl SellApi {
 			redeem_time_sec,
 			message1: None,
 			message2: None,
+			posted_msg1: None,
+			posted_msg2: None,
+			posted_lock: None,
+			posted_redeem: None,
+			posted_refund: None,
 		};
 
 		let mwc_lock_time = swap.get_time_mwc_lock();

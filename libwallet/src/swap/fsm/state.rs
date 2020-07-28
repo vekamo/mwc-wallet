@@ -17,6 +17,11 @@ use crate::swap::types::{Action, SwapTransactionsConfirmations};
 use crate::swap::{Context, ErrorKind, Swap};
 use std::fmt;
 
+/// We need to reprty post transaction we we don't see it on the blockchain
+pub const POST_MWC_RETRY_PERIOD: i64 = 300;
+/// For BTC - let's use same period. BTC is visible into the mem pool quickly, so it is expected to be delivered after 5 minutes...
+pub const POST_SECONDARY_RETRY_PERIOD: i64 = 300;
+
 /// StateId of the swap finite state machine.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StateId {

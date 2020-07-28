@@ -209,6 +209,7 @@
     ],
     "payment_proof": null
   },
+  "redeem_kernel_updated": false,
   "adaptor_signature": null,
   "mwc_confirmations": 30,
   "secondary_confirmations": 6,
@@ -351,5 +352,10 @@
       }
     }
   },
-  "message2": null
+  "message2": null,
+  "posted_msg1": 1567632152,
+  "posted_msg2": null,
+  "posted_lock": 1567632152,
+  "posted_redeem": null,
+  "posted_refund": null
 }

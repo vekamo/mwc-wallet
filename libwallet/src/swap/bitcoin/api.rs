@@ -165,11 +165,6 @@ where
 
 		// This function should only be called once
 		let btc_data = swap.secondary_data.unwrap_btc()?;
-		if btc_data.redeem_tx.is_some() {
-			return Err(ErrorKind::OneShot(
-				"Fn: seller_build_redeem_tx, btc_data.redeem_tx is not empty".to_string(),
-			))?;
-		}
 
 		let (pending_amount, confirmed_amount, _, mut conf_outputs) =
 			self.btc_balance(swap, input_script, 0)?;
@@ -494,7 +489,6 @@ where
 		swap: &mut Swap,
 		context: &Context,
 		fee_satoshi_per_byte: Option<f32>,
-		retry: bool,
 	) -> Result<(), ErrorKind> {
 		assert!(swap.is_seller());
 
@@ -511,9 +505,6 @@ where
 		self.btc_node_client.lock().post_tx(btc_tx.tx)?;
 
 		let btc_data = swap.secondary_data.unwrap_btc_mut()?;
-		if !retry && btc_data.redeem_tx.is_some() {
-			return Err(ErrorKind::UnexpectedAction("btc_data.redeem_confirmations is already defined at publish_secondary_transaction()".to_string()));
-		}
 		btc_data.redeem_tx = Some(btc_tx.txid);
 		Ok(())
 	}
