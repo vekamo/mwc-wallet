@@ -1741,16 +1741,9 @@ where
 						Ok(())
 					};
 
-				/*  No need to do initial execution. loop covers all cases well
-				let mut result = api.swap_process(
-					keychain_mask,
-					&swap_id,
-					message_sender.clone(),
-					args.destination.clone(),
-					args.fee_satoshi_per_byte,
-				);
-				let (mut curr_state, mut curr_action) =
-					api.get_swap_status_action(keychain_mask, swap_id.clone())?;*/
+				// Calling mostly for params and environment validation. From here we can exit by error
+				// From the loop - we can't
+				let _ = api.update_swap_status_action(keychain_mask, swap_id.clone())?;
 
 				// TODO - here we will need to print execution plan. It is not finalized yet,that functionality will be soon implented for 'swap --check'
 
