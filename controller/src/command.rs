@@ -23,14 +23,14 @@ use crate::impls::{create_sender, SlateGetter as _};
 use crate::impls::{PathToSlate, SlatePutter};
 use crate::keychain;
 use crate::libwallet::{
-	InitTxArgs, IssueInvoiceTxArgs, NodeClient, PaymentProof, WalletLCProvider,
+	swap::fsm::state::StateId, InitTxArgs, IssueInvoiceTxArgs, NodeClient, PaymentProof,
+	WalletLCProvider,
 };
 use crate::util::secp::key::SecretKey;
 use crate::util::{Mutex, ZeroingString};
 use crate::{controller, display};
 use grin_wallet_impls::adapters::create_swap_message_sender;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
-use grin_wallet_libwallet::swap::types::Action;
 use grin_wallet_libwallet::swap::message::Message;
 use grin_wallet_libwallet::{Slate, TxLogEntry};
 use serde_json as json;
@@ -1375,6 +1375,7 @@ pub enum SwapSubcommand {
 	Delete,
 	Check,
 	Process,
+	Autoswap,
 	Adjust,
 	Dump,
 }
@@ -1599,7 +1600,7 @@ where
 							}
 						}
 
-						// File is processed, the online send will handle here
+						// File is processed, the online send will be handled here
 						let sender = create_swap_message_sender(
 							method.as_str(),
 							dest.as_str(),
@@ -1629,6 +1630,9 @@ where
 						Ok(())
 					};
 
+				let (curr_state, curr_action) =
+					api.get_swap_status_action(keychain_mask, swap_id.clone())?;
+				println!("BEFORE::::state = {}, action = {}", curr_state, curr_action);
 				let result = api.swap_process(
 					keychain_mask,
 					&swap_id,
@@ -1636,6 +1640,9 @@ where
 					args.destination,
 					args.fee_satoshi_per_byte,
 				);
+				let (new_state, new_action) =
+					api.get_swap_status_action(keychain_mask, swap_id.clone())?;
+				println!("AFTER::::state = {}, action = {}", new_state, new_action);
 
 				match result {
 					Ok(_) => Ok(()),
@@ -1649,6 +1656,157 @@ where
 					}
 				}
 			})?;
+			Ok(())
+		}
+		SwapSubcommand::Autoswap => {
+			println!("Yes we start now the auto swap!!!!");
+			controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, _m| {
+				let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(
+					"Not found expected 'swap_id' argument".to_string(),
+				))?;
+
+				let method = args.method.clone().unwrap_or("file".to_string());
+				let config2 = config.clone();
+				let g_args2 = g_args.clone();
+				match method.as_str() {
+					"mwcmqs" => {
+						let _ = controller::init_start_mwcmqs_listener(
+							config2.clone(),
+							wallet_inst.clone(),
+							mqs_config.expect("No MQS config found!").clone(),
+							Arc::new(Mutex::new(km)),
+							false,
+							//None,
+						)
+						.map_err(|e| {
+							ErrorKind::LibWallet(format!("Unable to start mwcmqs listener, {}", e))
+						})?;
+						thread::sleep(Duration::from_millis(2000));
+					}
+					"tor" => {
+						let tor_config = tor_config.clone();
+						let _api_thread = thread::Builder::new()
+							.name("wallet-http-listener".to_string())
+							.spawn(move || {
+								let res = controller::foreign_listener(
+									wallet_inst,
+									Arc::new(Mutex::new(km)),
+									&config2.api_listen_addr(),
+									g_args2.tls_conf.clone(),
+									tor_config.unwrap().use_tor_listener,
+								);
+								if let Err(e) = res {
+									error!("Error starting http listener: {}", e);
+								}
+							});
+						thread::sleep(Duration::from_millis(2000));
+					}
+					_ => {}
+				}
+
+				// Creating message delivery transport as a closure
+				let destination = args.destination.clone();
+				let apisecret = args.apisecret.clone();
+				let swap_id2 = swap_id.clone();
+				let message_sender =
+					move |swap_message: Message| -> Result<(), crate::libwallet::Error> {
+						let dest = destination.ok_or(crate::libwallet::ErrorKind::SwapError(
+							"Expected 'destination' argument is not found".to_string(),
+						))?;
+
+						// File is processed, the online send will be handled here
+						let sender = create_swap_message_sender(
+							method.as_str(),
+							dest.as_str(),
+							&apisecret,
+							tor_config,
+						)
+						.map_err(|e| {
+							crate::libwallet::ErrorKind::SwapError(format!(
+								"Unable to create message sender, {}",
+								e
+							))
+						})?;
+						sender.send_swap_message(&swap_message).map_err(|e| {
+							crate::libwallet::ErrorKind::SwapError(format!(
+								"Unable to deliver the message {} by {}: {}",
+								swap_id2, method, e
+							))
+						})?;
+						Ok(())
+					};
+
+				let mut result = api.swap_process(
+					keychain_mask,
+					&swap_id,
+					message_sender.clone(),
+					args.destination.clone(),
+					args.fee_satoshi_per_byte,
+				);
+				let (mut curr_state, mut curr_action) =
+					api.get_swap_status_action(keychain_mask, swap_id.clone())?;
+
+				loop {
+					match curr_state {
+						StateId::SellerSwapComplete | StateId::BuyerSwapComplete => {
+							break;
+						}
+						StateId::SellerWaitingForAcceptanceMessage
+						| StateId::SellerWaitingForBuyerLock
+						| StateId::SellerWaitingForLockConfirmations
+						| StateId::SellerWaitingForInitRedeemMessage
+						| StateId::SellerWaitingForBuyerToRedeemMwc
+						| StateId::SellerWaitingForRedeemConfirmations
+						| StateId::BuyerWaitingForSellerToLock
+						| StateId::BuyerWaitingForLockConfirmations
+						| StateId::BuyerWaitingForRespondRedeemMessage
+						| StateId::BuyerWaitForRedeemMwcConfirmations
+						| StateId::BuyerPostingSecondaryToMultisigAccount => {
+							thread::sleep(Duration::from_millis(60000));
+						}
+						StateId::SellerSendingOffer
+						| StateId::SellerPostingLockMwcSlate
+						| StateId::SellerSendingInitRedeemMessage
+						| StateId::SellerRedeemSecondaryCurrency
+						| StateId::BuyerSendingAcceptOfferMessage
+						| StateId::BuyerSendingInitRedeemMessage
+						| StateId::BuyerRedeemMwc => {
+							result = api.swap_process(
+								keychain_mask,
+								&swap_id,
+								message_sender.clone(),
+								args.destination.clone(),
+								args.fee_satoshi_per_byte,
+							);
+						}
+						_ => {
+							println!(
+								"Unexpected state id {} in auto swap, action: {}",
+								curr_state, curr_action
+							);
+							break;
+						}
+					}
+					let (new_state, new_action) =
+						api.get_swap_status_action(keychain_mask, swap_id.clone())?;
+					curr_state = new_state;
+					curr_action = new_action;
+					println!("{}", curr_state);
+				}
+
+				match result {
+					Ok(_) => Ok(()),
+					Err(e) => {
+						error!("Unable to process Swap {}: {}", swap_id, e);
+						Err(ErrorKind::LibWallet(format!(
+							"Unable to process Swap {}: {}",
+							swap_id, e
+						))
+						.into())
+					}
+				}
+			})?;
+			//}
 			Ok(())
 		}
 		SwapSubcommand::Dump => {

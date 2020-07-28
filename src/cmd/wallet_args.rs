@@ -995,6 +995,8 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		command::SwapSubcommand::Dump
 	} else if adjust.is_some() {
 		command::SwapSubcommand::Adjust
+	} else if args.is_present("autoswap") {
+		command::SwapSubcommand::Autoswap
 	} else {
 		return Err(ParseError::ArgumentError(format!(
 			"Please define some action to do"

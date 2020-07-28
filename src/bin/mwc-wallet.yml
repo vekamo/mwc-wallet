@@ -516,12 +516,12 @@ subcommands:
             takes_value: true
             default_value: "3"
         - message_exchange_time:
-            help: How much time (minutes) is reserved for every session of message exchange (Offer exchange and create redeem transaction sessions). Please reserve enough time, if you you go out of time, your swap trade will be cancelled.
+            help: How much time (minutes) is reserved for every session of message exchange (Offer exchange and create redeem transaction sessions). Please reserve enough time, if you go out of time, your swap trade will be cancelled.
             long: message_exchange_time
             takes_value: true
             default_value: "60"
         - redeem_time:
-            help: How much time (minutes) is reserved for execution of redeem or refund transaction. Please reserve enough time for this operation, otherwise you become an easy targer for attacks.
+            help: How much time (minutes) is reserved for execution of redeem or refund transaction. Please reserve enough time for this operation, otherwise you become an easy target for attacks.
             long: redeem_time
             takes_value: true
             default_value: "60"
@@ -553,6 +553,11 @@ subcommands:
             short: p
             long: process
             takes_value: false
+        - autoswap:
+            help: Enter all required value now, then kick back and let swap process be carried out without any more inputs.
+            short: a
+            long: autoswap
+            takes_value: false
         - dump:
             help: Dump the content of the swap file decrypted on screen
             short: u
@@ -560,7 +565,7 @@ subcommands:
             takes_value: false
         - adjust:
             help: Modify the swap trade workflow. Normally it is not needed. Sometimes you can use 'cancel'. StateID we not recomment to adjust unless you know ehat you are doing
-            short: a
+            short: j
             long: adjust
             takes_value: true
             possible_values:

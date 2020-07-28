@@ -18,11 +18,11 @@ use crate::swap::{Context, ErrorKind, Swap};
 use std::fmt;
 
 /// StateId of the swap finite state machine.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StateId {
 	// ---------------- Seller Happy path -----------------
 	/// Seller created Offer (Initial state for Seller)
-	SellerOfferCreated,
+	SellerOfferCreated = 1,
 	/// Seller want to send the offer message
 	SellerSendingOffer,
 	/// Seller waiting for the message to be accepted
@@ -106,7 +106,7 @@ impl fmt::Display for StateId {
 			StateId::SellerWaitingForLockConfirmations => "Waiting for funds to be locked",
 			StateId::SellerWaitingForInitRedeemMessage => "Waiting for Buyer to init redeem",
 			StateId::SellerSendingInitRedeemMessage => "Send init redeem response to Buyer",
-			StateId::SellerWaitingForBuyerToRedeemMwc => "For for Buyer to redeem MWC",
+			StateId::SellerWaitingForBuyerToRedeemMwc => "Waiting for Buyer to redeem MWC",
 			StateId::SellerRedeemSecondaryCurrency => "Redeem Secondary Currency",
 			StateId::SellerWaitingForRedeemConfirmations => {
 				"Waiting for confirmations of Redeem transaction"
@@ -132,7 +132,7 @@ impl fmt::Display for StateId {
 			StateId::BuyerWaitingForLockConfirmations => "Waiting for funds to be locked",
 			StateId::BuyerSendingInitRedeemMessage => "Send Init redeem message to Seller",
 			StateId::BuyerWaitingForRespondRedeemMessage => {
-				"Waiting for Redeem responce form Seller"
+				"Waiting for Redeem response form Seller"
 			}
 			StateId::BuyerRedeemMwc => "Redeem MWC",
 			StateId::BuyerWaitForRedeemMwcConfirmations => {
