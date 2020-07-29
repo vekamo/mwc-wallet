@@ -838,7 +838,7 @@ pub fn swap_roadmap(swap_id: &str, roadmap: &Vec<StateEtaInfo>) -> Result<(), Er
 			print!("  started {}", timestamp_to_local_time(t));
 		}
 		if let Some(t) = eta.end_time {
-			print!("  finish by {}", timestamp_to_local_time(t));
+			print!("  required by {}", timestamp_to_local_time(t));
 		}
 		println!("");
 	}
