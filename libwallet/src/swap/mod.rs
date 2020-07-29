@@ -2913,7 +2913,10 @@ mod tests {
 			let res = seller.process(Input::Cancel).unwrap();
 			assert_eq!(res.next_state_id, StateId::SellerWaitingForRefundHeight);
 			assert_eq!(res.action.unwrap().get_id_str(), "WaitForMwcRefundUnlock");
-			assert_eq!(res.time_limit.unwrap(), swap::get_cur_time() + (need_blocks * 60) as i64);
+			assert_eq!(
+				res.time_limit.unwrap(),
+				swap::get_cur_time() + (need_blocks * 60) as i64
+			);
 
 			// Seller SellerWaitingForRefundHeight depend on height, not on time.
 			test_responds(

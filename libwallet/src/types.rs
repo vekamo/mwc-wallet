@@ -370,7 +370,8 @@ pub trait NodeClient: Send + Sync + Clone {
 	fn get_header_info(&self, height: u64) -> Result<HeaderInfo, Error>;
 
 	/// Return Connected peers
-	fn get_connected_peer_info(&self) -> Result<Vec<grin_p2p::types::PeerInfoDisplayLegacy>, Error>;
+	fn get_connected_peer_info(&self)
+		-> Result<Vec<grin_p2p::types::PeerInfoDisplayLegacy>, Error>;
 
 	/// Get a kernel and the height of the block it's included in. Returns
 	/// (tx_kernel, height, mmr_index)
