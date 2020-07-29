@@ -89,7 +89,6 @@ pub fn delete_swap_trade(swap_id: &str) -> Result<(), ErrorKind> {
 	Ok(())
 }
 
-// TODO -  Swap data contain bunch of secrets
 /// Get swap trade from the storage.
 pub fn get_swap_trade(swap_id: &str, dec_key: &SecretKey) -> Result<(Context, Swap), ErrorKind> {
 	let path = TRADE_DEALS_PATH
@@ -144,8 +143,6 @@ pub fn get_swap_trade(swap_id: &str, dec_key: &SecretKey) -> Result<(Context, Sw
 	Ok((context, swap))
 }
 
-// TODO - move swap storage to separate file. It is bigger problem, the data need to be encrypted because
-// Swap data contain bunch of secrets
 /// Store swap deal to a file
 pub fn store_swap_trade(
 	context: &Context,
@@ -154,11 +151,13 @@ pub fn store_swap_trade(
 ) -> Result<(), ErrorKind> {
 	// Writing to bak file. We don't want to loose the data in case of failure. It least the prev step will be left
 	let swap_id = swap.id.to_string();
+	let mut rng = thread_rng();
+	let r: u64 = rng.gen();
 	let path = TRADE_DEALS_PATH
 		.read()
 		.clone()
 		.unwrap()
-		.join(format!("{}.swap.bak", swap_id));
+		.join(format!("{}.swap_{}.bak", swap_id, r));
 	{
 		let mut stored_swap = File::create(path.clone()).map_err(|e| {
 			ErrorKind::TradeIoError(
