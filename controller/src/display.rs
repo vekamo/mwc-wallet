@@ -14,6 +14,7 @@
 
 use crate::core::core::{self, amount_to_hr_string};
 use crate::core::global;
+use crate::libwallet::swap::fsm::state::StateEtaInfo;
 use crate::libwallet::swap::swap;
 use crate::libwallet::swap::types::{Action, Role};
 use crate::libwallet::{
@@ -22,6 +23,7 @@ use crate::libwallet::{
 
 use crate::util;
 use chrono::prelude::*;
+use chrono::Local;
 use colored::*;
 use grin_wallet_libwallet::swap::fsm::state::StateId;
 use grin_wallet_libwallet::swap::types::SwapTransactionsConfirmations;
@@ -639,7 +641,7 @@ pub fn swap_trades(trades: Vec<(String, String)>) {
 
 /// Display list of wallet accounts in a pretty way
 pub fn swap_trade(
-	swap: swap::Swap,
+	swap: &swap::Swap,
 	state: &StateId,
 	action: &Action,
 	time_limit: &Option<i64>,
@@ -703,7 +705,7 @@ pub fn swap_trade(
 
 	let mut print_seller = false;
 	let mut print_buyer = false;
-	match swap.role {
+	match swap.role.clone() {
 		Role::Seller(btc_address, _) => {
 			println!("Role: Seller, redeem address {}", btc_address);
 			print_seller = true;
@@ -817,5 +819,28 @@ pub fn swap_trade(
 		println!("Action:  {}, {}", action, expired_str);
 	}
 
+	Ok(())
+}
+
+fn timestamp_to_local_time(timestamp: i64) -> String {
+	let dt = Local.timestamp(timestamp, 0);
+	dt.format("%B %e %H:%M:%S").to_string()
+}
+
+/// Display list of wallet accounts in a pretty way
+pub fn swap_roadmap(swap_id: &str, roadmap: &Vec<StateEtaInfo>) -> Result<(), Error> {
+	println!("------- Swap {} roadmap ---------", swap_id);
+	for eta in roadmap {
+		let prefix = if eta.active { "--> " } else { "    " };
+		print!("{}{:40}", prefix, eta.name);
+
+		if let Some(t) = eta.start_time {
+			print!("  started {}", timestamp_to_local_time(t));
+		}
+		if let Some(t) = eta.end_time {
+			print!("  finish by {}", timestamp_to_local_time(t));
+		}
+		println!("");
+	}
 	Ok(())
 }

@@ -1510,10 +1510,11 @@ where
 					Ok(swap) => {
 						let conf_status =
 							api.get_swap_tx_tstatus(keychain_mask, swap_id.clone())?;
-						let (status, action, time_limit) =
+						let (status, action, time_limit, roadmap) =
 							api.update_swap_status_action(keychain_mask, swap_id.clone())?;
 
-						display::swap_trade(swap, &status, &action, &time_limit, &conf_status)?;
+						display::swap_trade(&swap, &status, &action, &time_limit, &conf_status)?;
+						display::swap_roadmap(&swap_id, &roadmap)?;
 						Ok(())
 					}
 					Err(e) => {
@@ -1743,14 +1744,16 @@ where
 
 				// Calling mostly for params and environment validation. From here we can exit by error
 				// From the loop - we can't
-				let _ = api.update_swap_status_action(keychain_mask, swap_id.clone())?;
+				let (_, _, _, roadmap) =
+					api.update_swap_status_action(keychain_mask, swap_id.clone())?;
+				display::swap_roadmap(&swap_id, &roadmap)?;
 
 				// TODO - here we will need to print execution plan. It is not finalized yet,that functionality will be soon implented for 'swap --check'
 
 				// NOTE - we can't process errors with '?' here. We can't exit, we must try forever or until we get a final state
 				loop {
 					// we can't exit by error from the loop.
-					let (curr_state, curr_action, _time_limit) =
+					let (curr_state, curr_action, _time_limit, _roadmap) =
 						match api.update_swap_status_action(keychain_mask, swap_id.clone()) {
 							Ok(res) => res,
 							Err(e) => {

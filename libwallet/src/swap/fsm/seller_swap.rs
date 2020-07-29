@@ -15,36 +15,15 @@
 // Sell swap happy path states
 
 use crate::swap::bitcoin::{BtcNodeClient, BtcSwapApi};
-use crate::swap::fsm::state::{Input, State, StateId, StateProcessRespond};
+use crate::swap::fsm::state::{Input, State, StateEtaInfo, StateId, StateProcessRespond};
 use crate::swap::message::Message;
 use crate::swap::types::{Action, SwapTransactionsConfirmations};
 use crate::swap::{swap, Context, ErrorKind, SellApi, Swap, SwapApi};
 use crate::NodeClient;
+use chrono::{Local, TimeZone};
 use failure::_core::marker::PhantomData;
 use grin_keychain::Keychain;
 use std::sync::Arc;
-
-/*
-// Print how much time left from the time limit
-fn left_from_time_limit(time_limit: u64) -> String {
-	let left_sec = time_limit as i64 - Utc::now().timestamp();
-	if left_sec <= 0 {
-		"time is over".to_string()
-	}
-	else {
-		if left_sec > 3600 {
-			format!("{} hours {} minutes left", left_sec/3600, (left_sec%3600)/60)
-		}
-		else if left_sec>60 {
-			format!("{} minutes left", left_sec/60)
-		}
-		else {
-			format!("{} seconds left", left_sec)
-		}
-	}
-}*/
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// State SellerOfferCreated
 pub struct SellerOfferCreated {}
@@ -58,8 +37,10 @@ impl State for SellerOfferCreated {
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerOfferCreated
 	}
-	fn get_name(&self) -> String {
-		"Offer Created".to_string()
+	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
+		let dt = Local.timestamp(swap.started.timestamp(), 0);
+		let time_str = dt.format("%B %e %H:%M:%S").to_string();
+		Some(StateEtaInfo::new(&format!("Offer Created at {}", time_str)))
 	}
 	fn is_cancellable(&self) -> bool {
 		true
@@ -130,8 +111,8 @@ where
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerSendingOffer
 	}
-	fn get_name(&self) -> String {
-		"Sending Offer".to_string()
+	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
+		Some(StateEtaInfo::new("Sending Offer to Buyer").end_time(swap.get_time_message_offers()))
 	}
 	fn is_cancellable(&self) -> bool {
 		true
@@ -215,8 +196,11 @@ impl<K: Keychain> State for SellerWaitingForAcceptanceMessage<K> {
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerWaitingForAcceptanceMessage
 	}
-	fn get_name(&self) -> String {
-		"Waiting For Buyer to accept the offer".to_string()
+	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
+		Some(
+			StateEtaInfo::new("Waiting For Buyer to accept the offer")
+				.end_time(swap.get_time_message_offers()),
+		)
 	}
 	fn is_cancellable(&self) -> bool {
 		true
@@ -290,8 +274,15 @@ impl State for SellerWaitingForBuyerLock {
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerWaitingForBuyerLock
 	}
-	fn get_name(&self) -> String {
-		"Waiting For Buyer to start Locking coins".to_string()
+	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
+		if swap.seller_lock_first {
+			None
+		} else {
+			Some(
+				StateEtaInfo::new("Waiting For Buyer to start Locking coins")
+					.end_time(swap.get_time_start_lock()),
+			)
+		}
 	}
 	fn is_cancellable(&self) -> bool {
 		true
@@ -403,8 +394,8 @@ where
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerPostingLockMwcSlate
 	}
-	fn get_name(&self) -> String {
-		"Posting MWC Lock Slate".to_string()
+	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
+		Some(StateEtaInfo::new("Locking MWC funds").end_time(swap.get_time_start_lock()))
 	}
 	fn is_cancellable(&self) -> bool {
 		true
@@ -491,8 +482,11 @@ impl State for SellerWaitingForLockConfirmations {
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerWaitingForLockConfirmations
 	}
-	fn get_name(&self) -> String {
-		"Waiting for Locking funds confirmations".to_string()
+	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
+		Some(
+			StateEtaInfo::new("Waiting for Lock funds confirmations")
+				.end_time(swap.get_time_message_redeem()),
+		)
 	}
 	fn is_cancellable(&self) -> bool {
 		true
@@ -606,8 +600,11 @@ impl<K: Keychain> State for SellerWaitingForInitRedeemMessage<K> {
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerWaitingForInitRedeemMessage
 	}
-	fn get_name(&self) -> String {
-		"Waiting For Init Redeem message from the Buyer".to_string()
+	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
+		Some(
+			StateEtaInfo::new("Waiting For Init Redeem message")
+				.end_time(swap.get_time_message_redeem()),
+		)
 	}
 	fn is_cancellable(&self) -> bool {
 		true
@@ -697,8 +694,11 @@ impl State for SellerSendingInitRedeemMessage {
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerSendingInitRedeemMessage
 	}
-	fn get_name(&self) -> String {
-		"Sending Redeem Message".to_string()
+	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
+		Some(
+			StateEtaInfo::new("Sending back Redeem Message")
+				.end_time(swap.get_time_message_redeem()),
+		)
 	}
 	fn is_cancellable(&self) -> bool {
 		true
@@ -825,6 +825,10 @@ where
 	}
 }
 
+fn calc_mwc_unlock_time(swap: &Swap, tip: &u64) -> i64 {
+	swap::get_cur_time() + (swap.refund_slate.lock_height.saturating_sub(*tip) * 60) as i64
+}
+
 impl<'a, C, B> State for SellerWaitingForBuyerToRedeemMwc<'a, C, B>
 where
 	C: NodeClient + 'a,
@@ -833,8 +837,16 @@ where
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerWaitingForBuyerToRedeemMwc
 	}
-	fn get_name(&self) -> String {
-		"Waiting For Buyer redeem MWC".to_string()
+	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
+		// Time limit is defined by the chain height
+		if let Ok((height, _, _)) = self.swap_api.node_client.get_chain_tip() {
+			Some(
+				StateEtaInfo::new("Wait For Buyer to redeem MWC")
+					.end_time(calc_mwc_unlock_time(swap, &height)),
+			)
+		} else {
+			Some(StateEtaInfo::new("Wait For Buyer to redeem MWC"))
+		}
 	}
 	fn is_cancellable(&self) -> bool {
 		false
@@ -886,10 +898,7 @@ where
 							mwc_tip: height,
 							lock_height: swap.lock_slate.lock_height,
 						})
-						.time_limit(
-							swap::get_cur_time()
-								+ (swap.lock_slate.lock_height.saturating_sub(height) * 60) as i64,
-						),
+						.time_limit(calc_mwc_unlock_time(swap, &height)),
 				)
 			}
 			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
@@ -968,8 +977,11 @@ where
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerRedeemSecondaryCurrency
 	}
-	fn get_name(&self) -> String {
-		"Posting Secondary Redeem Transaction".to_string()
+	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
+		Some(
+			StateEtaInfo::new("Post Secondary Redeem Transaction")
+				.end_time(swap.get_time_btc_lock() - swap.get_timeinterval_btc_lock()),
+		)
 	}
 	fn is_cancellable(&self) -> bool {
 		false
@@ -1076,8 +1088,8 @@ where
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerWaitingForRedeemConfirmations
 	}
-	fn get_name(&self) -> String {
-		"Waiting For Redeem Tx Confirmations".to_string()
+	fn get_eta(&self, _swap: &Swap) -> Option<StateEtaInfo> {
+		Some(StateEtaInfo::new("Wait For Redeem Tx Confirmations"))
 	}
 	fn is_cancellable(&self) -> bool {
 		false
@@ -1152,8 +1164,8 @@ impl State for SellerSwapComplete {
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerSwapComplete
 	}
-	fn get_name(&self) -> String {
-		"Swap is completed sucessufully".to_string()
+	fn get_eta(&self, _swap: &Swap) -> Option<StateEtaInfo> {
+		Some(StateEtaInfo::new("Swap completed"))
 	}
 	fn is_cancellable(&self) -> bool {
 		false
@@ -1198,8 +1210,10 @@ impl State for SellerCancelled {
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerCancelled
 	}
-	fn get_name(&self) -> String {
-		"Swap is cancelled, no funds was locked, no refund needed".to_string()
+	fn get_eta(&self, _swap: &Swap) -> Option<StateEtaInfo> {
+		Some(StateEtaInfo::new(
+			"Swap is cancelled, no funds was locked, no refund needed",
+		))
 	}
 	fn is_cancellable(&self) -> bool {
 		false
@@ -1266,8 +1280,15 @@ where
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerWaitingForRefundHeight
 	}
-	fn get_name(&self) -> String {
-		"Waiting for MWC refund to unlock".to_string()
+	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
+		if let Ok((height, _, _)) = self.swap_api.node_client.get_chain_tip() {
+			Some(
+				StateEtaInfo::new("Wait for MWC refund to unlock")
+					.end_time(calc_mwc_unlock_time(swap, &height)),
+			)
+		} else {
+			Some(StateEtaInfo::new("Wait for MWC refund to unlock"))
+		}
 	}
 	fn is_cancellable(&self) -> bool {
 		false
@@ -1297,9 +1318,7 @@ where
 							mwc_tip: height,
 							lock_height: swap.refund_slate.lock_height,
 						})
-						.time_limit(
-							(swap.refund_slate.lock_height.saturating_sub(height) * 60) as i64,
-						),
+						.time_limit(calc_mwc_unlock_time(swap, &height)),
 				)
 			}
 			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
@@ -1349,8 +1368,17 @@ where
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerPostingRefundSlate
 	}
-	fn get_name(&self) -> String {
-		"Posting MWC Refund Slate".to_string()
+	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
+		if let Ok((height, _, _)) = self.swap_api.node_client.get_chain_tip() {
+			let start_time_limit = calc_mwc_unlock_time(swap, &height);
+			Some(
+				StateEtaInfo::new("Post MWC Refund Slate")
+					.start_time(start_time_limit)
+					.end_time(start_time_limit + swap.redeem_time_sec as i64),
+			)
+		} else {
+			Some(StateEtaInfo::new("Post MWC Refund Slate"))
+		}
 	}
 	fn is_cancellable(&self) -> bool {
 		false
@@ -1430,8 +1458,8 @@ impl State for SellerWaitingForRefundConfirmations {
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerWaitingForRefundConfirmations
 	}
-	fn get_name(&self) -> String {
-		"Waiting for MWC Refund confirmations".to_string()
+	fn get_eta(&self, _swap: &Swap) -> Option<StateEtaInfo> {
+		Some(StateEtaInfo::new("Wait for MWC Refund confirmations"))
 	}
 	fn is_cancellable(&self) -> bool {
 		false
@@ -1510,8 +1538,8 @@ impl State for SellerCancelledRefunded {
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerCancelledRefunded
 	}
-	fn get_name(&self) -> String {
-		"Swap is cancelled, MWC refund is redeemed".to_string()
+	fn get_eta(&self, _swap: &Swap) -> Option<StateEtaInfo> {
+		Some(StateEtaInfo::new("Swap is cancelled, MWC are refunded"))
 	}
 	fn is_cancellable(&self) -> bool {
 		false

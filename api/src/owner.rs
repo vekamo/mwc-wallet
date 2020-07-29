@@ -25,7 +25,7 @@ use crate::impls::create_sender;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::api_impl::owner_updater::{start_updater_log_thread, StatusMessage};
 use crate::libwallet::api_impl::{owner, owner_swap, owner_updater};
-use crate::libwallet::swap::fsm::state::{StateId, StateProcessRespond};
+use crate::libwallet::swap::fsm::state::{StateEtaInfo, StateId, StateProcessRespond};
 use crate::libwallet::swap::types::{Action, SwapTransactionsConfirmations};
 use crate::libwallet::swap::{message::Message, swap::Swap};
 use crate::libwallet::{
@@ -2416,7 +2416,7 @@ where
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		swap_id: String,
-	) -> Result<(StateId, Action, Option<i64>), Error> {
+	) -> Result<(StateId, Action, Option<i64>, Vec<StateEtaInfo>), Error> {
 		owner_swap::update_swap_status_action(self.wallet_inst.clone(), keychain_mask, &swap_id)
 	}
 

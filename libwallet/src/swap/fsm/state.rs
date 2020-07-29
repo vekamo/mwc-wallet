@@ -290,13 +290,64 @@ impl StateProcessRespond {
 	}
 }
 
+/// ETA or roadmap info the the state.
+pub struct StateEtaInfo {
+	/// True if this is current active state
+	pub active: bool,
+	/// Name of the state to show for user
+	pub name: String,
+	/// Starting time
+	pub start_time: Option<i64>,
+	/// Expiration time
+	pub end_time: Option<i64>,
+}
+
+impl StateEtaInfo {
+	/// Create a new instance for the ETA state
+	pub fn new(name: &str) -> Self {
+		StateEtaInfo {
+			active: false,
+			name: name.to_string(),
+			start_time: None,
+			end_time: None,
+		}
+	}
+	/// Define ETA start time
+	pub fn start_time(self, time: i64) -> Self {
+		StateEtaInfo {
+			active: self.active,
+			name: self.name,
+			start_time: Some(time),
+			end_time: self.end_time,
+		}
+	}
+	/// Define ETA end time
+	pub fn end_time(self, time: i64) -> Self {
+		StateEtaInfo {
+			active: self.active,
+			name: self.name,
+			start_time: self.start_time,
+			end_time: Some(time),
+		}
+	}
+	/// Mark it as active
+	pub fn active(self) -> Self {
+		StateEtaInfo {
+			active: true,
+			name: self.name,
+			start_time: self.start_time,
+			end_time: self.end_time,
+		}
+	}
+}
+
 /// State that is describe a finite state machine
 pub trait State {
 	/// This state Id
 	fn get_state_id(&self) -> StateId;
 
-	/// Get a state name
-	fn get_name(&self) -> String;
+	/// Get a state eta. Return None for states that are never executed
+	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo>;
 
 	/// Check if it is cancellable
 	fn is_cancellable(&self) -> bool;

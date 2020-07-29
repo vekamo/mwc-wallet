@@ -20,7 +20,7 @@ use crate::grin_util::Mutex;
 use crate::grin_keychain::{Identifier, Keychain, SwitchCommitmentType};
 use crate::internal::selection;
 use crate::swap::error::ErrorKind;
-use crate::swap::fsm::state::{Input, StateId, StateProcessRespond};
+use crate::swap::fsm::state::{Input, StateEtaInfo, StateId, StateProcessRespond};
 use crate::swap::message::{Message, Update};
 use crate::swap::swap::Swap;
 use crate::swap::types::{Action, Currency, SwapTransactionsConfirmations};
@@ -264,7 +264,7 @@ pub fn update_swap_status_action<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	swap_id: &str,
-) -> Result<(StateId, Action, Option<i64>), Error>
+) -> Result<(StateId, Action, Option<i64>, Vec<StateEtaInfo>), Error>
 where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
@@ -281,6 +281,7 @@ where
 	let mut fsm = swap_api.get_fsm(&keychain, &swap);
 	let tx_conf = swap_api.request_tx_confirmations(&keychain, &mut swap)?;
 	let resp = fsm.process(Input::Check, &mut swap, &context, &tx_conf)?;
+	let eta = fsm.get_swap_roadmap(&swap)?;
 
 	// Action might update the states. Need to save it
 	trades::store_swap_trade(&context, &swap, &skey)?;
@@ -289,6 +290,7 @@ where
 		resp.next_state_id,
 		resp.action.unwrap_or(Action::None),
 		resp.time_limit,
+		eta,
 	))
 }
 
