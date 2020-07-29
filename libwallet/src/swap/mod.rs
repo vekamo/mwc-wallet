@@ -297,7 +297,7 @@ mod tests {
 		}
 		fn get_connected_peer_info(
 			&self,
-		) -> Result<Vec<grin_p2p::types::PeerInfoDisplay>, crate::Error> {
+		) -> Result<Vec<grin_p2p::types::PeerInfoDisplayLegacy>, crate::Error> {
 			unimplemented!()
 		}
 		fn height_range_to_pmmr_indices(

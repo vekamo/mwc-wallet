@@ -566,7 +566,7 @@ impl NodeClient for LocalWalletClient {
 	/// Return Connected peers
 	fn get_connected_peer_info(
 		&self,
-	) -> Result<Vec<grin_p2p::types::PeerInfoDisplay>, libwallet::Error> {
+	) -> Result<Vec<grin_p2p::types::PeerInfoDisplayLegacy>, libwallet::Error> {
 		trace!("get_connected_peer_info called at the test client. Skipped.");
 		return Ok(Vec::new());
 	}
