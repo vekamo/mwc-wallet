@@ -982,6 +982,10 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		Some(s) => Some(parse_f32(s, "secondary_fee_per_byte")?),
 		None => None,
 	};
+	let message_file_name = args.value_of("message_file_name").map(|s| String::from(s));
+	let buyer_refund_address = args
+		.value_of("buyer_refund_address")
+		.map(|s| String::from(s));
 
 	let subcommand = if args.is_present("list") {
 		command::SwapSubcommand::List
@@ -1013,6 +1017,8 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		destination,
 		apisecret,
 		fee_satoshi_per_byte: secondary_fee_per_byte,
+		message_file_name,
+		buyer_refund_address,
 	})
 }
 

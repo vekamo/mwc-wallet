@@ -326,7 +326,8 @@ pub fn swap_process<'a, L, C, K, F>(
 	keychain_mask: Option<&SecretKey>,
 	swap_id: &str,
 	message_sender: F,
-	destination: Option<String>, // destination is used for several commands with different meaning
+	message_file_name: Option<String>,
+	buyer_refund_address: Option<String>,
 	fee_satoshi_per_byte: Option<f32>,
 ) -> Result<StateProcessRespond, Error>
 where
@@ -374,7 +375,7 @@ where
 		Action::SellerWaitingForOfferMessage
 		| Action::SellerWaitingForInitRedeemMessage
 		| Action::BuyerWaitingForRedeemMessage => {
-			let message_fn = destination.ok_or(ErrorKind::Generic("Please define 'destination' value if you you are processing income message from the file".to_string()))?;
+			let message_fn = message_file_name.ok_or(ErrorKind::Generic("Please define '--message_file_name' value if you you are processing income message from the file".to_string()))?;
 
 			let mut file = File::open(message_fn.clone()).map_err(|e| {
 				ErrorKind::Generic(format!("Unable to open file {}, {}", message_fn, e))
@@ -507,9 +508,9 @@ where
 			}
 		}
 		Action::BuyerPublishSecondaryRefundTx(_currency) => {
-			if destination.is_none() {
+			if buyer_refund_address.is_none() {
 				return Err(ErrorKind::Generic(format!(
-					"Please specify 'destination' {} address for your refund",
+					"Please specify '--buyer_refund_address' {} address for your refund",
 					swap.secondary_currency
 				))
 				.into());
@@ -517,7 +518,7 @@ where
 
 			process_respond = fsm.process(
 				Input::Execute {
-					refund_address: destination,
+					refund_address: buyer_refund_address,
 					fee_satoshi_per_byte,
 				},
 				&mut swap,

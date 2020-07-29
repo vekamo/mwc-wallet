@@ -642,4 +642,11 @@ subcommands:
             help: Optional secondary fee per byte. For BTC default 26 sat/byte.
             long: secondary_fee_per_byte
             takes_value: true
-
+        - message_file_name:
+            help: Filename with swap message content. Can be used for file based messages exchange process
+            long: message_file_name
+            takes_value: true
+        - buyer_refund_address:
+            help: Secondary currency refund address for the Buyer
+            long: buyer_refund_address
+            takes_value: true

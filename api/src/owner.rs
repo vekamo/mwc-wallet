@@ -2434,7 +2434,8 @@ where
 		keychain_mask: Option<&SecretKey>,
 		swap_id: &str,
 		message_sender: F,
-		destination: Option<String>, // destination is used for several commands with different meaning
+		message_file_name: Option<String>,
+		buyer_refund_address: Option<String>,
 		fee_satoshi_per_byte: Option<f32>,
 	) -> Result<StateProcessRespond, Error>
 	where
@@ -2445,7 +2446,8 @@ where
 			keychain_mask,
 			swap_id,
 			message_sender,
-			destination,
+			message_file_name,
+			buyer_refund_address,
 			fee_satoshi_per_byte,
 		)
 	}

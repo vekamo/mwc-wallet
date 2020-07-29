@@ -1395,12 +1395,16 @@ pub struct SwapArgs {
 	pub retry: Option<String>,
 	/// Transport that can be used for interaction
 	pub method: Option<String>,
-	/// Destination is something needed to be send
+	/// Destination for messages that needed to be send
 	pub destination: Option<String>,
 	/// Apisecret of the other party of the swap
 	pub apisecret: Option<String>,
 	/// Secondary currency fee. Satoshi per byte.
 	pub fee_satoshi_per_byte: Option<f32>,
+	/// File name with message content, if message need to be processed with files
+	pub message_file_name: Option<String>,
+	/// Refund address for the buyer
+	pub buyer_refund_address: Option<String>,
 }
 
 pub fn swap<L, C, K>(
@@ -1637,7 +1641,8 @@ where
 					keychain_mask,
 					&swap_id,
 					message_sender,
-					args.destination,
+					args.message_file_name,
+					args.buyer_refund_address,
 					args.fee_satoshi_per_byte,
 				);
 
@@ -1774,7 +1779,8 @@ where
 							keychain_mask,
 							&swap_id,
 							message_sender.clone(),
-							args.destination.clone(),
+							args.message_file_name.clone(),
+							args.buyer_refund_address.clone(),
 							args.fee_satoshi_per_byte,
 						) {
 							Ok(_) => (),
