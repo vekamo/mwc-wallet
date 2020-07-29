@@ -31,13 +31,20 @@ use crate::{
 	wallet_lock, OutputData, OutputStatus, Slate, SwapStartArgs, TxLogEntry, TxLogEntryType,
 	WalletBackend, WalletInst, WalletLCProvider,
 };
+use grin_keychain::ExtKeychainPath;
 use grin_util::to_hex;
 use std::convert::TryFrom;
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
 
-// TODO  - Validation for all parameters.
+fn get_swap_storage_key<K: Keychain>(keychain: &K) -> Result<SecretKey, Error> {
+	Ok(keychain.derive_key(
+		0,
+		&ExtKeychainPath::new(3, 3, 2, 1, 0).to_identifier(),
+		SwitchCommitmentType::None,
+	)?)
+}
 
 /// Start swap trade process. Return SwapID that can be used to check the status or perform further action.
 pub fn swap_start<'a, L, C, K>(
@@ -53,13 +60,10 @@ where
 	// Starting a swap trade.
 	// This method only initialize and store the swap process. Nothing is done
 
-	// TODO  - validate SwapStartArgs values
-	// TODO  - we probably want to do that as a generic solution because all params need to be validated
-
 	wallet_lock!(wallet_inst, w);
 	let node_client = w.w2n_client().clone();
 	let keychain = w.keychain(keychain_mask)?;
-	let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+	let skey = get_swap_storage_key(&keychain)?;
 	let height = node_client.get_chain_tip()?.0;
 
 	let secondary_currency = Currency::try_from(params.secondary_currency.as_str())?;
@@ -142,7 +146,7 @@ where
 
 	wallet_lock!(wallet_inst, w);
 	let keychain = w.keychain(keychain_mask)?;
-	let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+	let skey = get_swap_storage_key(&keychain)?;
 
 	for sw_id in &swap_id {
 		let (_, swap) = trades::get_swap_trade(sw_id.as_str(), &skey)?;
@@ -180,7 +184,7 @@ where
 {
 	wallet_lock!(wallet_inst, w);
 	let keychain = w.keychain(keychain_mask)?;
-	let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+	let skey = get_swap_storage_key(&keychain)?;
 	let (_, swap) = trades::get_swap_trade(swap_id, &skey)?;
 	Ok(swap)
 }
@@ -199,7 +203,7 @@ where
 {
 	wallet_lock!(wallet_inst, w);
 	let keychain = w.keychain(keychain_mask)?;
-	let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+	let skey = get_swap_storage_key(&keychain)?;
 	let node_client = w.w2n_client();
 
 	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey)?;
@@ -252,7 +256,7 @@ where
 {
 	wallet_lock!(wallet_inst, w);
 	let keychain = w.keychain(keychain_mask)?;
-	let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+	let skey = get_swap_storage_key(&keychain)?;
 	let dump_res = trades::dump_swap_trade(swap_id, &skey)?;
 	Ok(dump_res)
 }
@@ -273,7 +277,7 @@ where
 	wallet_lock!(wallet_inst, w);
 	let node_client = w.w2n_client().clone();
 	let keychain = w.keychain(keychain_mask)?;
-	let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+	let skey = get_swap_storage_key(&keychain)?;
 
 	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey)?;
 
@@ -308,7 +312,7 @@ where
 	wallet_lock!(wallet_inst, w);
 	let node_client = w.w2n_client().clone();
 	let keychain = w.keychain(keychain_mask)?;
-	let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+	let skey = get_swap_storage_key(&keychain)?;
 
 	let (_context, mut swap) = trades::get_swap_trade(swap_id, &skey)?;
 
@@ -344,7 +348,7 @@ where
 		(node_client, keychain, parent_key_id)
 	};
 
-	let skey = keychain.derive_key(0, &parent_key_id, SwitchCommitmentType::None)?;
+	let skey = get_swap_storage_key(&keychain)?;
 
 	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey)?;
 
@@ -618,7 +622,7 @@ where
 			wallet_lock!(wallet_inst, w);
 			let node_client = w.w2n_client().clone();
 			let keychain = w.keychain(keychain_mask)?;
-			let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+			let skey = get_swap_storage_key(&keychain)?;
 
 			if trades::get_swap_trade(swap_id.as_str(), &skey).is_ok() {
 				return Err( ErrorKind::Generic(format!("trade with SwapID {} already exist. Probably you already processed this message", swap_id)).into());
@@ -659,7 +663,7 @@ where
 			wallet_lock!(wallet_inst, w);
 			let node_client = w.w2n_client().clone();
 			let keychain = w.keychain(keychain_mask)?;
-			let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+			let skey = get_swap_storage_key(&keychain)?;
 
 			let (context, mut swap) = trades::get_swap_trade(swap_id.as_str(), &skey)?;
 
