@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::swap::fsm::state::{Input, State, StateId, StateProcessRespond};
+use crate::swap::fsm::state::{Input, State, StateEtaInfo, StateId, StateProcessRespond};
 use crate::swap::types::SwapTransactionsConfirmations;
 use crate::swap::{Context, ErrorKind, Swap};
 use std::collections::HashMap;
@@ -96,5 +96,57 @@ impl<'a> StateMachine<'a> {
 
 		debug!("Responding with {:?}", respond);
 		Ok(respond)
+	}
+
+	/// Build a roadmap for the swap process
+	pub fn get_swap_roadmap(&self, swap: &Swap) -> Result<Vec<StateEtaInfo>, ErrorKind> {
+		let state = self
+			.state_map
+			.get(&swap.state)
+			.ok_or(ErrorKind::SwapStateMachineError(format!(
+				"Unknown state {:?}",
+				swap.state
+			)))?;
+
+		let mut result: Vec<StateEtaInfo> = Vec::new();
+
+		// go backward first
+		let mut prev_state_id = state.get_prev_swap_state();
+		while prev_state_id.is_some() {
+			let psid = prev_state_id.unwrap();
+			let prev_state = self
+				.state_map
+				.get(&psid)
+				.ok_or(ErrorKind::SwapStateMachineError(format!(
+					"Unknown state {:?}",
+					psid
+				)))?;
+			if let Some(info) = prev_state.get_eta(swap) {
+				result.insert(0, info);
+			}
+			prev_state_id = prev_state.get_prev_swap_state();
+		}
+		// current state
+		if let Some(info) = state.get_eta(swap) {
+			result.push(info.active());
+		}
+		// going forward
+		let mut next_state_id = state.get_next_swap_state();
+		while next_state_id.is_some() {
+			let nsid = next_state_id.unwrap();
+			let next_state = self
+				.state_map
+				.get(&nsid)
+				.ok_or(ErrorKind::SwapStateMachineError(format!(
+					"Unknown state {:?}",
+					nsid
+				)))?;
+			if let Some(info) = next_state.get_eta(swap) {
+				result.push(info);
+			}
+			next_state_id = next_state.get_next_swap_state();
+		}
+
+		Ok(result)
 	}
 }

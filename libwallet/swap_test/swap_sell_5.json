@@ -236,6 +236,7 @@
     ],
     "payment_proof": null
   },
+  "redeem_kernel_updated": true,
   "adaptor_signature": "c243a5a05254a9e99cc69e80851f8566653ae806b8986595fedd057ae2a6b6dd20cea0957af2f764ab045d1177d4fa0a353428dcb8f572a9ca4b3007bcac9a0a",
   "mwc_confirmations": 30,
   "secondary_confirmations": 6,
@@ -393,5 +394,10 @@
       }
     },
     "inner_secondary": "Empty"
-  }
+  },
+  "posted_msg1": 1567632152,
+  "posted_msg2": null,
+  "posted_lock": 1567632152,
+  "posted_redeem": null,
+  "posted_refund": null
 }

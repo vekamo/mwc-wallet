@@ -114,6 +114,13 @@ impl TestBtcNodeClient {
 		state.txs.insert(txid, transaction.clone());
 	}
 
+	/// Add tx into the mem pool transaction
+	pub fn post_transaction(&self, transaction: &Transaction) {
+		let mut state = self.state.lock();
+		let txid = transaction.txid();
+		state.pending.insert(txid.clone(), transaction.clone());
+	}
+
 	/// Mine a new block. All oending transacitons will be included
 	pub fn mine_block(&self) {
 		let mut state = self.state.lock();
@@ -136,6 +143,25 @@ impl TestBtcNodeClient {
 				state.height += count - 1;
 			}
 		}
+	}
+
+	/// Get a current state for the test chain
+	pub fn get_state(&self) -> TestBtcNodeClientState {
+		self.state.lock().clone()
+	}
+
+	/// Set a state for the test chain
+	pub fn set_state(&self, chain_state: &TestBtcNodeClientState) {
+		let mut state = self.state.lock();
+		*state = chain_state.clone();
+	}
+
+	/// Clean the data, not height. Reorg attack
+	pub fn clean(&self) {
+		let mut state = self.state.lock();
+		state.pending.clear();
+		state.tx_heights.clear();
+		state.txs.clear();
 	}
 }
 
@@ -161,6 +187,22 @@ impl BtcNodeClient for TestBtcNodeClient {
 						},
 						value: o.value,
 						height,
+					});
+				}
+			}
+		}
+
+		for (txid, tx) in &state.pending {
+			for idx in 0..tx.output.len() {
+				let o = &tx.output[idx];
+				if o.script_pubkey == script_pubkey {
+					outputs.push(Output {
+						out_point: OutPoint {
+							txid: txid.clone(),
+							vout: idx as u32,
+						},
+						value: o.value,
+						height: 0,
 					});
 				}
 			}

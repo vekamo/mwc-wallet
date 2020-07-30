@@ -155,14 +155,13 @@ impl HTTPNodeClient {
 	}
 
 	/// Return Connected peers
-	fn get_connected_peer_info_impls(&self, counter: i32) -> Result<Vec<grin_p2p::types::PeerInfoDisplay>, libwallet::Error> {
+	fn get_connected_peer_info_impls(&self, counter: i32) -> Result<Vec<grin_p2p::types::PeerInfoDisplayLegacy>, libwallet::Error> {
 		// There is no v2 API with connected peers. Keep using v1 for that
-
 		let addr = self.node_url();
 		let url = format!("{}/v1/peers/connected", addr);
 
 		let res = self.client
-			.get::<Vec<grin_p2p::types::PeerInfoDisplay>>(url.as_str(), self.node_api_secret());
+			.get::<Vec<grin_p2p::types::PeerInfoDisplayLegacy>>(url.as_str(), self.node_api_secret());
 		match res {
 			Err(e) => {
 				// Do retry
@@ -459,7 +458,7 @@ impl NodeClient for HTTPNodeClient {
 	/// Return Connected peers
 	fn get_connected_peer_info(
 		&self,
-	) -> Result<Vec<grin_p2p::types::PeerInfoDisplay>, libwallet::Error> {
+	) -> Result<Vec<grin_p2p::types::PeerInfoDisplayLegacy>, libwallet::Error> {
 		self.get_connected_peer_info_impls(1)
 	}
 

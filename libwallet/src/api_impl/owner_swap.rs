@@ -20,7 +20,7 @@ use crate::grin_util::Mutex;
 use crate::grin_keychain::{Identifier, Keychain, SwitchCommitmentType};
 use crate::internal::selection;
 use crate::swap::error::ErrorKind;
-use crate::swap::fsm::state::{Input, StateId, StateProcessRespond};
+use crate::swap::fsm::state::{Input, StateEtaInfo, StateId, StateProcessRespond};
 use crate::swap::message::{Message, Update};
 use crate::swap::swap::Swap;
 use crate::swap::types::{Action, Currency, SwapTransactionsConfirmations};
@@ -31,13 +31,20 @@ use crate::{
 	wallet_lock, OutputData, OutputStatus, Slate, SwapStartArgs, TxLogEntry, TxLogEntryType,
 	WalletBackend, WalletInst, WalletLCProvider,
 };
+use grin_keychain::ExtKeychainPath;
 use grin_util::to_hex;
 use std::convert::TryFrom;
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
 
-// TODO  - Validation for all parameters.
+fn get_swap_storage_key<K: Keychain>(keychain: &K) -> Result<SecretKey, Error> {
+	Ok(keychain.derive_key(
+		0,
+		&ExtKeychainPath::new(3, 3, 2, 1, 0).to_identifier(),
+		SwitchCommitmentType::None,
+	)?)
+}
 
 /// Start swap trade process. Return SwapID that can be used to check the status or perform further action.
 pub fn swap_start<'a, L, C, K>(
@@ -53,13 +60,10 @@ where
 	// Starting a swap trade.
 	// This method only initialize and store the swap process. Nothing is done
 
-	// TODO  - validate SwapStartArgs values
-	// TODO  - we probably want to do that as a generic solution because all params need to be validated
-
 	wallet_lock!(wallet_inst, w);
 	let node_client = w.w2n_client().clone();
 	let keychain = w.keychain(keychain_mask)?;
-	let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+	let skey = get_swap_storage_key(&keychain)?;
 	let height = node_client.get_chain_tip()?.0;
 
 	let secondary_currency = Currency::try_from(params.secondary_currency.as_str())?;
@@ -142,7 +146,7 @@ where
 
 	wallet_lock!(wallet_inst, w);
 	let keychain = w.keychain(keychain_mask)?;
-	let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+	let skey = get_swap_storage_key(&keychain)?;
 
 	for sw_id in &swap_id {
 		let (_, swap) = trades::get_swap_trade(sw_id.as_str(), &skey)?;
@@ -180,7 +184,7 @@ where
 {
 	wallet_lock!(wallet_inst, w);
 	let keychain = w.keychain(keychain_mask)?;
-	let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+	let skey = get_swap_storage_key(&keychain)?;
 	let (_, swap) = trades::get_swap_trade(swap_id, &skey)?;
 	Ok(swap)
 }
@@ -199,7 +203,7 @@ where
 {
 	wallet_lock!(wallet_inst, w);
 	let keychain = w.keychain(keychain_mask)?;
-	let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+	let skey = get_swap_storage_key(&keychain)?;
 	let node_client = w.w2n_client();
 
 	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey)?;
@@ -252,17 +256,19 @@ where
 {
 	wallet_lock!(wallet_inst, w);
 	let keychain = w.keychain(keychain_mask)?;
-	let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+	let skey = get_swap_storage_key(&keychain)?;
 	let dump_res = trades::dump_swap_trade(swap_id, &skey)?;
 	Ok(dump_res)
 }
 
-/// Get a status and action for the swap.
-pub fn get_swap_status_action<'a, L, C, K>(
+/// Refresh and get a status and current expected action for the swap.
+/// return: <state>, <Action>, <time limit>
+/// time limit shows when this action will be expired
+pub fn update_swap_status_action<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	swap_id: &str,
-) -> Result<(StateId, Action), Error>
+) -> Result<(StateId, Action, Option<i64>, Vec<StateEtaInfo>), Error>
 where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
@@ -271,7 +277,7 @@ where
 	wallet_lock!(wallet_inst, w);
 	let node_client = w.w2n_client().clone();
 	let keychain = w.keychain(keychain_mask)?;
-	let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+	let skey = get_swap_storage_key(&keychain)?;
 
 	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey)?;
 
@@ -279,11 +285,17 @@ where
 	let mut fsm = swap_api.get_fsm(&keychain, &swap);
 	let tx_conf = swap_api.request_tx_confirmations(&keychain, &mut swap)?;
 	let resp = fsm.process(Input::Check, &mut swap, &context, &tx_conf)?;
+	let eta = fsm.get_swap_roadmap(&swap)?;
 
 	// Action might update the states. Need to save it
 	trades::store_swap_trade(&context, &swap, &skey)?;
 
-	Ok((resp.next_state_id, resp.action.unwrap_or(Action::None)))
+	Ok((
+		resp.next_state_id,
+		resp.action.unwrap_or(Action::None),
+		resp.time_limit,
+		eta,
+	))
 }
 
 /// Get a status of the transactions that involved into the swap.
@@ -300,7 +312,7 @@ where
 	wallet_lock!(wallet_inst, w);
 	let node_client = w.w2n_client().clone();
 	let keychain = w.keychain(keychain_mask)?;
-	let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+	let skey = get_swap_storage_key(&keychain)?;
 
 	let (_context, mut swap) = trades::get_swap_trade(swap_id, &skey)?;
 
@@ -318,7 +330,8 @@ pub fn swap_process<'a, L, C, K, F>(
 	keychain_mask: Option<&SecretKey>,
 	swap_id: &str,
 	message_sender: F,
-	destination: Option<String>, // destination is used for several commands with different meaning
+	message_file_name: Option<String>,
+	buyer_refund_address: Option<String>,
 	fee_satoshi_per_byte: Option<f32>,
 ) -> Result<StateProcessRespond, Error>
 where
@@ -335,7 +348,7 @@ where
 		(node_client, keychain, parent_key_id)
 	};
 
-	let skey = keychain.derive_key(0, &parent_key_id, SwitchCommitmentType::None)?;
+	let skey = get_swap_storage_key(&keychain)?;
 
 	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey)?;
 
@@ -366,7 +379,7 @@ where
 		Action::SellerWaitingForOfferMessage
 		| Action::SellerWaitingForInitRedeemMessage
 		| Action::BuyerWaitingForRedeemMessage => {
-			let message_fn = destination.ok_or(ErrorKind::Generic("Please define 'destination' value if you you are processing income message from the file".to_string()))?;
+			let message_fn = message_file_name.ok_or(ErrorKind::Generic("Please define '--message_file_name' value if you you are processing income message from the file".to_string()))?;
 
 			let mut file = File::open(message_fn.clone()).map_err(|e| {
 				ErrorKind::Generic(format!("Unable to open file {}, {}", message_fn, e))
@@ -499,9 +512,9 @@ where
 			}
 		}
 		Action::BuyerPublishSecondaryRefundTx(_currency) => {
-			if destination.is_none() {
+			if buyer_refund_address.is_none() {
 				return Err(ErrorKind::Generic(format!(
-					"Please specify 'destination' {} address for your refund",
+					"Please specify '--buyer_refund_address' {} address for your refund",
 					swap.secondary_currency
 				))
 				.into());
@@ -509,7 +522,7 @@ where
 
 			process_respond = fsm.process(
 				Input::Execute {
-					refund_address: destination,
+					refund_address: buyer_refund_address,
 					fee_satoshi_per_byte,
 				},
 				&mut swap,
@@ -609,7 +622,7 @@ where
 			wallet_lock!(wallet_inst, w);
 			let node_client = w.w2n_client().clone();
 			let keychain = w.keychain(keychain_mask)?;
-			let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+			let skey = get_swap_storage_key(&keychain)?;
 
 			if trades::get_swap_trade(swap_id.as_str(), &skey).is_ok() {
 				return Err( ErrorKind::Generic(format!("trade with SwapID {} already exist. Probably you already processed this message", swap_id)).into());
@@ -650,7 +663,7 @@ where
 			wallet_lock!(wallet_inst, w);
 			let node_client = w.w2n_client().clone();
 			let keychain = w.keychain(keychain_mask)?;
-			let skey = keychain.derive_key(0, &w.parent_key_id(), SwitchCommitmentType::None)?;
+			let skey = get_swap_storage_key(&keychain)?;
 
 			let (context, mut swap) = trades::get_swap_trade(swap_id.as_str(), &skey)?;
 

@@ -76,9 +76,9 @@ pub struct TxProof {
 	pub inputs: Vec<Commitment>,
 	/// Placeholder
 	pub outputs: Vec<Commitment>,
-	///added to support the new proof implementation but be backward compatible
+	/// added to support the new proof implementation but be backward compatible
 	pub version: Option<String>,
-	///this is the encrypted slate message
+	/// this is the encrypted slate message
 	pub slate_message: Option<String>,
 	/// Tor (Dalek ed25519) signature
 	pub tor_proof_signature: Option<String>,

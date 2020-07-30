@@ -99,7 +99,6 @@ pub trait SwapApi<K: Keychain>: Sync + Send {
 		swap: &mut Swap,
 		context: &Context,
 		fee_satoshi_per_byte: Option<f32>,
-		retry: bool,
 	) -> Result<(), ErrorKind>;
 }
 

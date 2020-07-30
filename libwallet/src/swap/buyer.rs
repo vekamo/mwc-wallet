@@ -241,6 +241,7 @@ impl BuyApi {
 			lock_slate,
 			refund_slate,
 			redeem_slate,
+			redeem_kernel_updated: false,
 			adaptor_signature: None,
 			mwc_confirmations: offer.mwc_confirmations,
 			secondary_confirmations: offer.secondary_confirmations,
@@ -248,6 +249,11 @@ impl BuyApi {
 			redeem_time_sec: offer.redeem_time_sec,
 			message1: None,
 			message2: None,
+			posted_msg1: None,
+			posted_msg2: None,
+			posted_lock: None,
+			posted_redeem: None,
+			posted_refund: None,
 		};
 
 		// Minimum mwc heights
