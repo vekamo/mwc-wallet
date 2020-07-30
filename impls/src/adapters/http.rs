@@ -294,6 +294,7 @@ impl HttpDataSender {
 
 impl SlateSender for HttpDataSender {
 	fn send_tx(&self, slate: &Slate) -> Result<Slate, Error> {
+		// we need to keep _tor in scope so that the process is not killed by drop.
 		let (url_str, _tor) = self.set_up_tor_send_process()?;
 
 		let slate_send = match self.check_other_version(&url_str, None)? {
@@ -392,6 +393,7 @@ impl SlateSender for HttpDataSender {
 
 impl SwapMessageSender for HttpDataSender {
 	fn send_swap_message(&self, swap_message: &Message) -> Result<(), Error> {
+		// we need to keep _tor in scope so that the process is not killed by drop.
 		let (url_str, _tor) = self.set_up_tor_send_process()?;
 		let message_ser = &serde_json::to_string(&swap_message).map_err(|e| {
 			ErrorKind::SwapMessageGenericError(format!(
