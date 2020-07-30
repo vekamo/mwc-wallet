@@ -246,7 +246,7 @@ impl HttpDataSender {
 		Ok(tor)
 	}
 
-	fn set_up_tor_send_process(&self) -> Result<String, Error> {
+	fn set_up_tor_send_process(&self) -> Result<(String, tor_process::TorProcess), Error> {
 		let trailing = match self.base_url.ends_with('/') {
 			true => "",
 			false => "/",
@@ -288,13 +288,13 @@ impl HttpDataSender {
 					))
 				})?;
 		}
-		Ok(url_str)
+		Ok((url_str, tor))
 	}
 }
 
 impl SlateSender for HttpDataSender {
 	fn send_tx(&self, slate: &Slate) -> Result<Slate, Error> {
-		let url_str = self.set_up_tor_send_process()?;
+		let (url_str, _tor) = self.set_up_tor_send_process()?;
 
 		let slate_send = match self.check_other_version(&url_str, None)? {
 			SlateVersion::V3B => VersionedSlate::into_version(slate.clone(), SlateVersion::V3),
@@ -392,7 +392,7 @@ impl SlateSender for HttpDataSender {
 
 impl SwapMessageSender for HttpDataSender {
 	fn send_swap_message(&self, swap_message: &Message) -> Result<(), Error> {
-		let url_str = self.set_up_tor_send_process()?;
+		let (url_str, _tor) = self.set_up_tor_send_process()?;
 		let message_ser = &serde_json::to_string(&swap_message).map_err(|e| {
 			ErrorKind::SwapMessageGenericError(format!(
 				"Failed to convert swap message to json in preparation for tor request, {}",
