@@ -102,6 +102,34 @@ pub fn version_bytes() -> Vec<u8> {
 	}
 }
 
+///convert a tor onion address to the pub key
+pub fn address_to_pubkey(addr: String) -> String {
+	//if it is an onion address, need to remove the http:// or https:// and .onion.
+	let mut addr_change = addr;
+	if addr_change.starts_with("HTTP://") || addr_change.starts_with("HTTPS://") {
+		addr_change = addr_change.replace("HTTP://", "");
+		addr_change = addr_change.replace("HTTPS://", "");
+	}
+	if addr_change.starts_with("http://") || addr_change.starts_with("http://") {
+		addr_change = addr_change.replace("http://", "");
+		addr_change = addr_change.replace("https://", "");
+	}
+	if addr_change.ends_with(".ONION") {
+		addr_change = addr_change.replace(".ONION", "");
+	}
+	if addr_change.ends_with(".onion") {
+		addr_change = addr_change.replace(".onion", "");
+	}
+	if addr_change.ends_with(".ONION/") {
+		addr_change = addr_change.replace(".ONION/", "");
+	}
+	if addr_change.ends_with(".onion/") {
+		addr_change = addr_change.replace(".onion/", "");
+	}
+	let addr_to_return = addr_change.into();
+	return addr_to_return;
+}
+
 /// provable address public key
 pub fn payment_proof_address<K>(
 	keychain: &K,

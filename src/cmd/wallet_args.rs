@@ -30,6 +30,7 @@ use grin_wallet_controller::{Error, ErrorKind};
 use grin_wallet_impls::tor::config::is_tor_address;
 use grin_wallet_impls::{DefaultLCProvider, DefaultWalletImpl};
 use grin_wallet_impls::{PathToSlate, SlateGetter as _};
+use grin_wallet_libwallet::proof::proofaddress;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::swap::types::Currency;
 use grin_wallet_libwallet::Slate;
@@ -507,15 +508,19 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 	};
 
 	let payment_proof_address = {
-		match args.is_present("request_payment_proof") {
+		match args.is_present("request_payment_proof") || args.is_present("proof") {
 			true => {
 				// if the destination address is a TOR address, we don't need the address
 				// separately
-				match ProvableAddress::from_str(dest) {
+
+				let proof_dest = proofaddress::address_to_pubkey(dest.to_string());
+				match ProvableAddress::from_str(&proof_dest) {
 					Ok(a) => Some(a),
 					Err(_) => {
 						let addr = parse_required(args, "proof_address")?;
-						match ProvableAddress::from_str(addr) {
+						match ProvableAddress::from_str(&proofaddress::address_to_pubkey(
+							addr.to_string(),
+						)) {
 							Ok(a) => Some(a),
 							Err(e) => {
 								let msg = format!("Invalid proof address: {:?}", e);

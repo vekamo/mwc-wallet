@@ -157,6 +157,10 @@ subcommands:
             help: Request a payment proof from the recipient. If sending to a tor address, the address will be filled automatically.
             short: y
             long: request_payment_proof
+        - proof:
+            help: Request a payment proof from the recipient. If sending to a tor address, the address will be filled automatically.
+            short: pf
+            long: proof
         - proof_address:
             help: Recipient proof address. If not using TOR, must be provided seprarately by the recipient
             short: z
