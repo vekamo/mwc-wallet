@@ -135,14 +135,23 @@ where
 		input: Input,
 		swap: &mut Swap,
 		_context: &Context,
-		_tx_conf: &SwapTransactionsConfirmations,
+		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::new(StateId::BuyerCancelled)),
+			Input::Cancel => {
+				if tx_conf.secondary_lock_amount == 0 {
+					Ok(StateProcessRespond::new(StateId::BuyerCancelled))
+				} else {
+					Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime))
+				}
+			}
 			Input::Check => {
 				let time_limit = swap.get_time_message_offers();
-				if swap.message1.is_none() {
+				if swap.posted_msg1.unwrap_or(0)
+					< swap::get_cur_time() - super::state::SEND_MESSAGE_RETRY_PERIOD
+				{
 					if swap::get_cur_time() < time_limit {
+						self.message = swap.message1.clone();
 						if self.message.is_none() {
 							let sec_update = self
 								.swap_api
@@ -157,7 +166,11 @@ where
 								.time_limit(time_limit),
 						)
 					} else {
-						Ok(StateProcessRespond::new(StateId::BuyerCancelled))
+						if tx_conf.secondary_lock_amount == 0 {
+							Ok(StateProcessRespond::new(StateId::BuyerCancelled))
+						} else {
+							Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime))
+						}
 					}
 				} else {
 					// Probably it is a rerun because of some reset. We should tolerate that
@@ -170,9 +183,10 @@ where
 				refund_address: _,
 				fee_satoshi_per_byte: _,
 			} => {
-				debug_assert!(swap.message1.is_none());
 				debug_assert!(self.message.is_some()); // Check expected to be called first
-				swap.message1 = Some(self.message.clone().unwrap());
+				if swap.message1.is_none() {
+					swap.message1 = Some(self.message.clone().unwrap());
+				}
 				swap.posted_msg1 = Some(swap::get_cur_time());
 				Ok(StateProcessRespond::new(
 					StateId::BuyerWaitingForSellerToLock,
@@ -230,13 +244,34 @@ impl State for BuyerWaitingForSellerToLock {
 		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::new(StateId::BuyerCancelled)),
+			Input::Cancel => {
+				if tx_conf.secondary_lock_amount == 0 {
+					Ok(StateProcessRespond::new(StateId::BuyerCancelled))
+				} else {
+					Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime))
+				}
+			}
 			Input::Check => {
+				// Checking if need to retry to send a message
+				if tx_conf.mwc_lock_conf.is_some() {
+					swap.ack_msg1();
+				} else if swap.posted_msg1.unwrap_or(0)
+					< swap::get_cur_time() - super::state::SEND_MESSAGE_RETRY_PERIOD
+				{
+					return Ok(StateProcessRespond::new(
+						StateId::BuyerSendingAcceptOfferMessage,
+					));
+				}
+
 				let time_limit = swap.get_time_start_lock();
 				// Check the deadline for locking
 				if swap::get_cur_time() > time_limit {
 					// cancelling
-					return Ok(StateProcessRespond::new(StateId::BuyerCancelled));
+					return if tx_conf.secondary_lock_amount == 0 {
+						Ok(StateProcessRespond::new(StateId::BuyerCancelled))
+					} else {
+						Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime))
+					};
 				}
 
 				if !swap.seller_lock_first {
@@ -324,11 +359,28 @@ where
 		input: Input,
 		swap: &mut Swap,
 		_context: &Context,
-		_tx_conf: &SwapTransactionsConfirmations,
+		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime)), // We can't just cancel. Funds might be posted, it is a manual process.
+			Input::Cancel => {
+				if tx_conf.secondary_lock_amount == 0 {
+					Ok(StateProcessRespond::new(StateId::BuyerCancelled))
+				} else {
+					Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime))
+				}
+			} // We can't just cancel. Funds might be posted, it is a manual process.
 			Input::Check => {
+				// Checking if need to retry to send a message
+				if tx_conf.mwc_lock_conf.is_some() {
+					swap.ack_msg1();
+				} else if swap.posted_msg1.unwrap_or(0)
+					< swap::get_cur_time() - super::state::SEND_MESSAGE_RETRY_PERIOD
+				{
+					return Ok(StateProcessRespond::new(
+						StateId::BuyerSendingAcceptOfferMessage,
+					));
+				}
+
 				// Check if mwc lock is already done
 				let input_script = self.swap_api.script(swap)?;
 
@@ -343,7 +395,11 @@ where
 				if chain_amount != swap.secondary_amount {
 					if swap::get_cur_time() > time_limit {
 						// cancelling because of timeout
-						return Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime));
+						return if tx_conf.secondary_lock_amount == 0 {
+							Ok(StateProcessRespond::new(StateId::BuyerCancelled))
+						} else {
+							Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime))
+						};
 					}
 				}
 
@@ -437,6 +493,17 @@ where
 		match input {
 			Input::Cancel => Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime)), // Long cancellation path
 			Input::Check => {
+				// Checking if need to retry to send a message
+				if tx_conf.mwc_lock_conf.is_some() {
+					swap.ack_msg1();
+				} else if swap.posted_msg1.unwrap_or(0)
+					< swap::get_cur_time() - super::state::SEND_MESSAGE_RETRY_PERIOD
+				{
+					return Ok(StateProcessRespond::new(
+						StateId::BuyerSendingAcceptOfferMessage,
+					));
+				}
+
 				let mwc_lock = tx_conf.mwc_lock_conf.unwrap_or(0);
 				let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
 
@@ -561,8 +628,14 @@ impl State for BuyerSendingInitRedeemMessage {
 				}
 
 				let time_limit = swap.get_time_message_redeem();
-				if swap.message2.is_none() {
+
+				if swap.posted_msg2.unwrap_or(0)
+					< swap::get_cur_time() - super::state::SEND_MESSAGE_RETRY_PERIOD
+				{
 					if swap::get_cur_time() < time_limit {
+						if self.message.is_none() {
+							self.message = swap.message2.clone();
+						}
 						if self.message.is_none() {
 							self.message = Some(BuyApi::init_redeem_message(swap)?);
 						}
@@ -587,9 +660,11 @@ impl State for BuyerSendingInitRedeemMessage {
 				refund_address: _,
 				fee_satoshi_per_byte: _,
 			} => {
-				debug_assert!(swap.message2.is_none());
 				debug_assert!(self.message.is_some()); // Check expected to be called first
-				swap.message2 = Some(self.message.clone().unwrap());
+				if swap.message2.is_none() {
+					swap.message2 = Some(self.message.clone().unwrap());
+				}
+				swap.posted_msg2 = Some(swap::get_cur_time());
 
 				Ok(StateProcessRespond::new(
 					StateId::BuyerWaitingForRespondRedeemMessage,
@@ -672,6 +747,14 @@ impl<K: Keychain> State for BuyerWaitingForRespondRedeemMessage<K> {
 
 				let time_limit = swap.get_time_message_redeem();
 				if swap::get_cur_time() < time_limit {
+					if swap.posted_msg2.unwrap_or(0)
+						< swap::get_cur_time() - super::state::SEND_MESSAGE_RETRY_PERIOD
+					{
+						return Ok(StateProcessRespond::new(
+							StateId::BuyerSendingInitRedeemMessage,
+						));
+					}
+
 					Ok(
 						StateProcessRespond::new(StateId::BuyerWaitingForRespondRedeemMessage)
 							.action(Action::BuyerWaitingForRedeemMessage)
@@ -683,23 +766,24 @@ impl<K: Keychain> State for BuyerWaitingForRespondRedeemMessage<K> {
 				}
 			}
 			Input::IncomeMessage(message) => {
-				debug_assert!(swap
+				if swap
 					.redeem_slate
 					.tx
 					.validate(
 						Weighting::AsTransaction,
-						Arc::new(RwLock::new(LruVerifierCache::new()))
+						Arc::new(RwLock::new(LruVerifierCache::new())),
 					)
-					.is_err());
-
-				let (_, redeem, _) = message.unwrap_redeem()?;
-				BuyApi::finalize_redeem_slate(
-					&*self.keychain,
-					swap,
-					context,
-					redeem.redeem_participant,
-				)?;
-
+					.is_err()
+				{
+					let (_, redeem, _) = message.unwrap_redeem()?;
+					BuyApi::finalize_redeem_slate(
+						&*self.keychain,
+						swap,
+						context,
+						redeem.redeem_participant,
+					)?;
+					swap.ack_msg2();
+				}
 				debug_assert!(swap
 					.redeem_slate
 					.tx

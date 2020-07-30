@@ -21,6 +21,8 @@ use std::fmt;
 pub const POST_MWC_RETRY_PERIOD: i64 = 300;
 /// For BTC - let's use same period. BTC is visible into the mem pool quickly, so it is expected to be delivered after 5 minutes...
 pub const POST_SECONDARY_RETRY_PERIOD: i64 = 300;
+/// Retry period for the messages, including files
+pub const SEND_MESSAGE_RETRY_PERIOD: i64 = 300;
 
 /// StateId of the swap finite state machine.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

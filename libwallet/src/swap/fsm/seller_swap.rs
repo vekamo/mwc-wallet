@@ -129,9 +129,14 @@ where
 		match input {
 			Input::Cancel => Ok(StateProcessRespond::new(StateId::SellerCancelled)),
 			Input::Check => {
-				if swap.message1.is_none() {
+				if swap.posted_msg1.unwrap_or(0)
+					< swap::get_cur_time() - super::state::SEND_MESSAGE_RETRY_PERIOD
+				{
 					let time_limit = swap.get_time_message_offers();
 					if swap::get_cur_time() < time_limit {
+						if self.message.is_none() {
+							self.message = swap.message1.clone();
+						}
 						if self.message.is_none() {
 							let sec_update = self
 								.swap_api
@@ -157,9 +162,10 @@ where
 				refund_address: _,
 				fee_satoshi_per_byte: _,
 			} => {
-				debug_assert!(swap.message1.is_none());
 				debug_assert!(self.message.is_some()); // Check expected to be called first
-				swap.message1 = Some(self.message.clone().unwrap());
+				if swap.message1.is_none() {
+					swap.message1 = Some(self.message.clone().unwrap());
+				}
 				swap.posted_msg1 = Some(swap::get_cur_time());
 
 				Ok(StateProcessRespond::new(
@@ -220,6 +226,12 @@ impl<K: Keychain> State for SellerWaitingForAcceptanceMessage<K> {
 				if swap.redeem_public.is_none() {
 					let time_limit = swap.get_time_message_offers();
 					if swap::get_cur_time() < time_limit {
+						// Check if we need to retry to send the message
+						if swap.posted_msg1.unwrap_or(0)
+							< swap::get_cur_time() - super::state::SEND_MESSAGE_RETRY_PERIOD
+						{
+							return Ok(StateProcessRespond::new(StateId::SellerSendingOffer));
+						}
 						Ok(
 							StateProcessRespond::new(StateId::SellerWaitingForAcceptanceMessage)
 								.action(Action::SellerWaitingForOfferMessage)
@@ -235,13 +247,17 @@ impl<K: Keychain> State for SellerWaitingForAcceptanceMessage<K> {
 				}
 			}
 			Input::IncomeMessage(message) => {
-				debug_assert!(swap.redeem_public.is_none());
-				let (_, accept_offer, secondary_update) = message.unwrap_accept_offer()?;
-				let btc_update = secondary_update.unwrap_btc()?.unwrap_accept_offer()?;
+				// Double processing should be fine
+				if swap.redeem_public.is_none() {
+					let (_, accept_offer, secondary_update) = message.unwrap_accept_offer()?;
+					let btc_update = secondary_update.unwrap_btc()?.unwrap_accept_offer()?;
 
-				SellApi::accepted_offer(&*self.keychain, swap, context, accept_offer)?;
-				let btc_data = swap.secondary_data.unwrap_btc_mut()?;
-				btc_data.accepted_offer(btc_update)?;
+					SellApi::accepted_offer(&*self.keychain, swap, context, accept_offer)?;
+					let btc_data = swap.secondary_data.unwrap_btc_mut()?;
+					btc_data.accepted_offer(btc_update)?;
+
+					swap.ack_msg1(); // Just in case duplicate ack, because we get a respond, so the message was delivered
+				}
 				debug_assert!(swap.redeem_public.is_some());
 				Ok(StateProcessRespond::new(StateId::SellerWaitingForBuyerLock))
 			}
@@ -656,9 +672,10 @@ impl<K: Keychain> State for SellerWaitingForInitRedeemMessage<K> {
 				}
 			}
 			Input::IncomeMessage(message) => {
-				debug_assert!(swap.adaptor_signature.is_none());
-				let (_, init_redeem, _) = message.unwrap_init_redeem()?;
-				SellApi::init_redeem(&*self.keychain, swap, context, init_redeem)?;
+				if swap.adaptor_signature.is_none() {
+					let (_, init_redeem, _) = message.unwrap_init_redeem()?;
+					SellApi::init_redeem(&*self.keychain, swap, context, init_redeem)?;
+				}
 				debug_assert!(swap.adaptor_signature.is_some());
 				Ok(StateProcessRespond::new(
 					StateId::SellerSendingInitRedeemMessage,
@@ -712,11 +729,29 @@ impl State for SellerSendingInitRedeemMessage {
 		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::new(
-				StateId::SellerWaitingForRefundHeight,
-			)), // Last chance to quit
+			Input::Cancel => {
+				if swap.posted_msg2.is_none() {
+					Ok(StateProcessRespond::new(
+						StateId::SellerWaitingForRefundHeight,
+					))
+				} else {
+					// we can't cancel, we must continue to wait
+					Ok(StateProcessRespond::new(
+						StateId::SellerWaitingForBuyerToRedeemMwc,
+					))
+				}
+			} // Last chance to quit
 			Input::Check => {
-				if swap.message2.is_none() {
+				// Redeem is published, so we are good
+				if swap.redeem_kernel_updated {
+					return Ok(StateProcessRespond::new(
+						StateId::SellerWaitingForBuyerToRedeemMwc,
+					));
+				}
+
+				if swap.posted_msg2.unwrap_or(0)
+					< swap::get_cur_time() - super::state::SEND_MESSAGE_RETRY_PERIOD
+				{
 					// Check if everything is still locked...
 					let mwc_lock = tx_conf.mwc_lock_conf.unwrap_or(0);
 					let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
@@ -731,6 +766,9 @@ impl State for SellerSendingInitRedeemMessage {
 					let time_limit = swap.get_time_message_redeem();
 					if swap::get_cur_time() < time_limit {
 						if self.message.is_none() {
+							self.message = swap.message2.clone();
+						}
+						if self.message.is_none() {
 							self.message = Some(SellApi::redeem_message(swap)?);
 						}
 						Ok(
@@ -741,14 +779,24 @@ impl State for SellerSendingInitRedeemMessage {
 								.time_limit(time_limit),
 						)
 					} else {
-						Ok(StateProcessRespond::new(
-							StateId::SellerWaitingForRefundHeight,
-						))
+						if swap.posted_msg2.is_none() {
+							Ok(StateProcessRespond::new(
+								StateId::SellerWaitingForRefundHeight,
+							))
+						} else {
+							// we can't cancel, we must continue to wait
+							// because it is cancellation, let's do ack for this send.
+							// Sending really doesn't needed any more
+							swap.ack_msg2();
+							Ok(StateProcessRespond::new(
+								StateId::SellerWaitingForBuyerToRedeemMwc,
+							))
+						}
 					}
 				} else {
 					// Probably it is a rerun because of some reset. We should tolerate that
 					Ok(StateProcessRespond::new(
-						StateId::SellerWaitingForAcceptanceMessage,
+						StateId::SellerWaitingForBuyerToRedeemMwc,
 					))
 				}
 			}
@@ -756,9 +804,11 @@ impl State for SellerSendingInitRedeemMessage {
 				refund_address: _,
 				fee_satoshi_per_byte: _,
 			} => {
-				debug_assert!(swap.message2.is_none());
 				debug_assert!(self.message.is_some()); // Check expected to be called first
-				swap.message2 = Some(self.message.clone().unwrap());
+				if swap.message2.is_none() {
+					swap.message2 = Some(self.message.clone().unwrap());
+				}
+				swap.posted_msg2 = Some(swap::get_cur_time());
 
 				Ok(StateProcessRespond::new(
 					StateId::SellerWaitingForBuyerToRedeemMwc,
@@ -873,6 +923,7 @@ where
 				// Then we want to do redeem and refund from redeem branch.
 				if !swap.redeem_slate.tx.kernels().is_empty() {
 					if check_mwc_redeem(swap, &*self.swap_api.node_client)? {
+						swap.ack_msg2();
 						// Buyer did a redeem, we can continue processing and redeem BTC
 						return Ok(StateProcessRespond::new(
 							StateId::SellerRedeemSecondaryCurrency,
@@ -888,6 +939,15 @@ where
 					// Time to to get my MWC back with a refund.
 					return Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForRefundHeight,
+					));
+				}
+
+				// Check if we need to retry to send the message
+				if swap.posted_msg2.unwrap_or(0)
+					< swap::get_cur_time() - super::state::SEND_MESSAGE_RETRY_PERIOD
+				{
+					return Ok(StateProcessRespond::new(
+						StateId::SellerSendingInitRedeemMessage,
 					));
 				}
 

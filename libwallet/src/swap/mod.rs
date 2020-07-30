@@ -1334,7 +1334,7 @@ mod tests {
 						t + 1,
 						t + MSG_EXCHANGE_TIME / 2,
 						t + MSG_EXCHANGE_TIME,
-						swap::get_cur_time() + 100000000000,
+						swap::get_cur_time() + 1000000000,
 					],
 				)
 			} else {
@@ -1350,13 +1350,13 @@ mod tests {
 					vec![
 						swap::get_cur_time(),
 						swap::get_cur_time() + MSG_EXCHANGE_TIME,
-						swap::get_cur_time() + 100000000000,
+						swap::get_cur_time() + 1000000000,
 					],
 					vec![],
 				)
 			} else {
 				assert!(swap::get_cur_time() < t2);
-				(vec![t2, t2 + MSG_EXCHANGE_TIME, t2 + 100000000000], vec![])
+				(vec![t2, t2 + MSG_EXCHANGE_TIME, t2 + 1000000000], vec![])
 			}
 		}
 	}
@@ -1632,6 +1632,35 @@ mod tests {
 		assert_eq!(
 			res.action.unwrap().get_id_str(),
 			"SellerWaitForOfferMessage"
+		);
+
+		// Let's test send retry logic
+		let res = seller.process(Input::Check).unwrap();
+		assert_eq!(
+			res.next_state_id,
+			StateId::SellerWaitingForAcceptanceMessage
+		);
+		let res = seller.process(Input::Check).unwrap();
+		assert_eq!(
+			res.next_state_id,
+			StateId::SellerWaitingForAcceptanceMessage
+		);
+
+		swap::set_testing_cur_time(swap::get_cur_time() + 61 * 5);
+		let res = seller.process(Input::Check).unwrap();
+		assert_eq!(res.next_state_id, StateId::SellerSendingOffer);
+		// simulate ack that we get from the network...
+		seller.swap.ack_msg1();
+		let res = seller.process(Input::Check).unwrap();
+		assert_eq!(
+			res.next_state_id,
+			StateId::SellerWaitingForAcceptanceMessage
+		);
+		swap::set_testing_cur_time(swap::get_cur_time() + 61 * 5);
+		let res = seller.process(Input::Check).unwrap();
+		assert_eq!(
+			res.next_state_id,
+			StateId::SellerWaitingForAcceptanceMessage
 		);
 
 		// ----------------------------------------------------------------------------------------------------------
@@ -2255,6 +2284,19 @@ mod tests {
 		assert_eq!(res.time_limit.clone().unwrap(), lock_start_timelimit);
 		assert_eq!(res.action.unwrap().get_id_str(), "WaitForMwcConfirmations");
 
+		// Checking send message retry...
+		let res = buyer.process(Input::Check).unwrap();
+		assert_eq!(res.next_state_id, StateId::BuyerWaitingForSellerToLock);
+		let res = buyer.process(Input::Check).unwrap();
+		assert_eq!(res.next_state_id, StateId::BuyerWaitingForSellerToLock);
+		swap::set_testing_cur_time(swap::get_cur_time() + 61 * 5);
+		let res = buyer.process(Input::Check).unwrap();
+		assert_eq!(res.next_state_id, StateId::BuyerSendingAcceptOfferMessage);
+		// simulate ack
+		buyer.swap.ack_msg1();
+		let res = buyer.process(Input::Check).unwrap();
+		assert_eq!(res.next_state_id, StateId::BuyerWaitingForSellerToLock);
+
 		// Seller is waiting for the message form the buyer...
 		assert_eq!(
 			seller.swap.state,
@@ -2500,9 +2542,8 @@ mod tests {
 		);
 
 		// Seller posting MWC transaction, testing retry tx cases.
+		let nc_nolock_state = nc.get_state();
 		{
-			let nc_nolock_state = nc.get_state();
-
 			// Let's check what happens if MWC is not published. Seller need to do a retry.
 			let res = seller.process(Input::execute()).unwrap();
 			assert_eq!(
@@ -2670,6 +2711,22 @@ mod tests {
 			None,
 		);
 
+		{
+			// BRANCH - checking that Sellr lock will set ack to the message
+			buyer.pushs();
+
+			// No retry if MWC are posted...
+			buyer.swap.posted_msg1 = Some(swap::get_cur_time() - 60 * 10);
+			let res = buyer.process(Input::Check).unwrap();
+			assert_eq!(
+				res.next_state_id,
+				StateId::BuyerPostingSecondaryToMultisigAccount
+			);
+			assert_eq!(buyer.swap.posted_msg1.unwrap(), u32::MAX as i64);
+
+			buyer.pops();
+		}
+
 		let res = buyer.process(Input::Check).unwrap();
 		assert_eq!(
 			buyer.swap.state,
@@ -2690,25 +2747,59 @@ mod tests {
 		}
 
 		{
-			// BRANCH - Check Buyer cancel in far future is different
+			// BRANCH - Checking retry messages
 			buyer.pushs();
-			let cur_ts = swap::get_cur_time();
-			swap::set_testing_cur_time(btc_lock_time_limit + 1);
-			let res = buyer.process(Input::Cancel).unwrap();
-			assert_eq!(res.next_state_id, StateId::BuyerPostingRefundForSecondary);
-			swap::set_testing_cur_time(cur_ts);
+
+			// No retry if MWC are posted...
+			buyer.swap.posted_msg1 = Some(swap::get_cur_time() - 60 * 10);
+			let res = buyer.process(Input::Check).unwrap();
+			assert_eq!(
+				res.next_state_id,
+				StateId::BuyerPostingSecondaryToMultisigAccount
+			);
+			assert_eq!(buyer.swap.posted_msg1.unwrap(), u32::MAX as i64);
+
+			// Doing some tweaks, need to reset ack first
+			assert_eq!(buyer.swap.posted_msg1.unwrap(), u32::MAX as i64);
+			let st = nc.get_state();
+			nc.set_state(&nc_nolock_state);
+			buyer.swap.posted_msg1 = Some(swap::get_cur_time());
+
+			let res = buyer.process(Input::Check).unwrap();
+			assert_eq!(
+				res.next_state_id,
+				StateId::BuyerPostingSecondaryToMultisigAccount
+			);
+			let res = buyer.process(Input::Check).unwrap();
+			assert_eq!(
+				res.next_state_id,
+				StateId::BuyerPostingSecondaryToMultisigAccount
+			);
+
+			swap::set_testing_cur_time(swap::get_cur_time() + 61 * 5);
+
+			let res = buyer.process(Input::Check).unwrap();
+			assert_eq!(res.next_state_id, StateId::BuyerSendingAcceptOfferMessage);
+			// simulate ack, so should return back to the current step
+			nc.set_state(&st);
+			buyer.swap.ack_msg1();
+			let res = buyer.process(Input::Check).unwrap();
+			assert_eq!(
+				res.next_state_id,
+				StateId::BuyerPostingSecondaryToMultisigAccount
+			);
+
 			buyer.pops();
 		}
 
-		// Before nothing posted, Buyer already can't can cancel easily. There is no way to detect if
-		// something was deposited
+		// Before nothing posted, Buyer still can cancel easily
 		test_responds(
 			&mut buyer,
 			StateId::BuyerPostingSecondaryToMultisigAccount,
 			Some((lock_start_timelimit, btc_lock_time_limit)), // timeout if possible
-			Some(StateId::BuyerWaitingForRefundTime),
+			Some(StateId::BuyerCancelled),
 			StateId::BuyerPostingSecondaryToMultisigAccount, // Expected state before timeput
-			StateId::BuyerWaitingForRefundTime,              // Expected state after timeout
+			StateId::BuyerCancelled,                         // Expected state after timeout
 			None,
 			None, // Expected state before timeput
 			None, // Expected state after timeout
@@ -2753,6 +2844,17 @@ mod tests {
 				assert_eq!(address, btc_address_to_deposit.to_string());
 			}
 			_ => panic!("Invalid action"),
+		}
+
+		{
+			// BRANCH - Check Buyer cancel in far future is different
+			buyer.pushs();
+			let cur_ts = swap::get_cur_time();
+			swap::set_testing_cur_time(btc_lock_time_limit + 1);
+			let res = buyer.process(Input::Cancel).unwrap();
+			assert_eq!(res.next_state_id, StateId::BuyerPostingRefundForSecondary);
+			swap::set_testing_cur_time(cur_ts);
+			buyer.pops();
 		}
 
 		// Let's store BTC network with part deposit
@@ -2836,6 +2938,40 @@ mod tests {
 		);
 
 		{
+			// BRANCH - Checking retry messages
+			buyer.pushs();
+
+			// No retry if MWC are posted...
+			buyer.swap.posted_msg1 = Some(swap::get_cur_time() - 60 * 10);
+			let res = buyer.process(Input::Check).unwrap();
+			assert_eq!(res.next_state_id, StateId::BuyerWaitingForLockConfirmations);
+			assert_eq!(buyer.swap.posted_msg1.unwrap(), u32::MAX as i64);
+
+			// Doing some tweaks, need to reset ack first
+			assert_eq!(buyer.swap.posted_msg1.unwrap(), u32::MAX as i64);
+			let st = nc.get_state();
+			nc.set_state(&nc_nolock_state);
+			buyer.swap.posted_msg1 = Some(swap::get_cur_time());
+
+			let res = buyer.process(Input::Check).unwrap();
+			assert_eq!(res.next_state_id, StateId::BuyerWaitingForLockConfirmations);
+			let res = buyer.process(Input::Check).unwrap();
+			assert_eq!(res.next_state_id, StateId::BuyerWaitingForLockConfirmations);
+
+			swap::set_testing_cur_time(swap::get_cur_time() + 61 * 5);
+
+			let res = buyer.process(Input::Check).unwrap();
+			assert_eq!(res.next_state_id, StateId::BuyerSendingAcceptOfferMessage);
+			// simulate ack, so should return back to the current step
+			buyer.swap.ack_msg1();
+			nc.set_state(&st);
+			let res = buyer.process(Input::Check).unwrap();
+			assert_eq!(res.next_state_id, StateId::BuyerWaitingForLockConfirmations);
+
+			buyer.pops();
+		}
+
+		{
 			// BRANCH  - checking how buyer will switch back to deposit step if no funds will be found
 			buyer.pushs();
 
@@ -2856,7 +2992,7 @@ mod tests {
 				None,
 			);
 
-			// With no amount - should switch back to BuyerPostingSecondaryToMultisigAccount, cancell still with refund becuase post was made
+			// With no amount - should switch back to BuyerPostingSecondaryToMultisigAccount, cancel will be without refunds becuse the balance is empty
 			btc_nc.set_state(&bnc_deposit_none);
 			test_responds(
 				&mut buyer,
@@ -2864,7 +3000,7 @@ mod tests {
 				Some((lock_start_timelimit, btc_lock_time_limit)), // timeout if possible
 				Some(StateId::BuyerWaitingForRefundTime),
 				StateId::BuyerPostingSecondaryToMultisigAccount, // Expected state before timeput
-				StateId::BuyerWaitingForRefundTime,              // Expected state after timeout
+				StateId::BuyerCancelled,                         // Expected state after timeout
 				None,
 				None, // Expected state before timeput
 				None, // Expected state after timeout
@@ -3283,7 +3419,7 @@ mod tests {
 				Some((lock_start_timelimit, btc_lock_time_limit)), // timeout if possible
 				Some(StateId::BuyerWaitingForRefundTime),
 				StateId::BuyerPostingSecondaryToMultisigAccount, // Expected state before timeput
-				StateId::BuyerWaitingForRefundTime,              // Expected state after timeout
+				StateId::BuyerCancelled,                         // Expected state after timeout
 				None,
 				None, // Expected state before timeput
 				None, // Expected state after timeout
@@ -3415,12 +3551,12 @@ mod tests {
 				StateId::BuyerSendingInitRedeemMessage,
 				Some((lock_second_message_round_timelimit, btc_lock_time_limit)), // timeout if possible
 				Some(StateId::BuyerWaitingForRefundTime),
-				StateId::BuyerWaitingForRefundTime, // Expected state before timeput
-				StateId::BuyerWaitingForRefundTime, // Expected state after timeout
+				StateId::BuyerCancelled, // Expected state before timeput
+				StateId::BuyerCancelled, // Expected state after timeout
 				None,
-				Some(StateId::BuyerWaitingForRefundTime), // Expected state before timeput
-				Some(StateId::BuyerWaitingForRefundTime), // Expected state after timeout
-				None,                                     // Acceptable message
+				Some(StateId::BuyerCancelled), // Expected state before timeput
+				Some(StateId::BuyerCancelled), // Expected state after timeout
+				None,                          // Acceptable message
 				None,
 				None,
 			);
@@ -3483,6 +3619,22 @@ mod tests {
 		assert_eq!(
 			res.action.unwrap().get_id_str(),
 			"BuyerWaitingForRedeemMessage"
+		);
+
+		// Checking send message retry
+		let res = buyer.process(Input::Check).unwrap();
+		assert_eq!(
+			res.next_state_id,
+			StateId::BuyerWaitingForRespondRedeemMessage
+		);
+		swap::set_testing_cur_time(swap::get_cur_time() + 61 * 5);
+		let res = buyer.process(Input::Check).unwrap();
+		assert_eq!(res.next_state_id, StateId::BuyerSendingInitRedeemMessage);
+		buyer.swap.ack_msg2();
+		let res = buyer.process(Input::Check).unwrap();
+		assert_eq!(
+			res.next_state_id,
+			StateId::BuyerWaitingForRespondRedeemMessage
 		);
 
 		assert_eq!(
@@ -3609,20 +3761,21 @@ mod tests {
 			// Testing btc chain reset
 			let btc_state = btc_nc.get_state();
 			btc_nc.clean();
-			// Expeted to fail because it is too late to deposit more
+			// Expected to fail because it is too late to deposit more
+			let tlim = buyer.swap.get_time_mwc_redeem();
 			test_responds(
 				&mut buyer,
 				StateId::BuyerWaitingForRespondRedeemMessage,
-				Some((lock_second_message_round_timelimit, btc_lock_time_limit)), // timeout if possible
+				Some((lock_second_message_round_timelimit, tlim)), // timeout if possible
 				Some(StateId::BuyerWaitingForRefundTime),
-				StateId::BuyerWaitingForRefundTime, // Expected state before timeput
-				StateId::BuyerWaitingForRefundTime, // Expected state after timeout
+				StateId::BuyerCancelled, // Expected state before timeput
+				StateId::BuyerCancelled, // Expected state after timeout
 				None,
 				None,                   // Expected state before timeput
 				None,                   // Expected state after timeout
 				Some(message4.clone()), // Acceptable message
-				Some(StateId::BuyerWaitingForRefundTime),
-				Some(StateId::BuyerWaitingForRefundTime),
+				Some(StateId::BuyerCancelled),
+				Some(StateId::BuyerCancelled),
 			);
 
 			btc_nc.set_state(&btc_state);
@@ -3678,6 +3831,16 @@ mod tests {
 			res.action.unwrap().get_id_str(),
 			"SellerWaitForBuyerRedeemPublish"
 		);
+
+		// Check if send message retyr does work as expected
+		let res = seller.process(Input::Check).unwrap();
+		assert_eq!(res.next_state_id, StateId::SellerWaitingForBuyerToRedeemMwc);
+		swap::set_testing_cur_time(swap::get_cur_time() + 61 * 5);
+		let res = seller.process(Input::Check).unwrap();
+		assert_eq!(res.next_state_id, StateId::SellerSendingInitRedeemMessage);
+		seller.swap.ack_msg2();
+		let res = seller.process(Input::Check).unwrap();
+		assert_eq!(res.next_state_id, StateId::SellerWaitingForBuyerToRedeemMwc);
 
 		assert_eq!(
 			buyer

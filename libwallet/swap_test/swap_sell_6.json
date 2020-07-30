@@ -395,8 +395,8 @@
     },
     "inner_secondary": "Empty"
   },
-  "posted_msg1": 1567632152,
-  "posted_msg2": null,
+  "posted_msg1": 4294967295,
+  "posted_msg2": 4294967295,
   "posted_lock": 1567632152,
   "posted_redeem": 1567632152,
   "posted_refund": null
