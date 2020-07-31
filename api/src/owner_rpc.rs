@@ -1738,6 +1738,7 @@ pub fn run_doctest_owner(
 				None,
 				true,
 				false,
+				0,
 			)
 			.unwrap();
 			w2.close().unwrap();

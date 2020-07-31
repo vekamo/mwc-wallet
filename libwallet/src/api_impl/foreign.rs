@@ -88,6 +88,7 @@ pub fn receive_tx<'a, T: ?Sized, C, K>(
 	message: Option<String>,
 	use_test_rng: bool,
 	refresh_from_node: bool,
+	address_index: u32,
 ) -> Result<Slate, Error>
 where
 	T: WalletBackend<'a, C, K>,
@@ -205,7 +206,7 @@ where
 			&excess,
 			p.sender_address.clone(),
 			p.receiver_address.clone(),
-			address::address_from_derivation_path(&keychain, &parent_key_id, 0)?,
+			address::address_from_derivation_path(&keychain, &parent_key_id, address_index)?,
 		)?;
 
 		p.receiver_signature = Some(sig);

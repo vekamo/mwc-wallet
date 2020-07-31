@@ -255,6 +255,7 @@ where
 		g_args.api_secret.clone(),
 		g_args.tls_conf.clone(),
 		config.owner_api_include_foreign.clone(),
+		config.grinbox_address_index().clone(),
 		Some(tor_config.clone()),
 	)
 	.map_err(|e| ErrorKind::LibWallet(format!("Unable to start Listener, {}", e)))?;
