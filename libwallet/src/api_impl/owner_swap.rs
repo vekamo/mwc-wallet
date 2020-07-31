@@ -21,7 +21,7 @@ use crate::grin_keychain::{Identifier, Keychain, SwitchCommitmentType};
 use crate::internal::selection;
 use crate::swap::error::ErrorKind;
 use crate::swap::fsm::state::{Input, StateEtaInfo, StateId, StateProcessRespond};
-use crate::swap::message::{Message, Update};
+use crate::swap::message::{Message, SecondaryUpdate, Update};
 use crate::swap::swap::Swap;
 use crate::swap::types::{Action, Currency, SwapTransactionsConfirmations};
 use crate::swap::{trades, BuyApi, Context, SwapApi};
@@ -117,7 +117,9 @@ where
 
 	// Store swap result into the file.
 	let swap_id = swap.id.to_string();
-	if trades::get_swap_trade(swap_id.as_str(), &skey).is_ok() {
+	let swap_lock = trades::get_swap_lock(&swap_id);
+	let _l = swap_lock.lock();
+	if trades::get_swap_trade(swap_id.as_str(), &skey, &*swap_lock).is_ok() {
 		// Should be impossible, uuid suppose to be unique. But we don't want to overwrite anything
 		return Err(ErrorKind::TradeIoError(
 			swap_id.clone(),
@@ -126,7 +128,7 @@ where
 		.into());
 	}
 
-	trades::store_swap_trade(&context, &swap, &skey)?;
+	trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 
 	Ok(swap_id)
 }
@@ -149,7 +151,9 @@ where
 	let skey = get_swap_storage_key(&keychain)?;
 
 	for sw_id in &swap_id {
-		let (_, swap) = trades::get_swap_trade(sw_id.as_str(), &skey)?;
+		let swap_lock = trades::get_swap_lock(sw_id);
+		let _l = swap_lock.lock();
+		let (_, swap) = trades::get_swap_trade(sw_id.as_str(), &skey, &*swap_lock)?;
 		result.push((sw_id.clone(), swap.state.to_string()));
 	}
 
@@ -167,7 +171,9 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	trades::delete_swap_trade(swap_id)?;
+	let swap_lock = trades::get_swap_lock(&swap_id.to_string());
+	let _l = swap_lock.lock();
+	trades::delete_swap_trade(swap_id, &*swap_lock)?;
 	Ok(())
 }
 
@@ -185,7 +191,9 @@ where
 	wallet_lock!(wallet_inst, w);
 	let keychain = w.keychain(keychain_mask)?;
 	let skey = get_swap_storage_key(&keychain)?;
-	let (_, swap) = trades::get_swap_trade(swap_id, &skey)?;
+	let swap_lock = trades::get_swap_lock(&swap_id.to_string());
+	let _l = swap_lock.lock();
+	let (_, swap) = trades::get_swap_trade(swap_id, &skey, &*swap_lock)?;
 	Ok(swap)
 }
 
@@ -206,7 +214,9 @@ where
 	let skey = get_swap_storage_key(&keychain)?;
 	let node_client = w.w2n_client();
 
-	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey)?;
+	let swap_lock = trades::get_swap_lock(&swap_id.to_string());
+	let _l = swap_lock.lock();
+	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey, &*swap_lock)?;
 
 	let swap_api =
 		crate::swap::api::create_instance(&swap.secondary_currency, node_client.clone())?;
@@ -223,7 +233,7 @@ where
 		// Cancelling the trade
 		let tx_conf = swap_api.request_tx_confirmations(&keychain, &swap)?;
 		let resp = fsm.process(Input::Cancel, &mut swap, &context, &tx_conf)?;
-		trades::store_swap_trade(&context, &swap, &skey)?;
+		trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 
 		return Ok((swap.state.clone(), resp.action.unwrap_or(Action::None)));
 	}
@@ -238,7 +248,7 @@ where
 
 	let tx_conf = swap_api.request_tx_confirmations(&keychain, &swap)?;
 	let resp = fsm.process(Input::Check, &mut swap, &context, &tx_conf)?;
-	trades::store_swap_trade(&context, &swap, &skey)?;
+	trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 
 	return Ok((swap.state.clone(), resp.action.unwrap_or(Action::None)));
 }
@@ -257,7 +267,9 @@ where
 	wallet_lock!(wallet_inst, w);
 	let keychain = w.keychain(keychain_mask)?;
 	let skey = get_swap_storage_key(&keychain)?;
-	let dump_res = trades::dump_swap_trade(swap_id, &skey)?;
+	let swap_lock = trades::get_swap_lock(&swap_id.to_string());
+	let _l = swap_lock.lock();
+	let dump_res = trades::dump_swap_trade(swap_id, &skey, &*swap_lock)?;
 	Ok(dump_res)
 }
 
@@ -278,8 +290,10 @@ where
 	let node_client = w.w2n_client().clone();
 	let keychain = w.keychain(keychain_mask)?;
 	let skey = get_swap_storage_key(&keychain)?;
+	let swap_lock = trades::get_swap_lock(&swap_id.to_string());
+	let _l = swap_lock.lock();
 
-	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey)?;
+	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey, &*swap_lock)?;
 
 	let swap_api = crate::swap::api::create_instance(&swap.secondary_currency, node_client)?;
 	let mut fsm = swap_api.get_fsm(&keychain, &swap);
@@ -288,7 +302,7 @@ where
 	let eta = fsm.get_swap_roadmap(&swap)?;
 
 	// Action might update the states. Need to save it
-	trades::store_swap_trade(&context, &swap, &skey)?;
+	trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 
 	Ok((
 		resp.next_state_id,
@@ -313,8 +327,10 @@ where
 	let node_client = w.w2n_client().clone();
 	let keychain = w.keychain(keychain_mask)?;
 	let skey = get_swap_storage_key(&keychain)?;
+	let swap_lock = trades::get_swap_lock(&swap_id.to_string());
+	let _l = swap_lock.lock();
 
-	let (_context, mut swap) = trades::get_swap_trade(swap_id, &skey)?;
+	let (_context, mut swap) = trades::get_swap_trade(swap_id, &skey, &*swap_lock)?;
 
 	let swap_api = crate::swap::api::create_instance(&swap.secondary_currency, node_client)?;
 	let res = swap_api.request_tx_confirmations(&keychain, &mut swap)?;
@@ -338,7 +354,7 @@ where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
-	F: FnOnce(Message) -> Result<(), Error> + 'a,
+	F: FnOnce(Message) -> Result<bool, Error> + 'a,
 {
 	let (node_client, keychain, parent_key_id) = {
 		wallet_lock!(wallet_inst, w);
@@ -349,8 +365,10 @@ where
 	};
 
 	let skey = get_swap_storage_key(&keychain)?;
+	let swap_lock = trades::get_swap_lock(&swap_id.to_string());
+	let _l = swap_lock.lock();
 
-	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey)?;
+	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey, &*swap_lock)?;
 
 	let swap_api =
 		crate::swap::api::create_instance(&swap.secondary_currency, node_client.clone())?;
@@ -361,7 +379,7 @@ where
 	let mut process_respond = fsm.process(Input::Check, &mut swap, &context, &tx_conf)?;
 
 	// Action might update the states. Need to save it
-	trades::store_swap_trade(&context, &swap, &skey)?;
+	trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 
 	if process_respond.action.is_none() {
 		return Ok(process_respond);
@@ -372,9 +390,17 @@ where
 		| Action::BuyerSendAcceptOfferMessage(message)
 		| Action::BuyerSendInitRedeemMessage(message)
 		| Action::SellerSendRedeemMessage(message) => {
-			message_sender(message)?;
+			let has_ack = message_sender(message)?;
 			process_respond = fsm.process(Input::execute(), &mut swap, &context, &tx_conf)?;
-			trades::store_swap_trade(&context, &swap, &skey)?;
+			if has_ack {
+				match process_respond.action.clone().unwrap() {
+					Action::SellerSendOfferMessage(_) | Action::BuyerSendAcceptOfferMessage(_) => {
+						swap.ack_msg1()
+					}
+					_ => swap.ack_msg2(),
+				}
+			}
+			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 		}
 		Action::SellerWaitingForOfferMessage
 		| Action::SellerWaitingForInitRedeemMessage
@@ -402,7 +428,12 @@ where
 				.into());
 			}
 
-			swap_income_message(wallet_inst.clone(), keychain_mask, &contents)?;
+			swap_income_message(
+				wallet_inst.clone(),
+				keychain_mask,
+				&contents,
+				Some(swap_lock.clone()),
+			)?;
 		}
 		Action::SellerPublishMwcLockTx => {
 			wallet_lock!(wallet_inst, w);
@@ -436,7 +467,7 @@ where
 			}
 
 			process_respond = fsm.process(Input::execute(), &mut swap, &context, &tx_conf)?;
-			trades::store_swap_trade(&context, &swap, &skey)?;
+			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 			println!(
 				"Lock MWC slate is published at transaction {}",
 				swap.lock_slate.id
@@ -444,7 +475,7 @@ where
 		}
 		Action::SellerPublishTxSecondaryRedeem(_currency) => {
 			process_respond = fsm.process(Input::execute(), &mut swap, &context, &tx_conf)?;
-			trades::store_swap_trade(&context, &swap, &skey)?;
+			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 			println!(
 				"{} redeem transaction is published",
 				swap.secondary_currency
@@ -464,7 +495,7 @@ where
 		}
 		Action::BuyerPublishMwcRedeemTx => {
 			process_respond = fsm.process(Input::execute(), &mut swap, &context, &tx_conf)?;
-			trades::store_swap_trade(&context, &swap, &skey)?;
+			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 
 			wallet_lock!(wallet_inst, w);
 
@@ -491,7 +522,7 @@ where
 		}
 		Action::SellerPublishMwcRefundTx => {
 			process_respond = fsm.process(Input::execute(), &mut swap, &context, &tx_conf)?;
-			trades::store_swap_trade(&context, &swap, &skey)?;
+			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 
 			wallet_lock!(wallet_inst, w);
 
@@ -529,7 +560,7 @@ where
 				&context,
 				&tx_conf,
 			)?;
-			trades::store_swap_trade(&context, &swap, &skey)?;
+			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 		}
 		_ => (), // Nothing to do
 	}
@@ -598,11 +629,13 @@ where
 /// Processing swap income message. Note result of that can be a new offer of modification of the current one
 /// We only notify user about that, no permission will be ask.
 /// Reason: Nothing will be done with the funds until user will go forward manually
+/// Return: option ack message
 pub fn swap_income_message<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	swap_message: &str,
-) -> Result<(), Error>
+	swap_lock: Option<Arc<Mutex<()>>>,
+) -> Result<Option<Message>, Error>
 where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
@@ -611,7 +644,23 @@ where
 	let message = Message::from_json(swap_message)?;
 	let swap_id = message.id.to_string();
 
-	match &message.inner {
+	wallet_lock!(wallet_inst, w);
+	let node_client = w.w2n_client().clone();
+	let keychain = w.keychain(keychain_mask)?;
+	let skey = get_swap_storage_key(&keychain)?;
+
+	let (lock, need_to_lock) = match swap_lock {
+		Some(lock) => (lock.clone(), false),
+		None => (trades::get_swap_lock(&swap_id), true),
+	};
+
+	let _guard = if need_to_lock {
+		Some(lock.lock())
+	} else {
+		None
+	};
+
+	let ack_msg = match &message.inner {
 		Update::None => {
 			return Err(
 				ErrorKind::Generic("Get empty message, nothing to process".to_string()).into(),
@@ -619,12 +668,7 @@ where
 		}
 		Update::Offer(offer_update) => {
 			// We get an offer
-			wallet_lock!(wallet_inst, w);
-			let node_client = w.w2n_client().clone();
-			let keychain = w.keychain(keychain_mask)?;
-			let skey = get_swap_storage_key(&keychain)?;
-
-			if trades::get_swap_trade(swap_id.as_str(), &skey).is_ok() {
+			if trades::get_swap_trade(swap_id.as_str(), &skey, &*lock).is_ok() {
 				return Err( ErrorKind::Generic(format!("trade with SwapID {} already exist. Probably you already processed this message", swap_id)).into());
 			}
 
@@ -655,29 +699,63 @@ where
 				&node_client,
 			)?;
 
-			trades::store_swap_trade(&context, &swap, &skey)?;
+			trades::store_swap_trade(&context, &swap, &skey, &*lock)?;
 			println!("You get an offer to swap BTC to MWC. SwapID is {}", swap.id);
-			return Ok(());
+			Some(Message::new(
+				id,
+				Update::MessageAcknowledge(1),
+				SecondaryUpdate::Empty,
+			))
+		}
+		Update::MessageAcknowledge(msg_id) => {
+			let (context, mut swap) = trades::get_swap_trade(swap_id.as_str(), &skey, &*lock)?;
+
+			match msg_id {
+				1 => {
+					if swap.is_seller() {
+						swap.ack_msg1();
+					}
+				}
+				2 => {
+					if !swap.is_seller() {
+						swap.ack_msg1();
+					}
+				}
+				_ => {
+					return Err(ErrorKind::Generic(format!(
+						"Get unknown message group {} at 'MessageAcknowledge'",
+						msg_id
+					))
+					.into())
+				}
+			}
+			trades::store_swap_trade(&context, &swap, &skey, &*lock)?;
+			None
 		}
 		_ => {
-			wallet_lock!(wallet_inst, w);
-			let node_client = w.w2n_client().clone();
-			let keychain = w.keychain(keychain_mask)?;
-			let skey = get_swap_storage_key(&keychain)?;
-
-			let (context, mut swap) = trades::get_swap_trade(swap_id.as_str(), &skey)?;
+			let (context, mut swap) = trades::get_swap_trade(swap_id.as_str(), &skey, &*lock)?;
 
 			let swap_api =
 				crate::swap::api::create_instance(&swap.secondary_currency, node_client)?;
 			let tx_conf = swap_api.request_tx_confirmations(&keychain, &swap)?;
 			let mut fsm = swap_api.get_fsm(&keychain, &swap);
+			let msg_gr = match &&message.inner {
+				Update::Offer(_) | Update::AcceptOffer(_) => 1,
+				_ => 2,
+			};
 
 			fsm.process(Input::IncomeMessage(message), &mut swap, &context, &tx_conf)?;
-			trades::store_swap_trade(&context, &swap, &skey)?;
+			trades::store_swap_trade(&context, &swap, &skey, &*lock)?;
 			println!("Processed message for SwapId {}", swap.id);
+
+			Some(Message::new(
+				swap.id.clone(),
+				Update::MessageAcknowledge(msg_gr),
+				SecondaryUpdate::Empty,
+			))
 		}
 	};
-	Ok(())
+	Ok(ack_msg)
 }
 
 // Local Helper method to create a context

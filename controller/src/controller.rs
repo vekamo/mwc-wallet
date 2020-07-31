@@ -428,7 +428,7 @@ where
 	fn process_incoming_swap_message(
 		&self,
 		swapmessage: Message
-	) -> Result<(), Error> {
+	) -> Result<Option<Message>, Error> {
 		let owner_api = Owner::new(self.wallet.clone(), None, None);
 		let mask = self.keychain_mask.lock().clone();
 
@@ -437,9 +437,9 @@ where
 				"Error in processing incoming swap message from mqs, {}", e
 			))
 		})?;
-		owner_api.swap_income_message((&mask).as_ref(), msg_str)?;
+		let ack_msg = owner_api.swap_income_message((&mask).as_ref(), msg_str)?;
 
-		Ok(())
+		Ok(ack_msg)
 	}
 
 	fn do_log_info(&self, message: String) {
@@ -517,12 +517,12 @@ where
 		}
 	}
 
-	fn on_swap_message(&self, swap: Message) {
+	fn on_swap_message(&self, swap: Message) -> Option<Message> {
 		let result = self.process_incoming_swap_message(swap);
 
 		match result {
-			Ok(()) => {}
-			Err(e) => self.do_log_error(format!("{}", e)),
+			Ok(message) => return message,
+			Err(e) => { self.do_log_error(format!("{}", e)); None }
 		}
 	}
 

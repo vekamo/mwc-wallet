@@ -1548,7 +1548,7 @@ where
 				let g_args2 = g_args.clone();
 				let swap_id2 = swap_id.clone();
 				let message_sender =
-					move |swap_message: Message| -> Result<(), crate::libwallet::Error> {
+					move |swap_message: Message| -> Result<bool, crate::libwallet::Error> {
 						let dest = destination.ok_or(crate::libwallet::ErrorKind::SwapError(
 							"Expected 'destination' argument is not found".to_string(),
 						))?;
@@ -1603,7 +1603,7 @@ where
 									))
 								})?;
 								println!("Message is written into the file {}", dest);
-								return Ok(());
+								return Ok(true); // ack if true, because file is concidered as delivered
 							}
 						}
 
@@ -1620,7 +1620,7 @@ where
 								e
 							))
 						})?;
-						sender
+						let ack = sender
 							.send_swap_message(&swap_message)
 							.map_err(|e| {
 								ErrorKind::LibWallet(format!(
@@ -1634,7 +1634,7 @@ where
 									e
 								))
 							})?;
-						Ok(())
+						Ok(ack)
 					};
 
 				let result = api.swap_process(
@@ -1720,7 +1720,7 @@ where
 				let apisecret = args.apisecret.clone();
 				let swap_id2 = swap_id.clone();
 				let message_sender =
-					move |swap_message: Message| -> Result<(), crate::libwallet::Error> {
+					move |swap_message: Message| -> Result<bool, crate::libwallet::Error> {
 						let dest = destination.ok_or(crate::libwallet::ErrorKind::SwapError(
 							"Expected 'destination' argument is not found".to_string(),
 						))?;
@@ -1738,13 +1738,13 @@ where
 								e
 							))
 						})?;
-						sender.send_swap_message(&swap_message).map_err(|e| {
+						let ack = sender.send_swap_message(&swap_message).map_err(|e| {
 							crate::libwallet::ErrorKind::SwapError(format!(
 								"Unable to deliver the message {} by {}: {}",
 								swap_id2, method, e
 							))
 						})?;
-						Ok(())
+						Ok(ack)
 					};
 
 				// Calling mostly for params and environment validation. From here we can exit by error

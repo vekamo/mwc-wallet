@@ -151,12 +151,14 @@ impl SlateSender for MwcMqsChannel {
 }
 
 impl SwapMessageSender for MwcMqsChannel {
-	fn send_swap_message(&self, message: &Message) -> Result<(), Error> {
+	/// Send a swap message. Return true is message delivery acknowledge can be set (message was delivered and procesed)
+	fn send_swap_message(&self, message: &Message) -> Result<bool, Error> {
 		if let Some((mwcmqs_publisher, _mwcmqs_subscriber)) = get_mwcmqs_brocker() {
 			let (_ts_message, rs_message) = channel();
 
-			let res = self.send_swap_to_mqs(message, mwcmqs_publisher, rs_message);
-			res
+			self.send_swap_to_mqs(message, mwcmqs_publisher, rs_message)?;
+			// MQS is async protocol, message might never be delivered, so no ack can be granted.
+			Ok(false)
 		} else {
 			return Err(ErrorKind::MqsGenericError(format!(
 				"MQS is not started, not able to send the swap message {}",
@@ -1065,7 +1067,17 @@ impl MWCMQSBroker {
 											continue;
 										}
 									};
-									self.handler.lock().on_swap_message(swap_message);
+									let ack_message =
+										self.handler.lock().on_swap_message(swap_message);
+									if let Some(ack_message) = ack_message {
+										let mqs_cannel = MwcMqsChannel::new(from.to_string());
+										if let Err(e) = mqs_cannel.send_swap_message(&ack_message) {
+											self.do_log_error(format!(
+												"Unable to send back ack message, {}",
+												e
+											));
+										}
+									}
 								}
 
 								break;

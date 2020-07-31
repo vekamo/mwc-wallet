@@ -392,7 +392,8 @@ impl SlateSender for HttpDataSender {
 }
 
 impl SwapMessageSender for HttpDataSender {
-	fn send_swap_message(&self, swap_message: &Message) -> Result<(), Error> {
+	/// Send a swap message. Return true is message delivery acknowledge can be set (message was delivered and procesed)
+	fn send_swap_message(&self, swap_message: &Message) -> Result<bool, Error> {
 		// we need to keep _tor in scope so that the process is not killed by drop.
 		let (url_str, _tor) = self.set_up_tor_send_process()?;
 		let message_ser = &serde_json::to_string(&swap_message).map_err(|e| {
@@ -438,13 +439,14 @@ impl SwapMessageSender for HttpDataSender {
 
 		if res["error"] != json!(null) {
 			let report = format!(
-				"Posting transaction slate: Error: {}, Message: {}",
+				"Sending swap message: Error: {}, Message: {}",
 				res["error"]["code"], res["error"]["message"]
 			);
 			error!("{}", report);
 			return Err(ErrorKind::ClientCallback(report).into());
 		}
 
-		Ok(())
+		// http call is synchronouse, so message was delivered and processes. Ack cn be granted.
+		Ok(true)
 	}
 }

@@ -254,7 +254,7 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	owner_swap::swap_income_message(wallet_inst, keychain_mask, &message).map_err(|e| {
+	owner_swap::swap_income_message(wallet_inst, keychain_mask, &message, None).map_err(|e| {
 		ErrorKind::SwapError(format!(
 			"Error occurred in receiving the swap message by TOR, {}",
 			e

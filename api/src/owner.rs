@@ -2356,7 +2356,7 @@ where
 			.into());
 		}
 
-		owner_swap::swap_income_message(self.wallet_inst.clone(), keychain_mask, &contents)?;
+		owner_swap::swap_income_message(self.wallet_inst.clone(), keychain_mask, &contents, None)?;
 		Ok(message.id.to_string())
 	}
 
@@ -2439,7 +2439,7 @@ where
 		fee_satoshi_per_byte: Option<f32>,
 	) -> Result<StateProcessRespond, Error>
 	where
-		F: FnOnce(Message) -> Result<(), crate::libwallet::Error> + 'static,
+		F: FnOnce(Message) -> Result<bool, crate::libwallet::Error> + 'static,
 	{
 		owner_swap::swap_process(
 			self.wallet_inst.clone(),
@@ -2457,8 +2457,8 @@ where
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		message: String,
-	) -> Result<(), Error> {
-		owner_swap::swap_income_message(self.wallet_inst.clone(), keychain_mask, &message)
+	) -> Result<Option<Message>, Error> {
+		owner_swap::swap_income_message(self.wallet_inst.clone(), keychain_mask, &message, None)
 	}
 }
 

@@ -48,7 +48,8 @@ pub trait SubscriptionHandler: Send {
 	fn on_close(&self, result: CloseReason);
 	fn on_dropped(&self);
 	fn on_reestablished(&self);
-	fn on_swap_message(&self, swap: Message);
+	// process swap message and return the message to respond
+	fn on_swap_message(&self, swap: Message) -> Option<Message>;
 
 	fn set_notification_channels(&self, slate_id: &uuid::Uuid, slate_send_channel: Sender<Slate>);
 	fn reset_notification_channels(&self, slate_id: &uuid::Uuid);

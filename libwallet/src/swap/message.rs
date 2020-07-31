@@ -136,6 +136,9 @@ pub enum Update {
 	InitRedeem(InitRedeemUpdate),
 	/// Seller to Buyer, working on Reedem slate
 	Redeem(RedeemUpdate),
+	/// Message Acknowledge, can be used for AcceptOffer & Redeem messages only.
+	/// Value is 1 for msg1 (session 1) or 2 for msg2 (session 2)
+	MessageAcknowledge(u32),
 }
 
 /// Seller, Status::Created  Seller creates initial offer

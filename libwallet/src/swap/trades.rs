@@ -17,15 +17,17 @@ use crate::swap::types::Context;
 use crate::swap::Swap;
 use base64;
 use grin_util::secp::key::SecretKey;
-use grin_util::RwLock;
 use grin_util::{from_hex, to_hex};
+use grin_util::{Mutex, RwLock};
 use rand::{thread_rng, Rng};
 use ring::aead;
+use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 /// Lacation of the swaps states
 pub const SWAP_DEAL_SAVE_DIR: &'static str = "saved_swap_deal";
@@ -33,6 +35,8 @@ pub const SWAP_DEAL_SAVE_DIR: &'static str = "saved_swap_deal";
 lazy_static! {
 	static ref TRADE_DEALS_PATH: RwLock<Option<PathBuf>> = RwLock::new(None);
 	static ref ELECTRUM_X_URI: RwLock<Option<String>> = RwLock::new(None);
+	// Locks for the swap reads. Note, all instances are in the memory, we don't expect too many of them
+	static ref SWAP_LOCKS: RwLock<HashMap< String, Arc<Mutex<()>>>> = RwLock::new(HashMap::new());
 }
 
 /// Init for file storage for saving swap deals
@@ -69,9 +73,29 @@ pub fn list_swap_trades() -> Result<Vec<String>, ErrorKind> {
 	Ok(result)
 }
 
+/// Caller suppose to lock the swap object first before call other swap related functions.
+pub fn get_swap_lock(swap_id: &String) -> Arc<Mutex<()>> {
+	let mut swap_lock_hash = SWAP_LOCKS.write();
+	match swap_lock_hash.get(swap_id) {
+		Some(l) => l.clone(),
+		None => {
+			let l = Arc::new(Mutex::new(()));
+			swap_lock_hash.insert(swap_id.to_string(), l.clone());
+			l
+		}
+	}
+}
+
 /// Remove swap trade record.
 /// Note! You don't want to remove the non compelete deal. You can loose funds because of that.
-pub fn delete_swap_trade(swap_id: &str) -> Result<(), ErrorKind> {
+pub fn delete_swap_trade(swap_id: &str, lock: &Mutex<()>) -> Result<(), ErrorKind> {
+	if lock.try_lock().is_some() {
+		return Err(ErrorKind::Generic(format!(
+			"delete_swap_trade processing unlocked instance {}",
+			swap_id
+		)));
+	}
+
 	let target_path = TRADE_DEALS_PATH
 		.read()
 		.clone()
@@ -90,7 +114,19 @@ pub fn delete_swap_trade(swap_id: &str) -> Result<(), ErrorKind> {
 }
 
 /// Get swap trade from the storage.
-pub fn get_swap_trade(swap_id: &str, dec_key: &SecretKey) -> Result<(Context, Swap), ErrorKind> {
+/// Mutex is provided for the locking. We want to restrict an access to it
+pub fn get_swap_trade(
+	swap_id: &str,
+	dec_key: &SecretKey,
+	lock: &Mutex<()>,
+) -> Result<(Context, Swap), ErrorKind> {
+	if lock.try_lock().is_some() {
+		return Err(ErrorKind::Generic(format!(
+			"get_swap_trade processing unlocked instance {}",
+			swap_id
+		)));
+	}
+
 	let path = TRADE_DEALS_PATH
 		.read()
 		.clone()
@@ -148,7 +184,15 @@ pub fn store_swap_trade(
 	context: &Context,
 	swap: &Swap,
 	enc_key: &SecretKey,
+	lock: &Mutex<()>,
 ) -> Result<(), ErrorKind> {
+	if lock.try_lock().is_some() {
+		return Err(ErrorKind::Generic(format!(
+			"store_swap_trade processing unlocked instance {}",
+			swap.id
+		)));
+	}
+
 	// Writing to bak file. We don't want to loose the data in case of failure. It least the prev step will be left
 	let swap_id = swap.id.to_string();
 	let mut rng = thread_rng();
@@ -228,7 +272,18 @@ pub fn store_swap_trade(
 }
 
 /// Dump the content of swap file
-pub fn dump_swap_trade(swap_id: &str, dec_key: &SecretKey) -> Result<String, ErrorKind> {
+pub fn dump_swap_trade(
+	swap_id: &str,
+	dec_key: &SecretKey,
+	lock: &Mutex<()>,
+) -> Result<String, ErrorKind> {
+	if lock.try_lock().is_some() {
+		return Err(ErrorKind::Generic(format!(
+			"dump_swap_trade processing unlocked instance {}",
+			swap_id
+		)));
+	}
+
 	let path = TRADE_DEALS_PATH
 		.read()
 		.clone()

@@ -260,11 +260,15 @@ impl Swap {
 
 	/// Receive acknowledge for message 1
 	pub fn ack_msg1(&mut self) {
-		self.posted_msg1 = Some(u32::MAX as i64);
+		if self.posted_msg1.is_some() {
+			self.posted_msg1 = Some(u32::MAX as i64);
+		}
 	}
 	/// Receive acknowledge for message 2
 	pub fn ack_msg2(&mut self) {
-		self.posted_msg2 = Some(u32::MAX as i64);
+		if self.posted_msg2.is_some() {
+			self.posted_msg2 = Some(u32::MAX as i64);
+		}
 	}
 
 	// Time management functions

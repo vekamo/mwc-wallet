@@ -73,7 +73,8 @@ pub trait SlateGetter {
 
 /// Swap Message Sender
 pub trait SwapMessageSender {
-	fn send_swap_message(&self, swap_message: &Message) -> Result<(), Error>;
+	/// Send a swap message. Return true is message delivery acknowledge can be set (message was delivered and procesed)
+	fn send_swap_message(&self, swap_message: &Message) -> Result<bool, Error>;
 }
 
 /// select a SlateSender based on method and dest fields from, e.g., SendArgs
