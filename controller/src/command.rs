@@ -29,6 +29,7 @@ use crate::util::secp::key::SecretKey;
 use crate::util::{Mutex, ZeroingString};
 use crate::{controller, display};
 use grin_wallet_impls::adapters::create_swap_message_sender;
+use grin_wallet_libwallet::api_impl::owner_swap;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::swap::message::Message;
 use grin_wallet_libwallet::swap::types::Action;
@@ -1415,6 +1416,7 @@ pub fn swap<L, C, K>(
 	tor_config: Option<TorConfig>,
 	g_args: &GlobalArgs,
 	args: SwapArgs,
+	cli_mode: bool,
 ) -> Result<(), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
@@ -1669,7 +1671,6 @@ where
 			Ok(())
 		}
 		SwapSubcommand::Autoswap => {
-			println!("Yes we start now the auto swap!!!!");
 			controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, _m| {
 				let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(
 					"Not found expected 'swap_id' argument".to_string(),
@@ -1678,6 +1679,9 @@ where
 				let method = args.method.clone().unwrap_or("file".to_string());
 				let config2 = config.clone();
 				let g_args2 = g_args.clone();
+				let wallet_inst2 = wallet_inst.clone();
+				let km2 = km.clone();
+
 				match method.as_str() {
 					"mwcmqs" => {
 						let _ = controller::init_start_mwcmqs_listener(
@@ -1756,58 +1760,76 @@ where
 				// TODO - here we will need to print execution plan. It is not finalized yet,that functionality will be soon implented for 'swap --check'
 
 				// NOTE - we can't process errors with '?' here. We can't exit, we must try forever or until we get a final state
-				loop {
-					// we can't exit by error from the loop.
-					let (curr_state, curr_action, _time_limit, _roadmap) =
-						match api.update_swap_status_action(keychain_mask, swap_id.clone()) {
-							Ok(res) => res,
-							Err(e) => {
-								error!("Error during Swap {}: {}", swap_id, e);
+				let swap_id2 = swap_id.clone();
+				let fee_satoshi = args.fee_satoshi_per_byte.clone();
+				let file_name = args.message_file_name.clone();
+				let refund_address = args.buyer_refund_address.clone();
+
+				let api_thread = thread::Builder::new()
+					.name("wallet-http-listener".to_string())
+					.spawn(move || {
+						loop {
+							// we can't exit by error from the loop.
+							let (curr_state, curr_action, _time_limit, _roadmap) =
+								match owner_swap::update_swap_status_action(
+									wallet_inst2.clone(),
+									km2.as_ref(),
+									&swap_id,
+								) {
+									Ok(res) => res,
+									Err(e) => {
+										error!("Error during Swap {}: {}", swap_id, e);
+										thread::sleep(Duration::from_millis(10000));
+										continue;
+									}
+								};
+
+							// In case of final state - we are exiting.
+							if curr_state.is_final_state() {
+								break;
+							}
+
+							// If actin require execution - it must be executed
+							if curr_action.can_execute() {
+								match owner_swap::swap_process(
+									wallet_inst2.clone(),
+									km2.as_ref(),
+									swap_id2.as_str(),
+									message_sender.clone(),
+									file_name.clone(),
+									refund_address.clone(),
+									fee_satoshi.clone(),
+								) {
+									Ok(_) => (),
+									Err(e) => error!("Error during Swap {}: {}", swap_id, e),
+								}
+								// We can execute in the row. Internal guarantees that we will never do retry to the same action unless it is an error
+								// The sleep here for possible error
 								thread::sleep(Duration::from_millis(10000));
 								continue;
 							}
-						};
 
-					// In case of final state - we are exiting.
-					if curr_state.is_final_state() {
-						break;
-					}
-
-					// If actin require execution - it must be executed
-					if curr_action.can_execute() {
-						match api.swap_process(
-							keychain_mask,
-							&swap_id,
-							message_sender.clone(),
-							args.message_file_name.clone(),
-							args.buyer_refund_address.clone(),
-							args.fee_satoshi_per_byte,
-						) {
-							Ok(_) => (),
-							Err(e) => error!("Error during Swap {}: {}", swap_id, e),
+							// TODO we need to print change and I think better for action, not for state.
+							// TODO  get_swap_status_action now returns _time_limit - it is a timestamp for the action. I will add function to show it.
+							// TODO - we need to print only if action/state was changed. Sometimes Action is None, so the state has meaning.
+							println!("{}, {}", curr_state, curr_action);
+							thread::sleep(Duration::from_millis(60000));
 						}
-						// We can execute in the row. Internal guarantees that we will never do retry to the same action unless it is an error
-						// The sleep here for possible error
-						thread::sleep(Duration::from_millis(10000));
-						continue;
+					});
+
+				if let Ok(t) = api_thread {
+					if !cli_mode {
+						let r = t.join();
+						if let Err(_) = r {
+							error!("Error doing auto swap.");
+							return Err(
+								ErrorKind::LibWallet(format!("Error doing auto swap")).into()
+							);
+						}
 					}
-
-					// TODO we need to print change and I think better for action, not for state.
-					// In this case there will be a nice progress.
-					// TODO  get_swap_status_action now returns _time_limit - it is a timestamp for the action. I will add function to show it.
-					// Action need to be executed before.
-
-					//curr_state = new_state;
-					//curr_action = new_action;
-					// TODO - we need to print only if action/state was changed. Sometimes Action is None, so the state has meaning.
-					println!("{}, {}", curr_state, curr_action);
-
-					thread::sleep(Duration::from_millis(60000));
 				}
-
 				Ok(())
 			})?;
-			//}
 			Ok(())
 		}
 		SwapSubcommand::Dump => {

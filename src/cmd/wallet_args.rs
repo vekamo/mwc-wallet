@@ -1404,6 +1404,7 @@ where
 				Some(tor_config.clone()),
 				&global_wallet_args.clone(),
 				a,
+				cli_mode,
 			)
 		}
 		(cmd, _) => {

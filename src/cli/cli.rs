@@ -163,6 +163,7 @@ where
 							("open", Some(_)) => {
 								let mut wallet_lock = owner_api.wallet_inst.lock();
 								let lc = wallet_lock.lc_provider().unwrap();
+
 								let mask = match lc.open_wallet(
 									None,
 									wallet_args::prompt_password(&global_wallet_args.password),
@@ -179,6 +180,14 @@ where
 										None
 									}
 								};
+
+								let wallet_inst = lc.wallet_inst()?;
+
+								grin_wallet_libwallet::swap::trades::init_swap_trade_backend(
+									wallet_inst.get_data_file_dir(),
+									wallet_config.electrum_node_addr.clone(),
+								);
+
 								if let Some(account) = args.value_of("account") {
 									if wallet_opened {
 										let wallet_inst = lc.wallet_inst()?;
