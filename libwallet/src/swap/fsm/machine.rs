@@ -70,7 +70,10 @@ impl<'a> StateMachine<'a> {
 		context: &Context,
 		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
-		debug!("Processing state {:?} for Input {:?}", swap.state, input);
+		debug!(
+			"Swap {} processing state {:?} for Input {:?}",
+			swap.id, swap.state, input
+		);
 
 		let state = self
 			.state_map
@@ -93,6 +96,7 @@ impl<'a> StateMachine<'a> {
 					)))?;
 			respond = state.process(Input::Check, swap, context, tx_conf)?;
 		}
+		respond.journal = swap.journal.clone();
 
 		debug!("Responding with {:?}", respond);
 		Ok(respond)

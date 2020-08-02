@@ -25,6 +25,7 @@ use crate::util;
 use chrono::prelude::*;
 use chrono::Local;
 use colored::*;
+use grin_wallet_libwallet::swap::swap::SwapJournalRecord;
 use grin_wallet_libwallet::swap::types::SwapTransactionsConfirmations;
 use prettytable;
 
@@ -645,6 +646,8 @@ pub fn swap_trade(
 	time_limit: &Option<i64>,
 	tx_conf: &SwapTransactionsConfirmations,
 	roadmap: &Vec<StateEtaInfo>,
+	journal_records: &Vec<SwapJournalRecord>,
+	show_requied_action: bool,
 ) -> Result<(), Error> {
 	println!("");
 	println!("    Swap ID: {}", swap.id);
@@ -737,7 +740,7 @@ pub fn swap_trade(
 			print!("  required by {}", timestamp_to_local_time(t));
 		}
 		println!("");
-		if eta.active {
+		if eta.active && !action.is_none() {
 			// prining action below...
 			println!("        {}", action_str);
 		}
@@ -745,14 +748,16 @@ pub fn swap_trade(
 
 	println!("");
 	println!("-------- Trade Journal --------");
-	for j in &swap.journal {
+	for j in journal_records {
 		println!("    {:20}{}", timestamp_to_local_time(j.time), j.message);
 	}
 
-	if action.can_execute() {
-		println!("");
-		println!("-------- Required Action --------");
-		println!("    {}", action_str);
+	if show_requied_action {
+		if action.can_execute() {
+			println!("");
+			println!("-------- Required Action --------");
+			println!("    {}", action_str);
+		}
 	}
 	println!("");
 

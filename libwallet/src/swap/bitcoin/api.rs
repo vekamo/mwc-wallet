@@ -588,7 +588,9 @@ where
 				Box::new(seller_swap::SellerPostingLockMwcSlate::new(
 					swap_api.clone(),
 				)),
-				Box::new(seller_swap::SellerWaitingForLockConfirmations::new()),
+				Box::new(seller_swap::SellerWaitingForLockConfirmations::new(
+					kc.clone(),
+				)),
 				Box::new(seller_swap::SellerWaitingForInitRedeemMessage::new(
 					kc.clone(),
 				)),

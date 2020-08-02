@@ -298,7 +298,7 @@ impl State for BuyerWaitingForSellerToLock {
 						Ok(
 							StateProcessRespond::new(StateId::BuyerWaitingForSellerToLock)
 								.action(Action::WaitForMwcConfirmations {
-									name: "Seller to lock funds".to_string(),
+									name: "Seller locking funds".to_string(),
 									required: 1,
 									actual: conf,
 								})
@@ -1036,7 +1036,7 @@ impl State for BuyerWaitForRedeemMwcConfirmations {
 				return Ok(
 					StateProcessRespond::new(StateId::BuyerWaitForRedeemMwcConfirmations).action(
 						Action::WaitForMwcConfirmations {
-							name: "Redeem Transaction".to_string(),
+							name: "Redeeming funds".to_string(),
 							required: swap.mwc_confirmations,
 							actual: conf,
 						},

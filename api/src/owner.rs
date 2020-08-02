@@ -27,7 +27,7 @@ use crate::libwallet::api_impl::owner_updater::{start_updater_log_thread, Status
 use crate::libwallet::api_impl::{owner, owner_swap, owner_updater};
 use crate::libwallet::swap::fsm::state::{StateEtaInfo, StateId, StateProcessRespond};
 use crate::libwallet::swap::types::{Action, SwapTransactionsConfirmations};
-use crate::libwallet::swap::{message::Message, swap::Swap};
+use crate::libwallet::swap::{message::Message, swap::Swap, swap::SwapJournalRecord};
 use crate::libwallet::{
 	AcctPathMapping, Error, ErrorKind, InitTxArgs, IssueInvoiceTxArgs, NodeClient,
 	NodeHeightResult, OutputCommitMapping, PaymentProof, Slate, SwapStartArgs, TxLogEntry,
@@ -2410,13 +2410,22 @@ where
 	}
 
 	/// Refresh and get a status and current expected action for the swap.
-	/// return: <state>, <Action>, <time limit>
+	/// return: <state>, <Action>, <time limit>, <Readmap lines>, <Journal records>
 	/// time limit shows when this action will be expired
 	pub fn update_swap_status_action(
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		swap_id: String,
-	) -> Result<(StateId, Action, Option<i64>, Vec<StateEtaInfo>), Error> {
+	) -> Result<
+		(
+			StateId,
+			Action,
+			Option<i64>,
+			Vec<StateEtaInfo>,
+			Vec<SwapJournalRecord>,
+		),
+		Error,
+	> {
 		owner_swap::update_swap_status_action(self.wallet_inst.clone(), keychain_mask, &swap_id)
 	}
 

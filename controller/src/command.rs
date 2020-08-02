@@ -1392,8 +1392,6 @@ pub struct SwapArgs {
 	pub swap_id: Option<String>,
 	/// Action to process. Value must match expected
 	pub adjust: Option<String>,
-	/// Action to retry. Caller shoudn't abuse that.
-	pub retry: Option<String>,
 	/// Transport that can be used for interaction
 	pub method: Option<String>,
 	/// Destination for messages that needed to be send
@@ -1516,24 +1514,17 @@ where
 					Ok(swap) => {
 						let conf_status =
 							api.get_swap_tx_tstatus(keychain_mask, swap_id.clone())?;
-						let (_status, action, time_limit, roadmap) =
+						let (_status, action, time_limit, roadmap, journal_records) =
 							api.update_swap_status_action(keychain_mask, swap_id.clone())?;
 
-						// Request swap once more because of the history records
-						let updated_swap = match api.swap_get(keychain_mask, swap_id.clone()) {
-							Ok(s) => s,
-							Err(e) => {
-								error!("Unable to retrieve Swap {}: {}", swap_id, e);
-								swap
-							}
-						};
-
 						display::swap_trade(
-							&updated_swap,
+							&swap,
 							&action,
 							&time_limit,
 							&conf_status,
 							&roadmap,
+							&journal_records,
+							true,
 						)?;
 						Ok(())
 					}
@@ -1758,46 +1749,69 @@ where
 					};
 
 				// Calling mostly for params and environment validation. Also it is a nice chance to print the status of the deal that will be started
-				{
+				let (mut prev_state, mut prev_action, mut prev_journal_len) = {
 					let swap = api.swap_get(keychain_mask, swap_id.clone())?;
 					let conf_status = api.get_swap_tx_tstatus(keychain_mask, swap_id.clone())?;
-					let (_status, action, time_limit, roadmap) =
+					let (state, action, time_limit, roadmap, journal_records) =
 						api.update_swap_status_action(keychain_mask, swap_id.clone())?;
 
-					display::swap_trade(&swap, &action, &time_limit, &conf_status, &roadmap)?;
-				}
+					display::swap_trade(
+						&swap,
+						&action,
+						&time_limit,
+						&conf_status,
+						&roadmap,
+						&journal_records,
+						true,
+					)?;
+					(state, action, journal_records.len())
+				};
 
 				// NOTE - we can't process errors with '?' here. We can't exit, we must try forever or until we get a final state
 				let swap_id2 = swap_id.clone();
 				let fee_satoshi = args.fee_satoshi_per_byte.clone();
 				let file_name = args.message_file_name.clone();
 				let refund_address = args.buyer_refund_address.clone();
+				let swap_report_prefix = if cli_mode {
+					format!("Swap Trade {}: ", swap_id)
+				} else {
+					"".to_string()
+				};
+
+				debug!("Starting autoswap thread for swap id {}", swap_id);
 
 				let api_thread = thread::Builder::new()
 					.name("wallet-http-listener".to_string())
 					.spawn(move || {
 						loop {
 							// we can't exit by error from the loop.
-							let (curr_state, curr_action, _time_limit, _roadmap) =
-								match owner_swap::update_swap_status_action(
-									wallet_inst2.clone(),
-									km2.as_ref(),
-									&swap_id,
-								) {
-									Ok(res) => res,
-									Err(e) => {
-										error!("Error during Swap {}: {}", swap_id, e);
-										thread::sleep(Duration::from_millis(10000));
-										continue;
-									}
-								};
+							let (
+								mut curr_state,
+								mut curr_action,
+								_time_limit,
+								_roadmap,
+								mut journal_records,
+							) = match owner_swap::update_swap_status_action(
+								wallet_inst2.clone(),
+								km2.as_ref(),
+								&swap_id,
+							) {
+								Ok(res) => res,
+								Err(e) => {
+									error!("Error during Swap {}: {}", swap_id, e);
+									thread::sleep(Duration::from_millis(10000));
+									continue;
+								}
+							};
 
 							// In case of final state - we are exiting.
 							if curr_state.is_final_state() {
+								println!("{}Swap trade is finished", swap_report_prefix);
 								break;
 							}
 
 							// If actin require execution - it must be executed
+							let mut was_executed = false;
 							if curr_action.can_execute() {
 								match owner_swap::swap_process(
 									wallet_inst2.clone(),
@@ -1808,20 +1822,63 @@ where
 									refund_address.clone(),
 									fee_satoshi.clone(),
 								) {
-									Ok(_) => (),
+									Ok(res) => {
+										curr_state = res.next_state_id;
+										if let Some(a) = res.action {
+											curr_action = a;
+										}
+										journal_records = res.journal;
+									}
 									Err(e) => error!("Error during Swap {}: {}", swap_id, e),
 								}
 								// We can execute in the row. Internal guarantees that we will never do retry to the same action unless it is an error
 								// The sleep here for possible error
-								thread::sleep(Duration::from_millis(10000));
-								continue;
+								was_executed = true;
+								debug!(
+									"Action {} for swap id {} was excecuted",
+									curr_action, swap_id
+								);
 							}
 
-							// TODO we need to print change and I think better for action, not for state.
-							// TODO  get_swap_status_action now returns _time_limit - it is a timestamp for the action. I will add function to show it.
-							// TODO - we need to print only if action/state was changed. Sometimes Action is None, so the state has meaning.
-							println!("{}, {}", curr_state, curr_action);
-							thread::sleep(Duration::from_millis(60000));
+							if prev_journal_len < journal_records.len() {
+								for i in prev_journal_len..journal_records.len() {
+									println!(
+										"{}{}",
+										swap_report_prefix, journal_records[i].message
+									);
+								}
+								prev_journal_len = journal_records.len();
+							}
+
+							let curr_action_str = if curr_action.is_none() {
+								"".to_string()
+							} else {
+								curr_action.to_string()
+							};
+
+							if curr_state != prev_state {
+								if curr_action_str.len() > 0 {
+									println!("{}{}", swap_report_prefix, curr_action_str);
+								} else {
+									println!(
+										"{}{}. {}",
+										swap_report_prefix, curr_state, curr_action_str
+									);
+								}
+								prev_state = curr_state;
+								prev_action = curr_action;
+							} else if curr_action.to_string() != prev_action.to_string() {
+								if curr_action_str.len() > 0 {
+									println!("{}{}", swap_report_prefix, curr_action);
+								}
+								prev_action = curr_action;
+							}
+
+							if was_executed {
+								thread::sleep(Duration::from_millis(10000));
+							} else {
+								thread::sleep(Duration::from_millis(60000));
+							}
 						}
 					});
 

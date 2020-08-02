@@ -3487,6 +3487,24 @@ mod tests {
 			_ => panic!("Invalid action"),
 		};
 
+		{
+			// BRANCH - checking thet message can be processing during confirmation step. It is fine
+			seller.pushs();
+
+			assert_eq!(
+				seller.swap.state,
+				StateId::SellerWaitingForLockConfirmations
+			);
+			assert_eq!(
+				seller
+					.process(Input::IncomeMessage(message3.clone()))
+					.is_ok(),
+				true
+			);
+
+			seller.pops();
+		}
+
 		let res = seller.process(Input::Check).unwrap();
 		assert_eq!(
 			res.next_state_id,

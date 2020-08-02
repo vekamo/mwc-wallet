@@ -131,7 +131,7 @@ where
 	let mut owner_api = Owner::new(wallet_inst, None, None);
 
 	// start the automatic updater
-	owner_api.start_updater((&keychain_mask).as_ref(), Duration::from_secs(30))?;
+	owner_api.start_updater((&keychain_mask).as_ref(), Duration::from_secs(60))?;
 	let mut wallet_opened = false;
 	loop {
 		match reader.readline(PROMPT) {

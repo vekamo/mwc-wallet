@@ -518,15 +518,17 @@ where
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// State SellerWaitingForLockConfirmations
-pub struct SellerWaitingForLockConfirmations {}
-impl SellerWaitingForLockConfirmations {
+pub struct SellerWaitingForLockConfirmations<K: Keychain> {
+	keychain: Arc<K>,
+}
+impl<K: Keychain> SellerWaitingForLockConfirmations<K> {
 	/// Create a new instance
-	pub fn new() -> Self {
-		Self {}
+	pub fn new(keychain: Arc<K>) -> Self {
+		Self { keychain }
 	}
 }
 
-impl State for SellerWaitingForLockConfirmations {
+impl<K: Keychain> State for SellerWaitingForLockConfirmations<K> {
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerWaitingForLockConfirmations
 	}
@@ -545,7 +547,7 @@ impl State for SellerWaitingForLockConfirmations {
 		&mut self,
 		input: Input,
 		swap: &mut Swap,
-		_context: &Context,
+		context: &Context,
 		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
@@ -627,6 +629,18 @@ impl State for SellerWaitingForLockConfirmations {
 				));
 				Ok(StateProcessRespond::new(
 					StateId::SellerWaitingForInitRedeemMessage,
+				))
+			}
+			Input::IncomeMessage(message) => {
+				// We can accept message durinf the wait. Byers can already get a confirmation and sending a message
+				if swap.adaptor_signature.is_none() {
+					let (_, init_redeem, _) = message.unwrap_init_redeem()?;
+					SellApi::init_redeem(&*self.keychain, swap, context, init_redeem)?;
+				}
+				debug_assert!(swap.adaptor_signature.is_some());
+				swap.add_journal_message("Init Redeem message is accepted".to_string());
+				Ok(StateProcessRespond::new(
+					StateId::SellerSendingInitRedeemMessage,
 				))
 			}
 			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
@@ -725,7 +739,7 @@ impl<K: Keychain> State for SellerWaitingForInitRedeemMessage<K> {
 					SellApi::init_redeem(&*self.keychain, swap, context, init_redeem)?;
 				}
 				debug_assert!(swap.adaptor_signature.is_some());
-				swap.add_journal_message("Accept Init Redeem message".to_string());
+				swap.add_journal_message("Init Redeem message is accepted".to_string());
 				Ok(StateProcessRespond::new(
 					StateId::SellerSendingInitRedeemMessage,
 				))
@@ -977,7 +991,8 @@ where
 				if !swap.redeem_slate.tx.kernels().is_empty() {
 					if check_mwc_redeem(swap, &*self.swap_api.node_client)? {
 						swap.add_journal_message(
-							"Buyer redeem MWC, transaction found on the blockchain".to_string(),
+							"Buyer redeemed MWC, transaction published on the blockchain"
+								.to_string(),
 						);
 						swap.ack_msg2();
 						// Buyer did a redeem, we can continue processing and redeem BTC
@@ -1254,7 +1269,7 @@ where
 				return Ok(
 					StateProcessRespond::new(StateId::SellerWaitingForRedeemConfirmations).action(
 						Action::WaitForSecondaryConfirmations {
-							name: "Redeem Transaction".to_string(),
+							name: "Redeeming funds".to_string(),
 							currency: swap.secondary_currency,
 							required: swap.secondary_confirmations,
 							actual: tx_conf.secondary_redeem_conf.unwrap_or(0),

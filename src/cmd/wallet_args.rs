@@ -979,7 +979,6 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 	let verbose = args.is_present("verbose");
 	let swap_id = args.value_of("swap_id").map(|s| String::from(s));
 	let adjust = args.value_of("adjust").map(|s| String::from(s));
-	let retry = args.value_of("retry").map(|s| String::from(s));
 	let method = args.value_of("method").map(|s| String::from(s));
 	let destination = args.value_of("dest").map(|s| String::from(s));
 	let apisecret = args.value_of("apisecret").map(|s| String::from(s));
@@ -1017,7 +1016,6 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		verbose,
 		swap_id,
 		adjust,
-		retry,
 		method,
 		destination,
 		apisecret,

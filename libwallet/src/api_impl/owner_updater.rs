@@ -71,13 +71,23 @@ pub fn start_updater_log_thread(
 					}
 				}
 				match m {
-					StatusMessage::UpdatingOutputs(_show_progress, s) => debug!("{}", s),
+					StatusMessage::UpdatingOutputs(_show_progress, s) => info!("{}", s),
 					StatusMessage::FullScanWarn(s) => warn!("{}", s),
-					StatusMessage::Scanning(_show_progress, s, m) => {
+					StatusMessage::Scanning(show_progress, s, m) => {
 						info!("{}", s);
-						warn!("Scanning - {}% complete", m);
+						if show_progress {
+							warn!("Scanning - {}% complete", m);
+						} else {
+							info!("Scanning - {}% complete", m);
+						}
 					}
-					StatusMessage::ScanningComplete(_show_progress, s) => warn!("{}", s),
+					StatusMessage::ScanningComplete(show_progress, s) => {
+						if show_progress {
+							warn!("{}", s);
+						} else {
+							info!("{}", s);
+						}
+					}
 					StatusMessage::Warning(s) => warn!("{}", s),
 					StatusMessage::Info(s) => info!("{}", s),
 				}

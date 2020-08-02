@@ -432,6 +432,14 @@ pub enum Action {
 }
 
 impl Action {
+	/// Return if this Action is None
+	pub fn is_none(&self) -> bool {
+		match &self {
+			Action::None => true,
+			_ => false,
+		}
+	}
+
 	/// Return true if this action require execution (swap --process) from the user.
 	pub fn can_execute(&self) -> bool {
 		match &self {
@@ -507,11 +515,11 @@ impl fmt::Display for Action {
 			Action::SellerWaitingForOfferMessage => "Waiting for Accept Offer message".to_string(),
 			Action::BuyerSendInitRedeemMessage(_) => "Sending Init Redeem Message".to_string(),
 			Action::SellerWaitingForInitRedeemMessage => {
-				"Waitong for Init Redeem Message".to_string()
+				"Waiting for Init Redeem Message".to_string()
 			}
 			Action::SellerSendRedeemMessage(_) => "Sending Finalize Redeem Message".to_string(),
 			Action::BuyerWaitingForRedeemMessage => {
-				"Waiting for Finalize Redeem Message".to_string()
+				"Waiting for Redeem response message from Seller".to_string()
 			}
 			Action::SellerPublishMwcLockTx => "Posting MWC lock transaction".to_string(),
 			Action::SellerPublishTxSecondaryRedeem(currency) => {
@@ -545,9 +553,9 @@ impl fmt::Display for Action {
 				name, required, currency, actual
 			),
 			Action::SellerWaitForBuyerRedeemPublish {
-				mwc_tip: _,
-				lock_height: _,
-			} => "Waiting for Buyer to redeem MWC".to_string(),
+				mwc_tip,
+				lock_height,
+			} => format!("Waiting for Buyer to redeem MWC. If get no response, will post refund slate in {} minutes",(lock_height.saturating_sub(*mwc_tip))),
 			Action::WaitForMwcRefundUnlock {
 				mwc_tip,
 				lock_height,
@@ -569,7 +577,7 @@ impl fmt::Display for Action {
 				let hours = time_left_sec / 3600;
 				let minutes = (time_left_sec % 3600) / 60;
 				let seconds = time_left_sec % 60;
-				format!("Waiting until will be able to refund {}. Waitong time left: {} hours {} minutes and {} seconds", currency, hours, minutes, seconds)
+				format!("Waiting until will be able to refund {}. Waiting time left: {} hours {} minutes and {} seconds", currency, hours, minutes, seconds)
 			}
 		};
 		write!(f, "{}", disp)

@@ -22,7 +22,7 @@ use crate::internal::selection;
 use crate::swap::error::ErrorKind;
 use crate::swap::fsm::state::{Input, StateEtaInfo, StateId, StateProcessRespond};
 use crate::swap::message::{Message, SecondaryUpdate, Update};
-use crate::swap::swap::Swap;
+use crate::swap::swap::{Swap, SwapJournalRecord};
 use crate::swap::types::{Action, Currency, SwapTransactionsConfirmations};
 use crate::swap::{trades, BuyApi, Context, SwapApi};
 use crate::types::NodeClient;
@@ -280,7 +280,16 @@ pub fn update_swap_status_action<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	swap_id: &str,
-) -> Result<(StateId, Action, Option<i64>, Vec<StateEtaInfo>), Error>
+) -> Result<
+	(
+		StateId,
+		Action,
+		Option<i64>,
+		Vec<StateEtaInfo>,
+		Vec<SwapJournalRecord>,
+	),
+	Error,
+>
 where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
@@ -309,6 +318,7 @@ where
 		resp.action.unwrap_or(Action::None),
 		resp.time_limit,
 		eta,
+		swap.journal,
 	))
 }
 
@@ -468,30 +478,10 @@ where
 
 			process_respond = fsm.process(Input::execute(), &mut swap, &context, &tx_conf)?;
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
-			println!(
-				"Lock MWC slate is published at transaction {}",
-				swap.lock_slate.id
-			);
 		}
 		Action::SellerPublishTxSecondaryRedeem(_currency) => {
 			process_respond = fsm.process(Input::execute(), &mut swap, &context, &tx_conf)?;
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
-			println!(
-				"{} redeem transaction is published",
-				swap.secondary_currency
-			);
-		}
-		Action::DepositSecondary {
-			currency,
-			amount,
-			address,
-		} => {
-			println!(
-				"Please deposit {} {} to {}",
-				currency.amount_to_hr_string(amount, true),
-				currency,
-				address
-			);
 		}
 		Action::BuyerPublishMwcRedeemTx => {
 			process_respond = fsm.process(Input::execute(), &mut swap, &context, &tx_conf)?;
@@ -515,10 +505,6 @@ where
 					&buyer_context.redeem,
 				)?;
 			}
-			println!(
-				"Redeem MWC slate is published at transaction {}",
-				swap.redeem_slate.id
-			);
 		}
 		Action::SellerPublishMwcRefundTx => {
 			process_respond = fsm.process(Input::execute(), &mut swap, &context, &tx_conf)?;
@@ -644,6 +630,8 @@ where
 	let message = Message::from_json(swap_message)?;
 	let swap_id = message.id.to_string();
 
+	debug!("Get swap message {:?}", message);
+
 	wallet_lock!(wallet_inst, w);
 	let node_client = w.w2n_client().clone();
 	let keychain = w.keychain(keychain_mask)?;
@@ -709,7 +697,6 @@ where
 		}
 		Update::MessageAcknowledge(msg_id) => {
 			let (context, mut swap) = trades::get_swap_trade(swap_id.as_str(), &skey, &*lock)?;
-
 			match msg_id {
 				1 => {
 					if swap.is_seller() {
@@ -746,7 +733,7 @@ where
 
 			fsm.process(Input::IncomeMessage(message), &mut swap, &context, &tx_conf)?;
 			trades::store_swap_trade(&context, &swap, &skey, &*lock)?;
-			println!("Processed message for SwapId {}", swap.id);
+			println!("Processed income message for SwapId {}", swap.id);
 
 			Some(Message::new(
 				swap.id.clone(),

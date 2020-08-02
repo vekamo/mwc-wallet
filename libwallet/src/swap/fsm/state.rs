@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::swap::message::Message;
+use crate::swap::swap::SwapJournalRecord;
 use crate::swap::types::{Action, SwapTransactionsConfirmations};
 use crate::swap::{Context, ErrorKind, Swap};
 use std::fmt;
@@ -271,6 +272,8 @@ pub struct StateProcessRespond {
 	pub action: Option<Action>,
 	/// time limit (seconds timestamp) for this action
 	pub time_limit: Option<i64>,
+	/// New swap journal records
+	pub journal: Vec<SwapJournalRecord>,
 }
 
 impl StateProcessRespond {
@@ -280,6 +283,7 @@ impl StateProcessRespond {
 			next_state_id,
 			action: None,
 			time_limit: None,
+			journal: Vec::new(),
 		}
 	}
 
@@ -289,6 +293,7 @@ impl StateProcessRespond {
 			next_state_id: self.next_state_id,
 			action: Some(action),
 			time_limit: self.time_limit,
+			journal: self.journal,
 		}
 	}
 
@@ -298,6 +303,7 @@ impl StateProcessRespond {
 			next_state_id: self.next_state_id,
 			action: self.action,
 			time_limit: Some(tl),
+			journal: self.journal,
 		}
 	}
 }

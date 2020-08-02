@@ -538,12 +538,13 @@ impl MWCMQSBroker {
 			&str::replace(&to.get_stripped(), "@", "%40")
 		);
 		let response = client.post(&url).form(&params).send();
-		println!("post take url = {}", url);
 
-		println!("error = {:?}", response);
 		if !response.is_ok() {
-			println!("error = {:?}", response);
-			return Err(ErrorKind::MqsInvalidRespose("mwcmqs connection error".to_string()).into());
+			return Err(ErrorKind::MqsInvalidRespose(format!(
+				"mwcmqs connection error, {:?}",
+				response
+			))
+			.into());
 		} else {
 			let mut response = response.unwrap();
 			let mut resp_str = "".to_string();
