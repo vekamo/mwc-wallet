@@ -170,9 +170,9 @@ pub struct OfferUpdate {
 	pub refund_slate: VersionedSlate,
 	/// Needed info to build step 1 on redeem state (that saving some interaction)
 	pub redeem_participant: TxParticipant,
-	/// Requred confirmations for MWC Locking
+	/// Required confirmations for MWC Locking
 	pub mwc_confirmations: u64,
-	/// Requred confirmations for BTC Locking
+	/// Required confirmations for BTC Locking
 	pub secondary_confirmations: u64,
 	/// Time interval for message exchange session.
 	pub message_exchange_time_sec: u64,

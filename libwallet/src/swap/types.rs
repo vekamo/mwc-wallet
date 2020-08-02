@@ -221,13 +221,13 @@ pub struct Context {
 	/// Multisig nonce. Both Buyer and Seller using it
 	#[serde(serialize_with = "seckey_to_hex", deserialize_with = "seckey_from_hex")]
 	pub multisig_nonce: SecretKey,
-	/// Nonce that is requred to build a lock slate. Both sides need it.
+	/// Nonce that is Required to build a lock slate. Both sides need it.
 	#[serde(serialize_with = "seckey_to_hex", deserialize_with = "seckey_from_hex")]
 	pub lock_nonce: SecretKey,
-	/// Nonce that is requred to build a refund slate. Both sides need it.
+	/// Nonce that is Required to build a refund slate. Both sides need it.
 	#[serde(serialize_with = "seckey_to_hex", deserialize_with = "seckey_from_hex")]
 	pub refund_nonce: SecretKey,
-	/// Nonce that is requred to build a redeem slate. Both sides need it.
+	/// Nonce that is Required to build a redeem slate. Both sides need it.
 	#[serde(serialize_with = "seckey_to_hex", deserialize_with = "seckey_from_hex")]
 	pub redeem_nonce: SecretKey,
 	/// Specific Buyer or Seller context
@@ -547,7 +547,7 @@ impl fmt::Display for Action {
 			Action::SellerWaitForBuyerRedeemPublish {
 				mwc_tip: _,
 				lock_height: _,
-			} => "Waiting for Buyer to redeem MWC.".to_string(),
+			} => "Waiting for Buyer to redeem MWC".to_string(),
 			Action::WaitForMwcRefundUnlock {
 				mwc_tip,
 				lock_height,

@@ -508,7 +508,7 @@ subcommands:
             possible_values:
               - buyer
               - seller
-            default_value: buyer
+            default_value: seller
         - mwc_confirmations:
             help: Number of confirmations required for MWC coins
             long: mwc_lock_confirmations

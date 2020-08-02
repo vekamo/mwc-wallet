@@ -344,5 +344,27 @@
   "posted_msg2": 1567632152,
   "posted_lock": null,
   "posted_redeem": null,
-  "posted_refund": null
+  "posted_refund": null,
+  "journal": [
+    {
+      "time": 1567632152,
+      "message": "Get a Swap offer"
+    },
+    {
+      "time": 1567632152,
+      "message": "Response to offer message was sent back"
+    },
+    {
+      "time": 1567632152,
+      "message": "Funds are posted to Lock account"
+    },
+    {
+      "time": 1567632152,
+      "message": "MWC and BTC funds are Locked"
+    },
+    {
+      "time": 1567632152,
+      "message": "Sent init redeem message"
+    }
+  ]
 }

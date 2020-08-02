@@ -254,7 +254,9 @@ impl BuyApi {
 			posted_lock: None,
 			posted_redeem: None,
 			posted_refund: None,
+			journal: Vec::new(),
 		};
+		swap.add_journal_message("Get a Swap offer".to_string());
 
 		// Minimum mwc heights
 		let expected_lock_height = height + (swap.get_time_mwc_lock() - now_ts) as u64 / 60;

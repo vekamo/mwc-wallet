@@ -24,6 +24,16 @@ pub const POST_SECONDARY_RETRY_PERIOD: i64 = 300;
 /// Retry period for the messages, including files
 pub const SEND_MESSAGE_RETRY_PERIOD: i64 = 300;
 
+/// Journal messages that are repeatable for State
+pub const JOURNAL_CANCELLED_BY_USER: &str = "Cancelled by user";
+/// Journal messages that are repeatable for State
+pub const JOURNAL_CANCELLED_BY_TIMEOUT: &str = "Cancelled as expired";
+/// Journal messages that are repeatable for State
+pub const JOURNAL_CANCELLED_BYER_LOCK_TOO_MUCH_FUNDS: &str =
+	"Cancelled because buyer posted too much funds to the Lock account";
+/// Journal messages that are repeatable for State
+pub const JOURNAL_NOT_LOCKED: &str = "Funds are not locking any more, switching back to waiting";
+
 /// StateId of the swap finite state machine.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StateId {

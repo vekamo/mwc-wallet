@@ -357,5 +357,23 @@
   "posted_msg2": null,
   "posted_lock": 1567632152,
   "posted_redeem": null,
-  "posted_refund": null
+  "posted_refund": null,
+  "journal": [
+    {
+      "time": 1567632152,
+      "message": "Swap offer is created"
+    },
+    {
+      "time": 1567632152,
+      "message": "Offer message was sent"
+    },
+    {
+      "time": 1567632152,
+      "message": "Processed Offer Accept message"
+    },
+    {
+      "time": 1567632152,
+      "message": "MWC lock slate is posted"
+    }
+  ]
 }

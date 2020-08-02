@@ -32,7 +32,6 @@ use grin_wallet_impls::adapters::create_swap_message_sender;
 use grin_wallet_libwallet::api_impl::owner_swap;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::swap::message::Message;
-use grin_wallet_libwallet::swap::types::Action;
 use grin_wallet_libwallet::{Slate, TxLogEntry};
 use serde_json as json;
 use std::fs::File;
@@ -1291,9 +1290,9 @@ pub struct SwapStartArgs {
 	pub seller_lock_first: bool,
 	/// Minimum confirmation for outputs. Default is 10
 	pub minimum_confirmations: Option<u64>,
-	/// Requred confirmations for MWC Locking
+	/// Required confirmations for MWC Locking
 	pub mwc_confirmations: u64,
-	/// Requred confirmations for BTC Locking
+	/// Required confirmations for BTC Locking
 	pub secondary_confirmations: u64,
 	/// Time interval for message exchange session.
 	pub message_exchange_time_sec: u64,
@@ -1516,11 +1515,25 @@ where
 					Ok(swap) => {
 						let conf_status =
 							api.get_swap_tx_tstatus(keychain_mask, swap_id.clone())?;
-						let (status, action, time_limit, roadmap) =
+						let (_status, action, time_limit, roadmap) =
 							api.update_swap_status_action(keychain_mask, swap_id.clone())?;
 
-						display::swap_trade(&swap, &status, &action, &time_limit, &conf_status)?;
-						display::swap_roadmap(&swap_id, &roadmap)?;
+						// Request swap once more because of the history records
+						let updated_swap = match api.swap_get(keychain_mask, swap_id.clone()) {
+							Ok(s) => s,
+							Err(e) => {
+								error!("Unable to retrieve Swap {}: {}", swap_id, e);
+								swap
+							}
+						};
+
+						display::swap_trade(
+							&updated_swap,
+							&action,
+							&time_limit,
+							&conf_status,
+							&roadmap,
+						)?;
 						Ok(())
 					}
 					Err(e) => {
@@ -1649,15 +1662,7 @@ where
 				);
 
 				match result {
-					Ok(res) => {
-						// TODO del me before relase
-						println!(
-							"AFTER::::state = {}, action = {}",
-							res.next_state_id,
-							res.action.unwrap_or(Action::None)
-						);
-						Ok(())
-					}
+					Ok(_) => Ok(()),
 					Err(e) => {
 						error!("Unable to process Swap {}: {}", swap_id, e);
 						Err(ErrorKind::LibWallet(format!(
@@ -1751,13 +1756,15 @@ where
 						Ok(ack)
 					};
 
-				// Calling mostly for params and environment validation. From here we can exit by error
-				// From the loop - we can't
-				let (_, _, _, roadmap) =
-					api.update_swap_status_action(keychain_mask, swap_id.clone())?;
-				display::swap_roadmap(&swap_id, &roadmap)?;
+				// Calling mostly for params and environment validation. Also it is a nice chance to print the status of the deal that will be started
+				{
+					let swap = api.swap_get(keychain_mask, swap_id.clone())?;
+					let conf_status = api.get_swap_tx_tstatus(keychain_mask, swap_id.clone())?;
+					let (_status, action, time_limit, roadmap) =
+						api.update_swap_status_action(keychain_mask, swap_id.clone())?;
 
-				// TODO - here we will need to print execution plan. It is not finalized yet,that functionality will be soon implented for 'swap --check'
+					display::swap_trade(&swap, &action, &time_limit, &conf_status, &roadmap)?;
+				}
 
 				// NOTE - we can't process errors with '?' here. We can't exit, we must try forever or until we get a final state
 				let swap_id2 = swap_id.clone();

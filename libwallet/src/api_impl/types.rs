@@ -333,9 +333,9 @@ pub struct SwapStartArgs {
 	pub seller_lock_first: bool,
 	/// Minimum confirmation number for the inputs to spend
 	pub minimum_confirmations: Option<u64>,
-	/// Requred confirmations for MWC Locking
+	/// Required confirmations for MWC Locking
 	pub mwc_confirmations: u64,
-	/// Requred confirmations for BTC Locking
+	/// Required confirmations for BTC Locking
 	pub secondary_confirmations: u64,
 	/// Time interval for message exchange session.
 	pub message_exchange_time_sec: u64,

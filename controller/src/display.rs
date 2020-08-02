@@ -25,7 +25,6 @@ use crate::util;
 use chrono::prelude::*;
 use chrono::Local;
 use colored::*;
-use grin_wallet_libwallet::swap::fsm::state::StateId;
 use grin_wallet_libwallet::swap::types::SwapTransactionsConfirmations;
 use prettytable;
 
@@ -642,46 +641,65 @@ pub fn swap_trades(trades: Vec<(String, String)>) {
 /// Display list of wallet accounts in a pretty way
 pub fn swap_trade(
 	swap: &swap::Swap,
-	state: &StateId,
 	action: &Action,
 	time_limit: &Option<i64>,
 	tx_conf: &SwapTransactionsConfirmations,
+	roadmap: &Vec<StateEtaInfo>,
 ) -> Result<(), Error> {
-	println!("Swap ID: {}", swap.id);
+	println!("");
+	println!("    Swap ID: {}", swap.id);
+	match swap.role.clone() {
+		Role::Seller(btc_address, _) => {
+			println!(
+				"    Selling {} MWC for {} {}. {} redeem address: {}",
+				core::amount_to_hr_string(swap.primary_amount, true),
+				swap.secondary_currency
+					.amount_to_hr_string(swap.secondary_amount, true),
+				swap.secondary_currency,
+				swap.secondary_currency,
+				btc_address
+			);
+		}
+		Role::Buyer => {
+			println!(
+				"    Buying {} MWC for {} {}",
+				core::amount_to_hr_string(swap.primary_amount, true),
+				swap.secondary_currency
+					.amount_to_hr_string(swap.secondary_amount, true),
+				swap.secondary_currency,
+			);
+		}
+	}
+
 	println!(
-		"MWC amount: {}",
-		core::amount_to_hr_string(swap.primary_amount, true)
+		"    Requied lock confirmations: {} for MWC and {} for {}",
+		swap.mwc_confirmations, swap.secondary_confirmations, swap.secondary_currency
 	);
 	println!(
-		"{} amount: {}",
-		swap.secondary_currency,
-		swap.secondary_currency
-			.amount_to_hr_string(swap.secondary_amount, true)
-	);
-	println!("Requied MWC lock confirmations: {}", swap.mwc_confirmations);
-	println!(
-		"Requied {} lock confirmations: {}",
-		swap.secondary_currency, swap.secondary_confirmations
-	);
-	println!(
-		"Massages exchange time limit: {} minutes",
-		swap.message_exchange_time_sec / 60
-	);
-	println!(
-		"Redeem/Refund time limit: {} minutes",
+		"    Time limits: {} minutes for messages exchange and {} minutes for redeem/refund",
+		swap.message_exchange_time_sec / 60,
 		swap.redeem_time_sec / 60
 	);
+
+	if swap.seller_lock_first {
+		println!("    Locking order: Seller lock MWC first");
+	} else {
+		println!(
+			"    Locking order: Buyer lock {} first",
+			swap.secondary_currency
+		);
+	}
 
 	if tx_conf.mwc_tip < swap.refund_slate.lock_height {
 		let mwc_lock_sec = (swap.refund_slate.lock_height - tx_conf.mwc_tip) * 60;
 		let sel_lock_h = mwc_lock_sec / 3600;
 		let sel_lock_m = (mwc_lock_sec % 3600) / 60;
 		println!(
-			"Seller MWC refund wait time: {} hours, {} minutes at block {}",
-			sel_lock_h, sel_lock_m, swap.refund_slate.lock_height
+			"    MWC funds locked until block {}, expected to be mined in {} hours and {} minutes",
+			swap.refund_slate.lock_height, sel_lock_h, sel_lock_m
 		);
 	} else {
-		println!("Seller refund is active");
+		println!("    MWC Lock expired");
 	}
 
 	let now_ts = Utc::now().timestamp();
@@ -690,146 +708,24 @@ pub fn swap_trade(
 		let buyer_lock_time = btc_lock_time - now_ts;
 		let buy_lock_h = buyer_lock_time / 3600;
 		let buy_lock_m = (buyer_lock_time % 3600) / 60;
-		let naive_lock_datetime = NaiveDateTime::from_timestamp(btc_lock_time as i64, 0);
-		let naive_lock_datetime: DateTime<Utc> = DateTime::from_utc(naive_lock_datetime, Utc);
 		println!(
-			"Buyer {} refund wait time: {} hours, {} minutes at {}",
-			swap.secondary_currency, buy_lock_h, buy_lock_m, naive_lock_datetime
+			"    {} funds locked for {} hours and {} minutes",
+			swap.secondary_currency, buy_lock_h, buy_lock_m
 		);
 	} else {
-		println!(
-			"Buyer locking time for {} is expired",
-			swap.secondary_currency
-		);
+		println!("    {} Lock expired", swap.secondary_currency);
 	}
-
-	let mut print_seller = false;
-	let mut print_buyer = false;
-	match swap.role.clone() {
-		Role::Seller(btc_address, _) => {
-			println!("Role: Seller, redeem address {}", btc_address);
-			print_seller = true;
-		}
-		Role::Buyer => {
-			println!("Role: Buyer");
-			print_buyer = true;
-		}
-	}
-
-	if swap.seller_lock_first {
-		println!("Locking order: Seller lock MWC first");
-	} else {
-		println!(
-			"Locking order: Buyer lock {} first",
-			swap.secondary_currency
-		);
-	}
-
-	// Transactoins info
-	println!("--------------------------------");
-
-	println!("MWC Height:               {}", tx_conf.mwc_tip);
-	println!(
-		"MWC Lock confirmations:   {}",
-		tx_conf
-			.mwc_lock_conf
-			.map(|l| format!("{}", l))
-			.unwrap_or("None".to_string())
-	);
-	println!(
-		"MWC Redeem confirmations: {}",
-		tx_conf
-			.mwc_redeem_conf
-			.map(|l| format!("{}", l))
-			.unwrap_or("None".to_string())
-	);
-	println!(
-		"MWC Refund confirmations: {}",
-		tx_conf
-			.mwc_refund_conf
-			.map(|l| format!("{}", l))
-			.unwrap_or("None".to_string())
-	);
-	println!(
-		"{} Height:               {}",
-		swap.secondary_currency, tx_conf.secondary_tip
-	);
-	println!(
-		"{} Lock confirmations:   {}",
-		swap.secondary_currency,
-		tx_conf
-			.secondary_lock_conf
-			.map(|l| format!("{}", l))
-			.unwrap_or("None".to_string())
-	);
-	if tx_conf.secondary_lock_conf.is_some() {
-		// check the amount...
-		if tx_conf.secondary_lock_amount != swap.secondary_amount {
-			if tx_conf.secondary_lock_amount < swap.secondary_amount {
-				println!(
-					"    WARNING  The buyer need to deposit {} {}",
-					swap.secondary_currency.amount_to_hr_string(
-						swap.secondary_amount - tx_conf.secondary_lock_amount,
-						true
-					),
-					swap.secondary_currency,
-				);
-			} else {
-				let amount_str = swap.secondary_currency.amount_to_hr_string(
-					tx_conf.secondary_lock_amount - swap.secondary_amount,
-					true,
-				);
-				println!("   WARNING  The buyer has deposited more funds than needed ({} {}). The swap must be cancelled in order for the buyer to recover those funds. If the deal proceeds, seller will receive the additional {} {}.",
-							amount_str, swap.secondary_currency, amount_str, swap.secondary_currency);
-			}
-		}
-	}
-	if print_seller {
-		println!(
-			"{} Redeem confirmations: {}",
-			swap.secondary_currency,
-			tx_conf
-				.secondary_redeem_conf
-				.map(|l| format!("{}", l))
-				.unwrap_or("None".to_string())
-		);
-	}
-	if print_buyer {
-		println!(
-			"{} Refund confirmations: {}",
-			swap.secondary_currency,
-			tx_conf
-				.secondary_refund_conf
-				.map(|l| format!("{}", l))
-				.unwrap_or("None".to_string())
-		);
-	}
-
-	// Status info
-	println!("--------------------------------");
-	println!("Started: {}", swap.started);
-	println!("State:   {}", state);
-
-	// Calculate the action deadline time.
 
 	let expired_str = swap::left_from_time_limit(time_limit);
-	if expired_str.is_empty() {
-		println!("Action:  {}", action);
+	let action_str = if expired_str.is_empty() {
+		format!("{}", action)
 	} else {
-		println!("Action:  {}, {}", action, expired_str);
-	}
+		format!("{}, {}", action, expired_str)
+	};
 
-	Ok(())
-}
-
-fn timestamp_to_local_time(timestamp: i64) -> String {
-	let dt = Local.timestamp(timestamp, 0);
-	dt.format("%B %e %H:%M:%S").to_string()
-}
-
-/// Display list of wallet accounts in a pretty way
-pub fn swap_roadmap(swap_id: &str, roadmap: &Vec<StateEtaInfo>) -> Result<(), Error> {
-	println!("------- Swap {} roadmap ---------", swap_id);
+	// Status info
+	println!("");
+	println!("-------- Execution plan --------");
 	for eta in roadmap {
 		let prefix = if eta.active { "--> " } else { "    " };
 		print!("{}{:40}", prefix, eta.name);
@@ -841,6 +737,29 @@ pub fn swap_roadmap(swap_id: &str, roadmap: &Vec<StateEtaInfo>) -> Result<(), Er
 			print!("  required by {}", timestamp_to_local_time(t));
 		}
 		println!("");
+		if eta.active {
+			// prining action below...
+			println!("        {}", action_str);
+		}
 	}
+
+	println!("");
+	println!("-------- Trade Journal --------");
+	for j in &swap.journal {
+		println!("    {:20}{}", timestamp_to_local_time(j.time), j.message);
+	}
+
+	if action.can_execute() {
+		println!("");
+		println!("-------- Required Action --------");
+		println!("    {}", action_str);
+	}
+	println!("");
+
 	Ok(())
+}
+
+fn timestamp_to_local_time(timestamp: i64) -> String {
+	let dt = Local.timestamp(timestamp, 0);
+	dt.format("%B %e %H:%M:%S").to_string()
 }

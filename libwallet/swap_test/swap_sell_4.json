@@ -399,5 +399,35 @@
   "posted_msg2": 1567632152,
   "posted_lock": 1567632152,
   "posted_redeem": null,
-  "posted_refund": null
+  "posted_refund": null,
+  "journal": [
+    {
+      "time": 1567632152,
+      "message": "Swap offer is created"
+    },
+    {
+      "time": 1567632152,
+      "message": "Offer message was sent"
+    },
+    {
+      "time": 1567632152,
+      "message": "Processed Offer Accept message"
+    },
+    {
+      "time": 1567632152,
+      "message": "MWC lock slate is posted"
+    },
+    {
+      "time": 1567632152,
+      "message": "MWC and BTC funds are Locked"
+    },
+    {
+      "time": 1567632152,
+      "message": "Accept Init Redeem message"
+    },
+    {
+      "time": 1567632152,
+      "message": "Send response to Redeem message"
+    }
+  ]
 }

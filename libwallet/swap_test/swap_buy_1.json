@@ -251,5 +251,19 @@
   "posted_msg2": null,
   "posted_lock": null,
   "posted_redeem": null,
-  "posted_refund": null
+  "posted_refund": null,
+  "journal": [
+    {
+      "time": 1567632152,
+      "message": "Get a Swap offer"
+    },
+    {
+      "time": 1567632152,
+      "message": "Response to offer message was sent back"
+    },
+    {
+      "time": 1567632152,
+      "message": "Funds are posted to Lock account"
+    }
+  ]
 }

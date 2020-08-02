@@ -14,6 +14,10 @@
 
 // Sell swap happy path states
 
+use super::state::{
+	JOURNAL_CANCELLED_BYER_LOCK_TOO_MUCH_FUNDS, JOURNAL_CANCELLED_BY_TIMEOUT,
+	JOURNAL_CANCELLED_BY_USER, JOURNAL_NOT_LOCKED,
+};
 use crate::swap::bitcoin::{BtcNodeClient, BtcSwapApi};
 use crate::swap::fsm::state::{Input, State, StateEtaInfo, StateId, StateProcessRespond};
 use crate::swap::message::Message;
@@ -50,12 +54,15 @@ impl State for SellerOfferCreated {
 	fn process(
 		&mut self,
 		input: Input,
-		_swap: &mut Swap,
+		swap: &mut Swap,
 		_context: &Context,
 		_tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::new(StateId::SellerCancelled)),
+			Input::Cancel => {
+				swap.add_journal_message(JOURNAL_CANCELLED_BY_USER.to_string());
+				Ok(StateProcessRespond::new(StateId::SellerCancelled))
+			}
 			Input::Check => Ok(StateProcessRespond::new(StateId::SellerSendingOffer)),
 			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
 				"SellerOfferCreated get {:?}",
@@ -127,7 +134,10 @@ where
 		_tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::new(StateId::SellerCancelled)),
+			Input::Cancel => {
+				swap.add_journal_message(JOURNAL_CANCELLED_BY_USER.to_string());
+				Ok(StateProcessRespond::new(StateId::SellerCancelled))
+			}
 			Input::Check => {
 				if swap.posted_msg1.unwrap_or(0)
 					< swap::get_cur_time() - super::state::SEND_MESSAGE_RETRY_PERIOD
@@ -149,6 +159,7 @@ where
 							))
 							.time_limit(time_limit))
 					} else {
+						swap.add_journal_message(JOURNAL_CANCELLED_BY_TIMEOUT.to_string());
 						Ok(StateProcessRespond::new(StateId::SellerCancelled))
 					}
 				} else {
@@ -168,6 +179,7 @@ where
 				}
 				swap.posted_msg1 = Some(swap::get_cur_time());
 
+				swap.add_journal_message("Offer message was sent".to_string());
 				Ok(StateProcessRespond::new(
 					StateId::SellerWaitingForAcceptanceMessage,
 				))
@@ -221,7 +233,10 @@ impl<K: Keychain> State for SellerWaitingForAcceptanceMessage<K> {
 		_tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::new(StateId::SellerCancelled)),
+			Input::Cancel => {
+				swap.add_journal_message(JOURNAL_CANCELLED_BY_USER.to_string());
+				Ok(StateProcessRespond::new(StateId::SellerCancelled))
+			}
 			Input::Check => {
 				if swap.redeem_public.is_none() {
 					let time_limit = swap.get_time_message_offers();
@@ -239,6 +254,7 @@ impl<K: Keychain> State for SellerWaitingForAcceptanceMessage<K> {
 						)
 					} else {
 						// cancelling
+						swap.add_journal_message(JOURNAL_CANCELLED_BY_TIMEOUT.to_string());
 						Ok(StateProcessRespond::new(StateId::SellerCancelled))
 					}
 				} else {
@@ -256,6 +272,7 @@ impl<K: Keychain> State for SellerWaitingForAcceptanceMessage<K> {
 					let btc_data = swap.secondary_data.unwrap_btc_mut()?;
 					btc_data.accepted_offer(btc_update)?;
 
+					swap.add_journal_message("Processed Offer Accept message".to_string());
 					swap.ack_msg1(); // Just in case duplicate ack, because we get a respond, so the message was delivered
 				}
 				debug_assert!(swap.redeem_public.is_some());
@@ -313,12 +330,16 @@ impl State for SellerWaitingForBuyerLock {
 		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::new(StateId::SellerCancelled)),
+			Input::Cancel => {
+				swap.add_journal_message(JOURNAL_CANCELLED_BY_USER.to_string());
+				Ok(StateProcessRespond::new(StateId::SellerCancelled))
+			}
 			Input::Check => {
 				// Check the deadline for locking
 				let time_limit = swap.get_time_start_lock();
 				if swap::get_cur_time() > time_limit {
 					// cancelling
+					swap.add_journal_message(JOURNAL_CANCELLED_BY_TIMEOUT.to_string());
 					return Ok(StateProcessRespond::new(StateId::SellerCancelled));
 				}
 
@@ -333,6 +354,10 @@ impl State for SellerWaitingForBuyerLock {
 
 					if tx_conf.secondary_lock_amount > swap.secondary_amount {
 						// Posted too much, byer probably will cancel the deal, we are not going to lock the MWCs
+						swap.add_journal_message(format!(
+							"Cancelled because buyer locked too much {} funds",
+							swap.secondary_currency
+						));
 						return Ok(StateProcessRespond::new(StateId::SellerCancelled));
 					}
 
@@ -346,6 +371,7 @@ impl State for SellerWaitingForBuyerLock {
 							})
 							.time_limit(time_limit))
 					} else {
+						swap.add_journal_message("Buyer start locking the funds".to_string());
 						Ok(StateProcessRespond::new(StateId::SellerPostingLockMwcSlate))
 					}
 				}
@@ -427,7 +453,10 @@ where
 	) -> Result<StateProcessRespond, ErrorKind> {
 		let time_limit = swap.get_time_start_lock();
 		match input {
-			Input::Cancel => Self::generate_cancel_respond(swap), // Locking is not done yet, we can cancel easy way
+			Input::Cancel => {
+				swap.add_journal_message(JOURNAL_CANCELLED_BY_USER.to_string());
+				Self::generate_cancel_respond(swap)
+			} // Locking is not done yet, we can cancel easy way
 			Input::Check => {
 				// Check if mwc lock is already done
 				if tx_conf.mwc_lock_conf.is_some() {
@@ -440,6 +469,7 @@ where
 				// Check the deadline for locking
 				if swap::get_cur_time() > time_limit {
 					// cancelling because of timeout
+					swap.add_journal_message(JOURNAL_CANCELLED_BY_TIMEOUT.to_string());
 					return Self::generate_cancel_respond(swap);
 				}
 
@@ -465,6 +495,8 @@ where
 				// Posting the transaction
 				swap::publish_transaction(&*self.swap_api.node_client, &swap.lock_slate.tx, false)?;
 				swap.posted_lock = Some(swap::get_cur_time());
+				swap.add_journal_message("MWC lock slate is posted".to_string());
+
 				Ok(StateProcessRespond::new(
 					StateId::SellerWaitingForLockConfirmations,
 				))
@@ -517,9 +549,12 @@ impl State for SellerWaitingForLockConfirmations {
 		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::new(
-				StateId::SellerWaitingForRefundHeight,
-			)), // Long cancellation path
+			Input::Cancel => {
+				swap.add_journal_message(JOURNAL_CANCELLED_BY_USER.to_string());
+				Ok(StateProcessRespond::new(
+					StateId::SellerWaitingForRefundHeight,
+				)) // Long cancellation path
+			}
 			Input::Check => {
 				let mwc_lock = tx_conf.mwc_lock_conf.unwrap_or(0);
 				let mut secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
@@ -530,6 +565,9 @@ impl State for SellerWaitingForLockConfirmations {
 
 				if tx_conf.secondary_lock_amount > swap.secondary_amount {
 					// Posted too much, bayer probably will cancel the deal, let's be in sync
+					swap.add_journal_message(
+						JOURNAL_CANCELLED_BYER_LOCK_TOO_MUCH_FUNDS.to_string(),
+					);
 					return Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForRefundHeight,
 					));
@@ -543,6 +581,7 @@ impl State for SellerWaitingForLockConfirmations {
 					// Checking for a deadline. Note time_message_redeem is fine, we can borrow time from that operation and still be safe
 					if swap::get_cur_time() > time_limit {
 						// cancelling because of timeout
+						swap.add_journal_message(JOURNAL_CANCELLED_BY_TIMEOUT.to_string());
 						return Ok(StateProcessRespond::new(
 							StateId::SellerWaitingForRefundHeight,
 						));
@@ -582,6 +621,10 @@ impl State for SellerWaitingForLockConfirmations {
 					.time_limit(time_limit));
 				}
 
+				swap.add_journal_message(format!(
+					"MWC and {} funds are Locked",
+					swap.secondary_currency
+				));
 				Ok(StateProcessRespond::new(
 					StateId::SellerWaitingForInitRedeemMessage,
 				))
@@ -635,9 +678,12 @@ impl<K: Keychain> State for SellerWaitingForInitRedeemMessage<K> {
 		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => Ok(StateProcessRespond::new(
-				StateId::SellerWaitingForRefundHeight,
-			)),
+			Input::Cancel => {
+				swap.add_journal_message(JOURNAL_CANCELLED_BY_USER.to_string());
+				Ok(StateProcessRespond::new(
+					StateId::SellerWaitingForRefundHeight,
+				))
+			}
 			Input::Check => {
 				if swap.adaptor_signature.is_some() {
 					// Was already processed. Can go to the next step
@@ -652,6 +698,7 @@ impl<K: Keychain> State for SellerWaitingForInitRedeemMessage<K> {
 				if mwc_lock < swap.mwc_confirmations
 					|| secondary_lock < swap.secondary_confirmations
 				{
+					swap.add_journal_message(JOURNAL_NOT_LOCKED.to_string());
 					return Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForLockConfirmations,
 					));
@@ -666,6 +713,7 @@ impl<K: Keychain> State for SellerWaitingForInitRedeemMessage<K> {
 					)
 				} else {
 					// cancelling
+					swap.add_journal_message(JOURNAL_CANCELLED_BY_TIMEOUT.to_string());
 					Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForRefundHeight,
 					))
@@ -677,6 +725,7 @@ impl<K: Keychain> State for SellerWaitingForInitRedeemMessage<K> {
 					SellApi::init_redeem(&*self.keychain, swap, context, init_redeem)?;
 				}
 				debug_assert!(swap.adaptor_signature.is_some());
+				swap.add_journal_message("Accept Init Redeem message".to_string());
 				Ok(StateProcessRespond::new(
 					StateId::SellerSendingInitRedeemMessage,
 				))
@@ -730,6 +779,7 @@ impl State for SellerSendingInitRedeemMessage {
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
 			Input::Cancel => {
+				swap.add_journal_message(JOURNAL_CANCELLED_BY_USER.to_string());
 				if swap.posted_msg2.is_none() {
 					Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForRefundHeight,
@@ -758,6 +808,7 @@ impl State for SellerSendingInitRedeemMessage {
 					if mwc_lock < swap.mwc_confirmations
 						|| secondary_lock < swap.secondary_confirmations
 					{
+						swap.add_journal_message(JOURNAL_NOT_LOCKED.to_string());
 						return Ok(StateProcessRespond::new(
 							StateId::SellerWaitingForLockConfirmations,
 						));
@@ -780,6 +831,7 @@ impl State for SellerSendingInitRedeemMessage {
 						)
 					} else {
 						if swap.posted_msg2.is_none() {
+							swap.add_journal_message(JOURNAL_CANCELLED_BY_TIMEOUT.to_string());
 							Ok(StateProcessRespond::new(
 								StateId::SellerWaitingForRefundHeight,
 							))
@@ -809,6 +861,7 @@ impl State for SellerSendingInitRedeemMessage {
 					swap.message2 = Some(self.message.clone().unwrap());
 				}
 				swap.posted_msg2 = Some(swap::get_cur_time());
+				swap.add_journal_message("Send response to Redeem message".to_string());
 
 				Ok(StateProcessRespond::new(
 					StateId::SellerWaitingForBuyerToRedeemMwc,
@@ -923,6 +976,9 @@ where
 				// Then we want to do redeem and refund from redeem branch.
 				if !swap.redeem_slate.tx.kernels().is_empty() {
 					if check_mwc_redeem(swap, &*self.swap_api.node_client)? {
+						swap.add_journal_message(
+							"Buyer redeem MWC, transaction found on the blockchain".to_string(),
+						);
 						swap.ack_msg2();
 						// Buyer did a redeem, we can continue processing and redeem BTC
 						return Ok(StateProcessRespond::new(
@@ -935,7 +991,9 @@ where
 				//
 				let (height, _, _) = self.swap_api.node_client.get_chain_tip()?;
 				if height > swap.refund_slate.lock_height {
-					info!("Waiting too long for the Buyer to redeem, time to get refund.");
+					swap.add_journal_message(
+						"Buyer didn't redeem, time to get a refund".to_string(),
+					);
 					// Time to to get my MWC back with a refund.
 					return Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForRefundHeight,
@@ -1096,6 +1154,10 @@ where
 				)?;
 				debug_assert!(swap.secondary_data.unwrap_btc()?.redeem_tx.is_some());
 				swap.posted_redeem = Some(swap::get_cur_time());
+				swap.add_journal_message(format!(
+					"{} redeem transaction is posted",
+					swap.secondary_currency
+				));
 				Ok(StateProcessRespond::new(
 					StateId::SellerWaitingForRedeemConfirmations,
 				))
@@ -1172,6 +1234,10 @@ where
 				if let Some(conf) = tx_conf.secondary_redeem_conf {
 					if conf >= swap.secondary_confirmations {
 						// We are done
+						swap.add_journal_message(format!(
+							"{} redeem transaction reack enough confirmations. Trade is complete",
+							swap.secondary_currency
+						));
 						return Ok(StateProcessRespond::new(StateId::SellerSwapComplete));
 					}
 				} else {
@@ -1368,6 +1434,7 @@ where
 				//
 				let (height, _, _) = self.swap_api.node_client.get_chain_tip()?;
 				if height > swap.refund_slate.lock_height {
+					swap.add_journal_message("MWC funds are unlocked".to_string());
 					return Ok(StateProcessRespond::new(StateId::SellerPostingRefundSlate));
 				}
 
@@ -1464,6 +1531,7 @@ where
 
 				if tx_conf.mwc_redeem_conf.is_some() {
 					// Buyer published the slate, we can to redeem BTCs now
+					swap.add_journal_message("Buyer published redeem transaction".to_string());
 					return Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForBuyerToRedeemMwc,
 					));
@@ -1485,6 +1553,7 @@ where
 					false,
 				)?;
 				swap.posted_refund = Some(swap::get_cur_time());
+				swap.add_journal_message("MWC refund slate is posted".to_string());
 				Ok(StateProcessRespond::new(
 					StateId::SellerWaitingForRefundConfirmations,
 				))
@@ -1539,6 +1608,7 @@ impl State for SellerWaitingForRefundConfirmations {
 				if tx_conf.mwc_refund_conf.is_none() {
 					if tx_conf.mwc_redeem_conf.is_some() {
 						// Found that Buyer redeem, let's switch to that branch
+						swap.add_journal_message("Buyer published redeem transaction".to_string());
 						return Ok(StateProcessRespond::new(
 							StateId::SellerWaitingForBuyerToRedeemMwc,
 						));
@@ -1557,6 +1627,7 @@ impl State for SellerWaitingForRefundConfirmations {
 				let refund_conf = tx_conf.mwc_refund_conf.unwrap_or(0);
 				if refund_conf > swap.mwc_confirmations {
 					// already published.
+					swap.add_journal_message("MWC refund transaction get enough confirmation. Trade is cancelled and refunded".to_string());
 					return Ok(StateProcessRespond::new(StateId::SellerCancelledRefunded));
 				}
 

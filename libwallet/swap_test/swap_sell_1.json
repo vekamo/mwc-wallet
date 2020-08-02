@@ -323,5 +323,15 @@
   "posted_msg2": null,
   "posted_lock": null,
   "posted_redeem": null,
-  "posted_refund": null
+  "posted_refund": null,
+  "journal": [
+    {
+      "time": 1567632152,
+      "message": "Swap offer is created"
+    },
+    {
+      "time": 1567632152,
+      "message": "Offer message was sent"
+    }
+  ]
 }

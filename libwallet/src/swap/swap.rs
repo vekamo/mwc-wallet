@@ -39,6 +39,15 @@ pub struct TxWrapper {
 	pub tx_hex: String,
 }
 
+/// Swap event
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SwapJournalRecord {
+	/// Unix timestamp, when event happens
+	pub time: i64,
+	/// Description with what happens at that time.
+	pub message: String,
+}
+
 /// Primary SWAP state. Both Seller and Buyer are using it.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Swap {
@@ -98,9 +107,9 @@ pub struct Swap {
 	)]
 	/// Multisig signature
 	pub(super) adaptor_signature: Option<Signature>,
-	/// Requred confirmations for MWC Locking
+	/// Required confirmations for MWC Locking
 	pub mwc_confirmations: u64,
-	/// Requred confirmations for BTC Locking
+	/// Required confirmations for BTC Locking
 	pub secondary_confirmations: u64,
 	/// Time interval for message exchange session.
 	pub message_exchange_time_sec: u64,
@@ -120,6 +129,8 @@ pub struct Swap {
 	pub posted_redeem: Option<i64>,
 	/// timestamp when refund transaction was posted
 	pub posted_refund: Option<i64>,
+	/// Event log for this swap trade.
+	pub journal: Vec<SwapJournalRecord>,
 }
 
 impl Swap {
@@ -269,6 +280,14 @@ impl Swap {
 		if self.posted_msg2.is_some() {
 			self.posted_msg2 = Some(u32::MAX as i64);
 		}
+	}
+
+	/// Add a journal message for this swap trade
+	pub fn add_journal_message(&mut self, msg: String) {
+		self.journal.push(SwapJournalRecord {
+			time: get_cur_time(),
+			message: msg,
+		});
 	}
 
 	// Time management functions
