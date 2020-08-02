@@ -423,7 +423,7 @@
     },
     {
       "time": 1567632152,
-      "message": "Accept Init Redeem message"
+      "message": "Init Redeem message is accepted"
     },
     {
       "time": 1567632152,
@@ -431,7 +431,7 @@
     },
     {
       "time": 1567632152,
-      "message": "Buyer redeem MWC, transaction found on the blockchain"
+      "message": "Buyer redeemed MWC, transaction published on the blockchain"
     },
     {
       "time": 1567632152,
