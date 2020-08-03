@@ -22,6 +22,7 @@ use super::types::*;
 use super::{ErrorKind, Keychain, CURRENT_VERSION};
 use crate::swap::fsm::state::StateId;
 use crate::{ParticipantData as TxParticipant, Slate, SlateVersion, VersionedSlate};
+use bitcoin::Address;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use grin_core::libtx::{build, proof, tx_fee};
 use grin_keychain::{BlindSum, BlindingFactor};
@@ -29,6 +30,8 @@ use grin_util::secp::aggsig;
 use grin_util::secp::key::{PublicKey, SecretKey};
 use grin_util::secp::pedersen::{Commitment, RangeProof};
 use rand::thread_rng;
+use std::str::FromStr;
+
 #[cfg(test)]
 use uuid::Uuid;
 
@@ -179,6 +182,17 @@ impl SellApi {
 			));
 		}
 		let change = sum_in - primary_amount - lock_slate.fee;
+
+		match secondary_currency {
+			Currency::Btc => {
+				let _ = Address::from_str(&secondary_redeem_address).map_err(|e| {
+					ErrorKind::Generic(format!(
+						"Unable to parse BTC redeem address {}, {}",
+						secondary_redeem_address, e
+					))
+				})?;
+			}
+		}
 
 		swap.role = Role::Seller(secondary_redeem_address, change);
 

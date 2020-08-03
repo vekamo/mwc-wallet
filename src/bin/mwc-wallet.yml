@@ -537,11 +537,6 @@ subcommands:
             short: l
             long: list
             takes_value: false
-        - verbose:
-            help: Show details for List command and print maximum details for
-            short: v
-            long: verbose
-            takes_value: false
         - remove:
             help: Remove SWAP trade. Note, be sure that you finish or cancel you trade before to delete it.
             short: r

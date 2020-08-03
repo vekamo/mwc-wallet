@@ -976,7 +976,6 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<command::SwapStartArgs
 }
 
 pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseError> {
-	let verbose = args.is_present("verbose");
 	let swap_id = args.value_of("swap_id").map(|s| String::from(s));
 	let adjust = args.value_of("adjust").map(|s| String::from(s));
 	let method = args.value_of("method").map(|s| String::from(s));
@@ -1013,7 +1012,6 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 
 	Ok(command::SwapArgs {
 		subcommand,
-		verbose,
 		swap_id,
 		adjust,
 		method,

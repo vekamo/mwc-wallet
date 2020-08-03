@@ -91,9 +91,7 @@ pub fn create_sender(
 		))
 	};
 
-	let (method, dest) = validate_tor_address(method, dest)?;
-
-	Ok(match method.as_str() {
+	Ok(match method {
 		"http" => Box::new(
 			HttpDataSender::new(&dest, apisecret.clone(), None, false).map_err(|e| invalid(e))?,
 		),
@@ -103,21 +101,24 @@ pub fn create_sender(
 					ErrorKind::WalletComms("Tor Configuration required".to_string()).into(),
 				);
 			}
-			Some(tc) => Box::new(
-				HttpDataSender::with_socks_proxy(
-					&dest,
-					apisecret.clone(),
-					&tc.socks_proxy_addr,
-					Some(tc.send_config_dir),
-					tc.socks_running,
+			Some(tc) => {
+				let dest = validate_tor_address(dest)?;
+				Box::new(
+					HttpDataSender::with_socks_proxy(
+						&dest,
+						apisecret.clone(),
+						&tc.socks_proxy_addr,
+						Some(tc.send_config_dir),
+						tc.socks_running,
+					)
+					.map_err(|e| invalid(e))?,
 				)
-				.map_err(|e| invalid(e))?,
-			),
+			}
 		},
-		"keybase" => Box::new(KeybaseChannel::new(dest)),
-		"mwcmqs" => Box::new(MwcMqsChannel::new(dest)),
+		"keybase" => Box::new(KeybaseChannel::new(dest.to_string())),
+		"mwcmqs" => Box::new(MwcMqsChannel::new(dest.to_string())),
 		_ => {
-			return Err(handle_unsupported_types(method.as_str()));
+			return Err(handle_unsupported_types(method));
 		}
 	})
 }
@@ -136,48 +137,40 @@ pub fn create_swap_message_sender(
 		))
 	};
 
-	let (method, dest) = validate_tor_address(method, dest)?;
-
-	Ok(match method.as_str() {
+	Ok(match method {
 		"tor" => match tor_config {
 			None => {
 				return Err(
 					ErrorKind::WalletComms("Tor Configuration required".to_string()).into(),
 				);
 			}
-			Some(tc) => Box::new(
-				HttpDataSender::with_socks_proxy(
-					&dest,
-					apisecret.clone(),
-					&tc.socks_proxy_addr,
-					Some(tc.send_config_dir),
-					tc.socks_running,
+			Some(tc) => {
+				let dest = validate_tor_address(dest)?;
+				Box::new(
+					HttpDataSender::with_socks_proxy(
+						&dest,
+						apisecret.clone(),
+						&tc.socks_proxy_addr,
+						Some(tc.send_config_dir),
+						tc.socks_running,
+					)
+					.map_err(|e| invalid(e))?,
 				)
-				.map_err(|e| invalid(e))?,
-			),
+			}
 		},
-		"mwcmqs" => Box::new(MwcMqsChannel::new(dest)),
+		"mwcmqs" => Box::new(MwcMqsChannel::new(dest.to_string())),
 		_ => {
-			return Err(handle_unsupported_types(method.as_str()));
+			return Err(handle_unsupported_types(method));
 		}
 	})
 }
 
-/// create sender common
-pub fn validate_tor_address(method: &str, dest: &str) -> Result<(String, String), Error> {
-	let mut method = method;
-
+/// Validate and complete TOR address.
+pub fn validate_tor_address(dest: &str) -> Result<String, Error> {
 	// will test if this is a tor address and fill out
 	// the http://[].onion if missing
-	let dest = match complete_tor_address(dest) {
-		Ok(d) => {
-			method = "tor";
-			d
-		}
-		Err(_) => dest.into(),
-	};
-
-	Ok((method.to_string(), dest))
+	let dest = complete_tor_address(dest)?;
+	Ok(dest)
 }
 
 /// create sender not-supported types

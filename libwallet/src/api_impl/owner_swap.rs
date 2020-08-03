@@ -33,11 +33,11 @@ use crate::{
 };
 use grin_keychain::ExtKeychainPath;
 use grin_util::to_hex;
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
-`use std::collections::HashMap;
 
 fn get_swap_storage_key<K: Keychain>(keychain: &K) -> Result<SecretKey, Error> {
 	Ok(keychain.derive_key(
@@ -69,10 +69,15 @@ where
 		&None,
 		false,
 		false,
-		None)?;
+		None,
+	)?;
 	// Reading all swaps. We need to exclude
 
-	let mut outs : HashMap<String, u64> = outputs.iter().filter(|o| o.output.commit.is_some()).map(|o| (o.output.commit.clone().unwrap(), o.output.value) ).collect();
+	let mut outs: HashMap<String, u64> = outputs
+		.iter()
+		.filter(|o| o.output.commit.is_some())
+		.map(|o| (o.output.commit.clone().unwrap(), o.output.value))
+		.collect();
 
 	wallet_lock!(wallet_inst, w);
 	let node_client = w.w2n_client().clone();
@@ -104,8 +109,9 @@ where
 		}
 	}
 
-	if swap_reserved_amount>0 {
-		let swap_reserved_amount_str = grin_core::core::amount_to_hr_string(swap_reserved_amount, true);
+	if swap_reserved_amount > 0 {
+		let swap_reserved_amount_str =
+			grin_core::core::amount_to_hr_string(swap_reserved_amount, true);
 		info!("Running swaps reserved {} coins", swap_reserved_amount);
 		println!("WARNING. Running Swap trades are reserved {} MWC. If you don't have anough amount for trading, please finish or cancel them.", swap_reserved_amount_str);
 	}
@@ -126,7 +132,7 @@ where
 		false,
 		&parent_key_id,
 		&Some(outputs), // outputs to include into the transaction
-		1,     // Number of resulting outputs. Normally it is 1
+		1,              // Number of resulting outputs. Normally it is 1
 		false,
 		0,
 	)?;

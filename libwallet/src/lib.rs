@@ -64,6 +64,8 @@ mod types;
 extern crate bitcoin as bitcoin_lib;
 extern crate bitcoin_hashes;
 
+pub use bitcoin::Address as BitcoinAddress;
+
 pub use crate::error::{Error, ErrorKind};
 pub use crate::slate::{ParticipantData, ParticipantMessageData, ParticipantMessages, Slate};
 pub use crate::slate_versions::{

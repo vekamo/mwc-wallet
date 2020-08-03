@@ -28,14 +28,18 @@ use crate::libwallet::{
 use crate::util::secp::key::SecretKey;
 use crate::util::{Mutex, ZeroingString};
 use crate::{controller, display};
-use grin_wallet_impls::adapters::create_swap_message_sender;
+use grin_wallet_impls::adapters::{create_swap_message_sender, validate_tor_address};
+use grin_wallet_impls::{Address, MWCMQSAddress};
 use grin_wallet_libwallet::api_impl::owner_swap;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::swap::message::Message;
+use grin_wallet_libwallet::swap::types::Currency;
+use grin_wallet_libwallet::BitcoinAddress;
 use grin_wallet_libwallet::{Slate, TxLogEntry};
 use serde_json as json;
 use std::fs::File;
 use std::io::{Read, Write};
+use std::str::FromStr;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
@@ -1386,8 +1390,6 @@ pub enum SwapSubcommand {
 pub struct SwapArgs {
 	/// What we want to do with a swap
 	pub subcommand: SwapSubcommand,
-	/// Using verbose outptus/printing
-	pub verbose: bool,
 	/// Swap ID that will are working with
 	pub swap_id: Option<String>,
 	/// Action to process. Value must match expected
@@ -1681,6 +1683,25 @@ where
 
 				match method.as_str() {
 					"mwcmqs" => {
+						// Validating destination address
+						match &args.destination {
+							Some(dest) => {
+								let _ = MWCMQSAddress::from_str(dest).map_err(|e| {
+									ErrorKind::GenericError(format!(
+										"Invalid destination address, {}",
+										e
+									))
+								})?;
+							}
+							None => {
+								return Err(ErrorKind::GenericError(
+									"Please define destination address for automated swap"
+										.to_string(),
+								)
+								.into());
+							}
+						}
+						// Startting MQS
 						let _ = controller::init_start_mwcmqs_listener(
 							config2.clone(),
 							wallet_inst.clone(),
@@ -1695,6 +1716,25 @@ where
 						thread::sleep(Duration::from_millis(2000));
 					}
 					"tor" => {
+						// Validating tor address
+						match &args.destination {
+							Some(dest) => {
+								let _ = validate_tor_address(dest).map_err(|e| {
+									ErrorKind::GenericError(format!(
+										"Invalid destination address, {}",
+										e
+									))
+								})?;
+							}
+							None => {
+								return Err(ErrorKind::GenericError(
+									"Please define destination address for automated swap"
+										.to_string(),
+								)
+								.into());
+							}
+						}
+						// Starting tor
 						let tor_config = tor_config.clone();
 						let _api_thread = thread::Builder::new()
 							.name("wallet-http-listener".to_string())
@@ -1713,7 +1753,13 @@ where
 							});
 						thread::sleep(Duration::from_millis(2000));
 					}
-					_ => {}
+					_ => {
+						return Err(ErrorKind::GenericError(
+							"Please define online communication method for automated swap"
+								.to_string(),
+						)
+						.into());
+					}
 				}
 
 				// Creating message delivery transport as a closure
@@ -1754,6 +1800,30 @@ where
 					let conf_status = api.get_swap_tx_tstatus(keychain_mask, swap_id.clone())?;
 					let (state, action, time_limit, roadmap, journal_records) =
 						api.update_swap_status_action(keychain_mask, swap_id.clone())?;
+
+					// Autoswap has to be sure that ALL parameters are defined. There are multiple steps and potentioly all of them can be used.
+					// We are checking them here because the swap object is known, so the second currency is known. And we can validate the data
+					if !swap.is_seller() {
+						match &args.buyer_refund_address {
+							Some(addr) => match swap.secondary_currency {
+								Currency::Btc => {
+									let _ = BitcoinAddress::from_str(&addr).map_err(|e| {
+										ErrorKind::GenericError(format!(
+											"Unable to parse BTC redeem address {}, {}",
+											addr, e
+										))
+									})?;
+								}
+							},
+							None => {
+								return Err(ErrorKind::GenericError(
+									"Please define buyer_refund_address for automated swap"
+										.to_string(),
+								)
+								.into())
+							}
+						}
+					}
 
 					display::swap_trade(
 						&swap,
