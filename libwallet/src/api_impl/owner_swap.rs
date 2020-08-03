@@ -37,6 +37,7 @@ use std::convert::TryFrom;
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
+`use std::collections::HashMap;
 
 fn get_swap_storage_key<K: Keychain>(keychain: &K) -> Result<SecretKey, Error> {
 	Ok(keychain.derive_key(
@@ -60,11 +61,56 @@ where
 	// Starting a swap trade.
 	// This method only initialize and store the swap process. Nothing is done
 
+	// First we need to define outputs that we can use.
+	// Reading all output.
+	let (_, outputs) = super::owner::retrieve_outputs(
+		wallet_inst.clone(),
+		keychain_mask,
+		&None,
+		false,
+		false,
+		None)?;
+	// Reading all swaps. We need to exclude
+
+	let mut outs : HashMap<String, u64> = outputs.iter().filter(|o| o.output.commit.is_some()).map(|o| (o.output.commit.clone().unwrap(), o.output.value) ).collect();
+
 	wallet_lock!(wallet_inst, w);
 	let node_client = w.w2n_client().clone();
 	let keychain = w.keychain(keychain_mask)?;
 	let skey = get_swap_storage_key(&keychain)?;
 	let height = node_client.get_chain_tip()?.0;
+
+	let mut swap_reserved_amount = 0;
+
+	// Searching to swaps that are started, but not locked
+	let swap_id = trades::list_swap_trades()?;
+	for sw_id in &swap_id {
+		let swap_lock = trades::get_swap_lock(sw_id);
+		let _l = swap_lock.lock();
+		let (_, swap) = trades::get_swap_trade(sw_id.as_str(), &skey, &*swap_lock)?;
+
+		if swap.is_seller() && !swap.state.is_final_state() {
+			// Check if funds are not locked yet
+			if swap.posted_lock.is_none() {
+				// So funds are not posted, transaction doesn't exist and outpuyts are not locked.
+				// We have to exclude those outputs
+				for inp in swap.lock_slate.tx.body.inputs {
+					let in_commit = to_hex(inp.commit.0.to_vec());
+					if let Some(amount) = outs.remove(&in_commit) {
+						swap_reserved_amount += amount;
+					}
+				}
+			}
+		}
+	}
+
+	if swap_reserved_amount>0 {
+		let swap_reserved_amount_str = grin_core::core::amount_to_hr_string(swap_reserved_amount, true);
+		info!("Running swaps reserved {} coins", swap_reserved_amount);
+		println!("WARNING. Running Swap trades are reserved {} MWC. If you don't have anough amount for trading, please finish or cancel them.", swap_reserved_amount_str);
+	}
+
+	let outputs: Vec<&str> = outs.keys().map(AsRef::as_ref).collect();
 
 	let secondary_currency = Currency::try_from(params.secondary_currency.as_str())?;
 	let mut swap_api = crate::swap::api::create_instance(&secondary_currency, node_client)?;
@@ -79,7 +125,7 @@ where
 		1,
 		false,
 		&parent_key_id,
-		&None, // outputs to include into the transaction
+		&Some(outputs), // outputs to include into the transaction
 		1,     // Number of resulting outputs. Normally it is 1
 		false,
 		0,
@@ -162,8 +208,8 @@ where
 
 /// Delete Swap trade.
 pub fn swap_delete<'a, L, C, K>(
-	_wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
-	_keychain_mask: Option<&SecretKey>,
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
 	swap_id: &str,
 ) -> Result<(), Error>
 where
@@ -171,9 +217,13 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
+	wallet_lock!(wallet_inst, w);
+	let keychain = w.keychain(keychain_mask)?;
+	let skey = get_swap_storage_key(&keychain)?;
+
 	let swap_lock = trades::get_swap_lock(&swap_id.to_string());
 	let _l = swap_lock.lock();
-	trades::delete_swap_trade(swap_id, &*swap_lock)?;
+	trades::delete_swap_trade(swap_id, &skey, &*swap_lock)?;
 	Ok(())
 }
 

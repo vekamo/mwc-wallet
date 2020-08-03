@@ -88,10 +88,22 @@ pub fn get_swap_lock(swap_id: &String) -> Arc<Mutex<()>> {
 
 /// Remove swap trade record.
 /// Note! You don't want to remove the non compelete deal. You can loose funds because of that.
-pub fn delete_swap_trade(swap_id: &str, lock: &Mutex<()>) -> Result<(), ErrorKind> {
+pub fn delete_swap_trade(
+	swap_id: &str,
+	dec_key: &SecretKey,
+	lock: &Mutex<()>,
+) -> Result<(), ErrorKind> {
 	if lock.try_lock().is_some() {
 		return Err(ErrorKind::Generic(format!(
 			"delete_swap_trade processing unlocked instance {}",
+			swap_id
+		)));
+	}
+
+	let (_context, swap) = get_swap_trade(swap_id, dec_key, lock)?;
+	if !swap.state.is_final_state() {
+		return Err(ErrorKind::Generic(format!(
+			"Swap {} is still in the progress. Please finish or cancel this trade",
 			swap_id
 		)));
 	}

@@ -40,7 +40,7 @@ pub const JOURNAL_NOT_LOCKED: &str = "Funds are not locking any more, switching 
 pub enum StateId {
 	// ---------------- Seller Happy path -----------------
 	/// Seller created Offer (Initial state for Seller)
-	SellerOfferCreated = 1,
+	SellerOfferCreated,
 	/// Seller want to send the offer message
 	SellerSendingOffer,
 	/// Seller waiting for the message to be accepted
