@@ -1663,7 +1663,7 @@ impl State for SellerWaitingForRefundConfirmations {
 		}
 	}
 	fn get_prev_swap_state(&self) -> Option<StateId> {
-		Some(StateId::SellerWaitingForRefundConfirmations)
+		Some(StateId::SellerPostingRefundSlate)
 	}
 	fn get_next_swap_state(&self) -> Option<StateId> {
 		Some(StateId::SellerCancelledRefunded)
