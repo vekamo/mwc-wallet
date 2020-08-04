@@ -461,10 +461,10 @@ subcommands:
             long: file
             takes_value: true
   - swap_create_from_offer:
-      about:  Create Buyer swap trade from the Offer message that is saved into the file.
+      about: Create Buyer swap from the Offer message in the specified file
       args:
         - file:
-            help: Filename where message with trade offer is stored. Please review the offer before accept it.
+            help: Filename where message with trade offer is stored. Please review the offer before accepting it
             short: f
             long: file
             takes_value: true
@@ -477,7 +477,7 @@ subcommands:
             long: mwc_amount
             takes_value: true
         - minimum_confirmations:
-            help: Minimum confirmations number for the outputs to spend
+            help: Minimum number of confirmations required for an output to be spendable
             short: c
             long: min_conf
             default_value: "10"
@@ -491,17 +491,17 @@ subcommands:
               - btc
             default_value: btc
         - secondary_amount:
-            help: BTC amount expected to get before fees paid
+            help: BTC amount excluding fees
             short: b
             long: secondary_amount
             takes_value: true
         - secondary_address:
-            help: resulting BTC address
+            help: BTC withdrawal address
             short: a
             long: secondary_address
             takes_value: true
         - who_lock_first:
-            help: Coins locking order. Another party will wait until transaction will be published
+            help: Coins locking order. Who locks first?
             short: l
             long: who_lock_first
             takes_value: true
@@ -617,7 +617,7 @@ subcommands:
             default_value: file
             takes_value: true
         - dest:
-            help: Send message to the destination using the method above; address is for the buyer's BTC refund
+            help: destination to send swap file to (i.e. onion address or file location)
             short: d
             long: dest
             takes_value: true
