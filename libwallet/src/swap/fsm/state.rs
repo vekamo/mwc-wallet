@@ -179,7 +179,9 @@ impl StateId {
 			StateId::SellerSwapComplete
 			| StateId::BuyerSwapComplete
 			| StateId::SellerCancelled
-			| StateId::BuyerCancelled => true,
+			| StateId::BuyerCancelled
+			| StateId::SellerCancelledRefunded
+			| StateId::BuyerCancelledRefunded => true,
 			_ => false,
 		}
 	}
