@@ -559,29 +559,15 @@ where
 						swap.add_journal_message(JOURNAL_CANCELLED_BY_TIMEOUT.to_string());
 						return Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime));
 					}
-				}
 
-				// Every party waiting first on there own funds. For buyer it is BTC
-				if secondary_lock < swap.secondary_confirmations {
 					return Ok(
 						StateProcessRespond::new(StateId::BuyerWaitingForLockConfirmations)
-							.action(Action::WaitForSecondaryConfirmations {
-								name: format!("{} Locking Account", swap.secondary_currency),
+							.action(Action::WaitForLockConfirmations {
+								mwc_required: swap.mwc_confirmations,
+								mwc_actual: mwc_lock,
 								currency: swap.secondary_currency,
-								required: swap.secondary_confirmations,
-								actual: secondary_lock,
-							})
-							.time_limit(time_limit),
-					);
-				}
-
-				if mwc_lock < swap.mwc_confirmations {
-					return Ok(
-						StateProcessRespond::new(StateId::BuyerWaitingForLockConfirmations)
-							.action(Action::WaitForMwcConfirmations {
-								name: "MWC Lock transaction".to_string(),
-								required: swap.mwc_confirmations,
-								actual: mwc_lock,
+								sec_required: swap.secondary_confirmations,
+								sec_actual: tx_conf.secondary_lock_conf,
 							})
 							.time_limit(time_limit),
 					);

@@ -705,12 +705,13 @@ mod tests {
 		assert_eq!(swap_buy.state, StateId::BuyerWaitingForLockConfirmations);
 
 		match buy_resp.action.unwrap() {
-			Action::WaitForSecondaryConfirmations {
-				name: _,
+			Action::WaitForLockConfirmations {
+				mwc_required: _,
+				mwc_actual: _,
 				currency: _,
-				required: _,
-				actual,
-			} => assert_eq!(actual, 1),
+				sec_required: _,
+				sec_actual: actual,
+			} => assert_eq!(actual, Some(1)),
 			_ => panic!("Invalid action"),
 		};
 		btc_nc.mine_blocks(5);
@@ -724,10 +725,12 @@ mod tests {
 			.unwrap();
 		assert_eq!(swap_buy.state, StateId::BuyerWaitingForLockConfirmations);
 		match buy_resp.action.unwrap() {
-			Action::WaitForMwcConfirmations {
-				name: _,
-				required: _,
-				actual,
+			Action::WaitForLockConfirmations {
+				mwc_required: _,
+				mwc_actual: actual,
+				currency: _,
+				sec_required: _,
+				sec_actual: _,
 			} => assert_eq!(actual, 0),
 			_ => panic!("Invalid action"),
 		};
@@ -813,10 +816,12 @@ mod tests {
 			.unwrap();
 		assert_eq!(swap_sell.state, StateId::SellerWaitingForLockConfirmations);
 		match sell_resp.action.unwrap() {
-			Action::WaitForMwcConfirmations {
-				name: _,
-				required,
-				actual,
+			Action::WaitForLockConfirmations {
+				mwc_required: required,
+				mwc_actual: actual,
+				currency: _,
+				sec_required: _,
+				sec_actual: _,
 			} => {
 				assert_eq!(required, 30);
 				assert_eq!(actual, 0)
@@ -847,10 +852,12 @@ mod tests {
 			.unwrap();
 		assert_eq!(swap_sell.state, StateId::SellerWaitingForLockConfirmations);
 		match sell_resp.action.unwrap() {
-			Action::WaitForMwcConfirmations {
-				name: _,
-				required,
-				actual,
+			Action::WaitForLockConfirmations {
+				mwc_required: required,
+				mwc_actual: actual,
+				currency: _,
+				sec_required: _,
+				sec_actual: _,
 			} => {
 				assert_eq!(required, 30);
 				assert_eq!(actual, 10)
@@ -865,10 +872,12 @@ mod tests {
 			.unwrap();
 		assert_eq!(swap_buy.state, StateId::BuyerWaitingForLockConfirmations);
 		match buy_resp.action.unwrap() {
-			Action::WaitForMwcConfirmations {
-				name: _,
-				required,
-				actual,
+			Action::WaitForLockConfirmations {
+				mwc_required: required,
+				mwc_actual: actual,
+				currency: _,
+				sec_required: _,
+				sec_actual: _,
 			} => {
 				assert_eq!(required, 30);
 				assert_eq!(actual, 10)
@@ -892,14 +901,15 @@ mod tests {
 			.unwrap();
 		assert_eq!(swap_sell.state, StateId::SellerWaitingForLockConfirmations);
 		match sell_resp.action.unwrap() {
-			Action::WaitForSecondaryConfirmations {
-				name: _,
+			Action::WaitForLockConfirmations {
+				mwc_required: _,
+				mwc_actual: _,
 				currency: _,
-				required,
-				actual,
+				sec_required: required,
+				sec_actual: actual,
 			} => {
 				assert_eq!(required, 6);
-				assert_eq!(actual, 5)
+				assert_eq!(actual, Some(5))
 			}
 			_ => panic!("Invalid action"),
 		}
@@ -2555,7 +2565,7 @@ mod tests {
 				res.time_limit.clone().unwrap(),
 				lock_second_message_round_timelimit
 			);
-			assert_eq!(res.action.unwrap().get_id_str(), "WaitForMwcConfirmations");
+			assert_eq!(res.action.unwrap().get_id_str(), "WaitForLockConfirmations");
 			// check if record was created
 			let first_post_time = swap::get_cur_time();
 			assert_eq!(seller.swap.posted_lock.clone().unwrap(), first_post_time);
@@ -2917,10 +2927,7 @@ mod tests {
 		let res = buyer.process(Input::Check).unwrap();
 		assert_eq!(buyer.swap.state, StateId::BuyerWaitingForLockConfirmations);
 		assert_eq!(res.time_limit.unwrap(), lock_second_message_round_timelimit);
-		assert_eq!(
-			res.action.unwrap().get_id_str(),
-			"WaitForSecondaryConfirmations"
-		);
+		assert_eq!(res.action.unwrap().get_id_str(), "WaitForLockConfirmations");
 
 		test_responds(
 			&mut buyer,

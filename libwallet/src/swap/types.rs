@@ -396,6 +396,19 @@ pub enum Action {
 		/// Actual number of confirmations
 		actual: u64,
 	},
+	/// Wait for sufficient confirmations. Lock transaction on MWC network
+	WaitForLockConfirmations {
+		/// Required number of confirmations
+		mwc_required: u64,
+		/// Actual number of confirmations
+		mwc_actual: u64,
+		/// Type of secondary currency (BTC)
+		currency: Currency,
+		/// Required number of confirmations for secondary
+		sec_required: u64,
+		/// Actual number of confirmations for secondary. None if secondary not posted
+		sec_actual: Option<u64>,
+	},
 	/// Wait for the MWC redeem tx to be mined
 	SellerWaitForBuyerRedeemPublish {
 		/// Current mwc tip height
@@ -485,6 +498,13 @@ impl Action {
 				required: _,
 				actual: _,
 			} => "WaitForSecondaryConfirmations",
+			Action::WaitForLockConfirmations {
+				mwc_required: _,
+				mwc_actual: _,
+				currency: _,
+				sec_required: _,
+				sec_actual: _,
+			} => "WaitForLockConfirmations",
 			Action::SellerWaitForBuyerRedeemPublish {
 				mwc_tip: _,
 				lock_height: _,
@@ -540,7 +560,7 @@ impl fmt::Display for Action {
 				required,
 				actual,
 			} => format!(
-				"{}, waiting for {} MWC lock confirmations, has {}",
+				"{}, waiting for {} MWC confirmations, has {}",
 				name, required, actual
 			),
 			Action::WaitForSecondaryConfirmations {
@@ -549,9 +569,41 @@ impl fmt::Display for Action {
 				required,
 				actual,
 			} => format!(
-				"{}, waiting for {} {} lock confirmations, has {}",
+				"{}, waiting for {} {} confirmations, has {}",
 				name, required, currency, actual
 			),
+			Action::WaitForLockConfirmations {
+				mwc_required,
+				mwc_actual,
+				currency,
+				sec_required,
+				sec_actual,
+			} => {
+				let mwc_str = if *mwc_actual == 0 {
+					"Waiting for MWC Lock transaction to be confirmed".to_string()
+				}
+				else if mwc_actual >= mwc_required {
+					"MWC funds are locked".to_string()
+				}
+				else {
+					format!("Waiting for {} MWC Lock confirmations, has {}",mwc_required, mwc_actual)
+				};
+
+				let sec_str = if sec_actual.is_none() {
+					format!("Waiting for {} Lock transaction to be posted", currency)
+				}
+				else if sec_actual.unwrap() == 0 {
+					format!("{} Lock transaction is in the memory pool, waiting to be mined", currency)
+				}
+				else if sec_actual.unwrap() >= *sec_required {
+					format!("{} funds are locked", currency)
+				}
+				else {
+					format!("Waiting for {} {} Lock confirmations, has {}", sec_required, currency, sec_actual.unwrap())
+				};
+
+				format!("{}; {}", mwc_str, sec_str)
+			}
 			Action::SellerWaitForBuyerRedeemPublish {
 				mwc_tip,
 				lock_height,

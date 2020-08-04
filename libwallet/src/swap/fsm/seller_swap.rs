@@ -588,6 +588,25 @@ impl<K: Keychain> State for SellerWaitingForLockConfirmations<K> {
 							StateId::SellerWaitingForRefundHeight,
 						));
 					}
+
+					if mwc_lock == 0
+						&& swap.posted_lock.clone().unwrap_or(0)
+							< swap::get_cur_time() - super::state::POST_MWC_RETRY_PERIOD
+					{
+						return Ok(StateProcessRespond::new(StateId::SellerPostingLockMwcSlate));
+					}
+
+					return Ok(StateProcessRespond::new(
+						StateId::SellerWaitingForLockConfirmations,
+					)
+					.action(Action::WaitForLockConfirmations {
+						mwc_required: swap.mwc_confirmations,
+						mwc_actual: mwc_lock,
+						currency: swap.secondary_currency,
+						sec_required: swap.secondary_confirmations,
+						sec_actual: tx_conf.secondary_lock_conf,
+					})
+					.time_limit(time_limit));
 				}
 
 				// Waiting for own funds first. For seller it is MWC
