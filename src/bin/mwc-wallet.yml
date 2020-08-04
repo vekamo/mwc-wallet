@@ -538,7 +538,7 @@ subcommands:
             long: list
             takes_value: false
         - remove:
-            help: Remove SWAP trade. Note: be sure that you finish or cancel your trade before you delete it.
+            help: Remove SWAP trade. Note, be sure that you finish or cancel your trade before you delete it.
             short: r
             long: remove
             takes_value: false
