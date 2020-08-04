@@ -31,7 +31,7 @@ use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
 use rustyline::{CompletionType, Config, Context, EditMode, Editor, Helper, OutputStreamType};
 use std::borrow::Cow::{self, Borrowed, Owned};
-use std::sync::Arc;
+use std::sync::{ Arc, atomic::AtomicBool };
 use std::time::Duration;
 
 const COLORED_PROMPT: &'static str = "\x1b[36mmwc-wallet>\x1b[0m ";
@@ -133,6 +133,7 @@ where
 	// start the automatic updater
 	owner_api.start_updater((&keychain_mask).as_ref(), Duration::from_secs(60))?;
 	let mut wallet_opened = false;
+	let stop_thread = Arc::new(AtomicBool::new(false));
 	loop {
 		match reader.readline(PROMPT) {
 			Ok(command) => {
@@ -214,6 +215,7 @@ where
 							&args,
 							test_mode,
 							true,
+							&stop_thread,
 						) {
 							Ok(_) => {
 								cli_message!("Command '{}' completed", args.subcommand().0);

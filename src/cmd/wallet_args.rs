@@ -43,7 +43,7 @@ use linefeed::terminal::Signal;
 use linefeed::{Interface, ReadResult};
 use rpassword;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{atomic::AtomicBool, Arc};
 
 // define what to do on argument error
 macro_rules! arg_parse {
@@ -989,6 +989,7 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 	let buyer_refund_address = args
 		.value_of("buyer_refund_address")
 		.map(|s| String::from(s));
+	let start_listener = args.is_present("start_listener");
 
 	let subcommand = if args.is_present("list") {
 		command::SwapSubcommand::List
@@ -1004,6 +1005,8 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		command::SwapSubcommand::Adjust
 	} else if args.is_present("autoswap") {
 		command::SwapSubcommand::Autoswap
+	} else if args.is_present("terminate_auto_swap") {
+		command::SwapSubcommand::Terminate
 	} else {
 		return Err(ParseError::ArgumentError(format!(
 			"Please define some action to do"
@@ -1020,6 +1023,7 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		fee_satoshi_per_byte: secondary_fee_per_byte,
 		message_file_name,
 		buyer_refund_address,
+		start_listener,
 	})
 }
 
@@ -1173,6 +1177,7 @@ where
 		),
 		_ => {
 			let mut owner_api = Owner::new(wallet, None, Some(tor_config.clone()));
+			let stop_thread = Arc::new(AtomicBool::new(false));
 			parse_and_execute(
 				&mut owner_api,
 				keychain_mask,
@@ -1183,6 +1188,7 @@ where
 				&wallet_args,
 				test_mode,
 				false,
+				&stop_thread,
 			)
 		}
 	};
@@ -1204,6 +1210,7 @@ pub fn parse_and_execute<L, C, K>(
 	wallet_args: &ArgMatches,
 	test_mode: bool,
 	cli_mode: bool,
+	stop_thread: &Arc<AtomicBool>,
 ) -> Result<(), Error>
 where
 	DefaultWalletImpl<'static, C>: WalletInst<'static, L, C, K>,
@@ -1401,6 +1408,7 @@ where
 				&global_wallet_args.clone(),
 				a,
 				cli_mode,
+				stop_thread,
 			)
 		}
 		(cmd, _) => {

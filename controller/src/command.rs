@@ -38,9 +38,10 @@ use grin_wallet_libwallet::BitcoinAddress;
 use grin_wallet_libwallet::{Slate, TxLogEntry};
 use serde_json as json;
 use std::fs::File;
+use std::io;
 use std::io::{Read, Write};
 use std::str::FromStr;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -1384,6 +1385,7 @@ pub enum SwapSubcommand {
 	Autoswap,
 	Adjust,
 	Dump,
+	Terminate,
 }
 
 /// Arguments for the swap command
@@ -1406,6 +1408,8 @@ pub struct SwapArgs {
 	pub message_file_name: Option<String>,
 	/// Refund address for the buyer
 	pub buyer_refund_address: Option<String>,
+	/// Whether to start listener or not for swap
+	pub start_listener: bool,
 }
 
 pub fn swap<L, C, K>(
@@ -1417,6 +1421,7 @@ pub fn swap<L, C, K>(
 	g_args: &GlobalArgs,
 	args: SwapArgs,
 	cli_mode: bool,
+	stop_thread: &Arc<AtomicBool>,
 ) -> Result<(), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
@@ -1680,85 +1685,91 @@ where
 				let g_args2 = g_args.clone();
 				let wallet_inst2 = wallet_inst.clone();
 				let km2 = km.clone();
+				stop_thread.swap(false, Ordering::Relaxed);
 
-				match method.as_str() {
-					"mwcmqs" => {
-						// Validating destination address
-						match &args.destination {
-							Some(dest) => {
-								let _ = MWCMQSAddress::from_str(dest).map_err(|e| {
-									ErrorKind::GenericError(format!(
-										"Invalid destination address, {}",
-										e
-									))
-								})?;
-							}
-							None => {
-								return Err(ErrorKind::GenericError(
-									"Please define destination address for automated swap"
-										.to_string(),
-								)
-								.into());
-							}
-						}
-						// Startting MQS
-						let _ = controller::init_start_mwcmqs_listener(
-							config2.clone(),
-							wallet_inst.clone(),
-							mqs_config.expect("No MQS config found!").clone(),
-							Arc::new(Mutex::new(km)),
-							false,
-							//None,
-						)
-						.map_err(|e| {
-							ErrorKind::LibWallet(format!("Unable to start mwcmqs listener, {}", e))
-						})?;
-						thread::sleep(Duration::from_millis(2000));
-					}
-					"tor" => {
-						// Validating tor address
-						match &args.destination {
-							Some(dest) => {
-								let _ = validate_tor_address(dest).map_err(|e| {
-									ErrorKind::GenericError(format!(
-										"Invalid destination address, {}",
-										e
-									))
-								})?;
-							}
-							None => {
-								return Err(ErrorKind::GenericError(
-									"Please define destination address for automated swap"
-										.to_string(),
-								)
-								.into());
-							}
-						}
-						// Starting tor
-						let tor_config = tor_config.clone();
-						let _api_thread = thread::Builder::new()
-							.name("wallet-http-listener".to_string())
-							.spawn(move || {
-								let res = controller::foreign_listener(
-									wallet_inst,
-									Arc::new(Mutex::new(km)),
-									&config2.api_listen_addr(),
-									g_args2.tls_conf.clone(),
-									tor_config.unwrap().use_tor_listener,
-									config2.grinbox_address_index(),
-								);
-								if let Err(e) = res {
-									error!("Error starting http listener: {}", e);
+				if args.start_listener {
+					match method.as_str() {
+						"mwcmqs" => {
+							// Validating destination address
+							match &args.destination {
+								Some(dest) => {
+									let _ = MWCMQSAddress::from_str(dest).map_err(|e| {
+										ErrorKind::GenericError(format!(
+											"Invalid destination address, {}",
+											e
+										))
+									})?;
 								}
-							});
-						thread::sleep(Duration::from_millis(2000));
-					}
-					_ => {
-						return Err(ErrorKind::GenericError(
-							"Please define online communication method for automated swap"
-								.to_string(),
-						)
-						.into());
+								None => {
+									return Err(ErrorKind::GenericError(
+										"Please define destination address for automated swap"
+											.to_string(),
+									)
+									.into());
+								}
+							}
+							// Startting MQS
+							let _ = controller::init_start_mwcmqs_listener(
+								config2.clone(),
+								wallet_inst.clone(),
+								mqs_config.expect("No MQS config found!").clone(),
+								Arc::new(Mutex::new(km)),
+								false,
+								//None,
+							)
+							.map_err(|e| {
+								ErrorKind::LibWallet(format!(
+									"Unable to start mwcmqs listener, {}",
+									e
+								))
+							})?;
+							thread::sleep(Duration::from_millis(2000));
+						}
+						"tor" => {
+							// Validating tor address
+							match &args.destination {
+								Some(dest) => {
+									let _ = validate_tor_address(dest).map_err(|e| {
+										ErrorKind::GenericError(format!(
+											"Invalid destination address, {}",
+											e
+										))
+									})?;
+								}
+								None => {
+									return Err(ErrorKind::GenericError(
+										"Please define destination address for automated swap"
+											.to_string(),
+									)
+									.into());
+								}
+							}
+							// Starting tor
+							let tor_config = tor_config.clone();
+							let _api_thread = thread::Builder::new()
+								.name("wallet-http-listener".to_string())
+								.spawn(move || {
+									let res = controller::foreign_listener(
+										wallet_inst,
+										Arc::new(Mutex::new(km)),
+										&config2.api_listen_addr(),
+										g_args2.tls_conf.clone(),
+										tor_config.unwrap().use_tor_listener,
+										config2.grinbox_address_index(),
+									);
+									if let Err(e) = res {
+										error!("Error starting http listener: {}", e);
+									}
+								});
+							thread::sleep(Duration::from_millis(2000));
+						}
+						_ => {
+							return Err(ErrorKind::GenericError(
+								"Please define online communication method for automated swap"
+									.to_string(),
+							)
+							.into());
+						}
 					}
 				}
 
@@ -1837,6 +1848,10 @@ where
 					(state, action, journal_records.len())
 				};
 
+				println!(
+					"Swap started in auto mode.... Status will be displayed as swap progresses."
+				);
+
 				// NOTE - we can't process errors with '?' here. We can't exit, we must try forever or until we get a final state
 				let swap_id2 = swap_id.clone();
 				let fee_satoshi = args.fee_satoshi_per_byte.clone();
@@ -1847,13 +1862,19 @@ where
 				} else {
 					"".to_string()
 				};
+				let stop_thread_clone = stop_thread.clone();
 
 				debug!("Starting autoswap thread for swap id {}", swap_id);
-
 				let api_thread = thread::Builder::new()
-					.name("wallet-http-listener".to_string())
+					.name("wallet-auto-swap".to_string())
 					.spawn(move || {
 						loop {
+							// check if the thread is asked to stop
+							if cli_mode && stop_thread_clone.load(Ordering::Relaxed) {
+								println!("Auto swap thread is now terminated. You can continue with the swap manually by entering individual commands.");
+								break;
+							};
+
 							// we can't exit by error from the loop.
 							let (
 								mut curr_state,
@@ -1965,6 +1986,25 @@ where
 				}
 				Ok(())
 			})?;
+			Ok(())
+		}
+		SwapSubcommand::Terminate => {
+			let mut answer = String::new();
+			let input = io::stdin();
+			println!("This command is going to terminate the ongoing auto-swap threads. You can continue with the swap manually by entering commands step by step after the termination.");
+			println!("Do you want to continue? Please answer Yes/No");
+			input.read_line(&mut answer).map_err(|e| {
+				ErrorKind::LibWallet(format!(
+					"Invalid answer to terminating the auto swap threads, {}",
+					e
+				))
+			})?;
+
+			if answer.trim() == "Yes" {
+				println!("Terminating..... It might take up to one minute for the thread to come to the full stop.");
+				stop_thread.swap(true, Ordering::Relaxed);
+			}
+
 			Ok(())
 		}
 		SwapSubcommand::Dump => {

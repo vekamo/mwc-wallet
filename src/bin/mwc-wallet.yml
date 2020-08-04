@@ -601,6 +601,11 @@ subcommands:
               - BuyerWaitingForRefundConfirmations
               - BuyerCancelledRefunded
               - BuyerCancelled
+        - terminate_auto_swap:
+            help: Stop the ongoing auto swap process
+            short: t
+            long: terminate_auto_swap
+            takes_value: false
         - swap_id:
             help: Id of swap trade. Required for some commands
             short: i
@@ -638,3 +643,9 @@ subcommands:
             help: BTC refund address for the Buyer
             long: buyer_refund_address
             takes_value: true
+        - start_listener:
+            help: Only needed if in CLI mode doing auto swap and the method is TOR or MWCMQS. Please specify false if listener was started in previous auto swap in the same CLI session.
+            long: start_listener
+            takes_value: false
+
+
