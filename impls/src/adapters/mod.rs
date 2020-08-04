@@ -91,6 +91,18 @@ pub fn create_sender(
 		))
 	};
 
+	let method = if method=="http" {
+		// Url might be onion. In this case we can update method to tor
+		if validate_tor_address(dest).is_ok() {
+			"tor"
+		} else {
+			method
+		}
+	}
+	else {
+		method
+	};
+
 	Ok(match method {
 		"http" => Box::new(
 			HttpDataSender::new(&dest, apisecret.clone(), None, false).map_err(|e| invalid(e))?,
