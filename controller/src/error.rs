@@ -101,7 +101,7 @@ pub enum ErrorKind {
 	Mnemonic,
 
 	/// Command line argument error
-	#[fail(display = "{}", _0)]
+	#[fail(display = "Invalid argument: {}", _0)]
 	ArgumentError(String),
 
 	/// Other

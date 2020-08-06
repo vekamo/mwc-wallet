@@ -52,12 +52,23 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::mpsc::Sender;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::thread;
 
 lazy_static! {
 	pub static ref MWC_OWNER_BASIC_REALM: HeaderValue =
 		HeaderValue::from_str("Basic realm=MWC-OwnerAPI").unwrap();
+
+	static ref FOREIGN_API_RUNNING: RwLock<bool> = RwLock::new(false);
+	static ref OWNER_API_RUNNING: RwLock<bool> = RwLock::new(false);
+}
+
+pub fn is_foreign_api_running() -> bool {
+	*FOREIGN_API_RUNNING.read().unwrap()
+}
+
+pub fn is_owner_api_running() -> bool {
+	*OWNER_API_RUNNING.read().unwrap()
 }
 
 // This function has to use libwallet errots because of callback and runs on libwallet side
@@ -600,6 +611,10 @@ pub fn start_mwcmqs_listener<L, C, K>(
 		C: NodeClient + 'static,
 		K: Keychain + 'static,
 {
+	if grin_wallet_impls::adapters::get_mwcmqs_brocker().is_some() {
+		return Err(ErrorKind::GenericError("mwcmqs listener is already running".to_string()).into());
+	}
+
 	// make sure wallet is not locked, if it is try to unlock with no passphrase
 
 	info!(
@@ -707,6 +722,10 @@ pub fn start_keybase_listener<L, C, K>(
 		C: NodeClient + 'static,
 		K: Keychain + 'static,
 {
+	if grin_wallet_impls::adapters::get_keybase_brocker().is_some() {
+		return Err(ErrorKind::GenericError("keybase listener is already running".to_string()).into());
+	}
+
 	// make sure wallet is not locked, if it is try to unlock with no passphrase
 
 	let controller = Controller::new(
@@ -766,6 +785,18 @@ pub fn owner_listener<L, C, K>(
 		C: NodeClient + 'static,
 		K: Keychain + 'static,
 {
+	let mut running_foreign = false;
+	if owner_api_include_foreign.unwrap_or(false) {
+		running_foreign = true;
+	}
+
+	if *OWNER_API_RUNNING.read().unwrap() {
+		return Err( ErrorKind::GenericError("Owner API is already up and running".to_string()).into() );
+	}
+	if running_foreign && *FOREIGN_API_RUNNING.read().unwrap() {
+		return Err( ErrorKind::GenericError("Foreign API is already up and running".to_string()).into() );
+	}
+
 	//I don't know why but it seems the warn message in controller.rs will get printed to console.
 	warn!("owner listener started {}", addr);
 	let mut router = Router::new();
@@ -778,10 +809,6 @@ pub fn owner_listener<L, C, K>(
 			Some("/v2/foreign".into()),
 		));
 		router.add_middleware(basic_auth_middleware);
-	}
-	let mut running_foreign = false;
-	if owner_api_include_foreign.unwrap_or(false) {
-		running_foreign = true;
 	}
 
 	let api_handler_v2 = OwnerAPIHandlerV2::new(wallet.clone(), tor_config.clone());
@@ -822,9 +849,22 @@ pub fn owner_listener<L, C, K>(
 		.start(socket_addr, router, tls_config)
 		.map_err(|e| ErrorKind::GenericError(format!("API thread failed to start, {}", e)))?;
 	warn!("HTTP Owner listener started.");
-	api_thread
+
+	*OWNER_API_RUNNING.write().unwrap() = true;
+	if running_foreign {
+		*FOREIGN_API_RUNNING.write().unwrap() = true;
+	}
+
+	let res = api_thread
 		.join()
-		.map_err(|e| ErrorKind::GenericError(format!("API thread panicked :{:?}", e)).into())
+		.map_err(|e| ErrorKind::GenericError(format!("API thread panicked :{:?}", e)).into());
+
+	*OWNER_API_RUNNING.write().unwrap() = false;
+	if running_foreign {
+		*FOREIGN_API_RUNNING.write().unwrap() = false;
+	}
+
+	res
 }
 
 /// Listener version, providing same API but listening for requests on a
@@ -842,6 +882,10 @@ pub fn foreign_listener<L, C, K>(
 		C: NodeClient + 'static,
 		K: Keychain + 'static,
 {
+	if *FOREIGN_API_RUNNING.read().unwrap() {
+		return Err( ErrorKind::GenericError("Foreign API is already up and running".to_string()).into() );
+	}
+
 	// Check if wallet has been opened first
 	{
 		let mut w_lock = wallet.lock();
@@ -879,10 +923,15 @@ pub fn foreign_listener<L, C, K>(
 		.map_err(|e| ErrorKind::GenericError(format!("API thread failed to start, {}", e)))?;
 
 	warn!("HTTP Foreign listener started.");
+	*FOREIGN_API_RUNNING.write().unwrap() = true;
 
-	api_thread
+	let res = api_thread
 		.join()
-		.map_err(|e| ErrorKind::GenericError(format!("API thread panicked :{:?}", e)).into())
+		.map_err(|e| ErrorKind::GenericError(format!("API thread panicked :{:?}", e)).into());
+
+	*FOREIGN_API_RUNNING.write().unwrap() = false;
+
+	res
 }
 
 /// V2 API Handler/Wrapper for owner functions

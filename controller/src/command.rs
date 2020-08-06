@@ -183,7 +183,7 @@ where
 				config.clone(),
 				wallet_inst,
 				keychain_mask,
-				true,
+				!cli_mode,
 			)
 			.map_err(|e| {
 				error!("Unable to start keybase listener, {}", e);
@@ -197,7 +197,7 @@ where
 				wallet_inst,
 				mqs_config.clone(),
 				keychain_mask,
-				true,
+				!cli_mode,
 			)
 			.map_err(|e| {
 				error!("Unable to start mwcmqs listener, {}", e);
@@ -1680,7 +1680,12 @@ where
 					"Not found expected 'swap_id' argument".to_string(),
 				))?;
 
-				let method = args.method.clone().unwrap_or("file".to_string());
+				let method = args.method.clone().ok_or(ErrorKind::ArgumentError(
+					"Please define '--method' parameter for autoswp".to_string(),
+				))?;
+				let destination = args.destination.clone().ok_or(ErrorKind::ArgumentError(
+					"Please define destination address (--dest) for automated swap".to_string(),
+				))?;
 				let config2 = config.clone();
 				let g_args2 = g_args.clone();
 				let wallet_inst2 = wallet_inst.clone();
@@ -1690,24 +1695,10 @@ where
 				if args.start_listener {
 					match method.as_str() {
 						"mwcmqs" => {
-							// Validating destination address
-							match &args.destination {
-								Some(dest) => {
-									let _ = MWCMQSAddress::from_str(dest).map_err(|e| {
-										ErrorKind::GenericError(format!(
-											"Invalid destination address, {}",
-											e
-										))
-									})?;
-								}
-								None => {
-									return Err(ErrorKind::GenericError(
-										"Please define destination address for automated swap"
-											.to_string(),
-									)
-									.into());
-								}
+							if grin_wallet_impls::adapters::get_mwcmqs_brocker().is_some() {
+								return Err(ErrorKind::GenericError("mwcmqs listener is already running, there is no need to specify '--start_listener' parameter".to_string()).into());
 							}
+
 							// Startting MQS
 							let _ = controller::init_start_mwcmqs_listener(
 								config2.clone(),
@@ -1726,24 +1717,11 @@ where
 							thread::sleep(Duration::from_millis(2000));
 						}
 						"tor" => {
-							// Validating tor address
-							match &args.destination {
-								Some(dest) => {
-									let _ = validate_tor_address(dest).map_err(|e| {
-										ErrorKind::GenericError(format!(
-											"Invalid destination address, {}",
-											e
-										))
-									})?;
-								}
-								None => {
-									return Err(ErrorKind::GenericError(
-										"Please define destination address for automated swap"
-											.to_string(),
-									)
-									.into());
-								}
+							// Checking is foreign API is running. It dont't important if it is tor or http.
+							if controller::is_foreign_api_running() {
+								return Err(ErrorKind::GenericError("tor or http listener is already running, there is no need to specify '--start_listener' parameter".to_string()).into());
 							}
+
 							// Starting tor
 							let tor_config = tor_config.clone();
 							let _api_thread = thread::Builder::new()
@@ -1764,29 +1742,55 @@ where
 							thread::sleep(Duration::from_millis(2000));
 						}
 						_ => {
-							return Err(ErrorKind::GenericError(
-								"Please define online communication method for automated swap"
-									.to_string(),
-							)
+							return Err(ErrorKind::ArgumentError(format!(
+								"Auto Swap doesn't support communication method {}",
+								method
+							))
 							.into());
 						}
 					}
 				}
 
+				// Checking if we are ready to send messages
+				match method.as_str() {
+					"mwcmqs" => {
+						// Validating destination address
+						let _ = MWCMQSAddress::from_str(&destination).map_err(|e| {
+							ErrorKind::ArgumentError(format!("Invalid destination address, {}", e))
+						})?;
+
+						if grin_wallet_impls::adapters::get_mwcmqs_brocker().is_none() {
+							return Err(ErrorKind::GenericError("mqcmqs listener is not running. Please start it with 'listen' command or '--start_listener' argument".to_string()).into());
+						}
+					}
+					"tor" => {
+						// Validating tor address
+						let _ = validate_tor_address(&destination).map_err(|e| {
+							ErrorKind::ArgumentError(format!("Invalid destination address, {}", e))
+						})?;
+
+						if !controller::is_foreign_api_running() {
+							return Err(ErrorKind::GenericError("tor listener is not running. Please start it with 'listen' command or '--start_listener' argument".to_string()).into());
+						}
+					}
+					_ => {
+						return Err(ErrorKind::ArgumentError(format!(
+							"Auto Swap doesn't support communication method {}",
+							method
+						))
+						.into());
+					}
+				}
+
 				// Creating message delivery transport as a closure
-				let destination = args.destination.clone();
 				let apisecret = args.apisecret.clone();
 				let swap_id2 = swap_id.clone();
 				let message_sender =
 					move |swap_message: Message| -> Result<bool, crate::libwallet::Error> {
-						let dest = destination.ok_or(crate::libwallet::ErrorKind::SwapError(
-							"Expected 'destination' argument is not found".to_string(),
-						))?;
-
 						// File is processed, the online send will be handled here
 						let sender = create_swap_message_sender(
 							method.as_str(),
-							dest.as_str(),
+							destination.as_str(),
 							&apisecret,
 							tor_config,
 						)
