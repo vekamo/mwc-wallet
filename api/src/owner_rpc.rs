@@ -387,9 +387,9 @@ pub trait OwnerRpc: Sync + Send {
 			"Err": {
 			  "NotEnoughFunds": {
 				"available": 0,
-				"available_disp": "0.000000000",
+				"available_disp": "0.0",
 				"needed": 209000000,
-				"needed_disp": "0.209000000"
+				"needed_disp": "0.209"
 			  }
 			}
 		  }
