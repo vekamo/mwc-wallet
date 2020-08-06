@@ -255,6 +255,7 @@ impl BuyApi {
 			posted_redeem: None,
 			posted_refund: None,
 			journal: Vec::new(),
+			secondary_fee: None,
 		};
 		swap.add_journal_message("Get a Swap offer".to_string());
 

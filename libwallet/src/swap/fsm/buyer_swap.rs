@@ -18,11 +18,9 @@ use super::state::{
 	JOURNAL_CANCELLED_BYER_LOCK_TOO_MUCH_FUNDS, JOURNAL_CANCELLED_BY_TIMEOUT,
 	JOURNAL_CANCELLED_BY_USER, JOURNAL_NOT_LOCKED,
 };
-use crate::swap::bitcoin::{BtcNodeClient, BtcSwapApi};
 use crate::swap::fsm::state::{Input, State, StateEtaInfo, StateId, StateProcessRespond};
 use crate::swap::message::Message;
 use crate::swap::swap;
-use crate::swap::swap::publish_transaction;
 use crate::swap::types::{Action, SwapTransactionsConfirmations};
 use crate::swap::{BuyApi, Context, ErrorKind, Swap, SwapApi};
 use crate::NodeClient;
@@ -91,25 +89,21 @@ impl State for BuyerOfferCreated {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// State BuyerSendingAcceptOfferMessage
-pub struct BuyerSendingAcceptOfferMessage<'a, C, B, K>
+pub struct BuyerSendingAcceptOfferMessage<'a, K>
 where
-	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 	K: Keychain + 'a,
 {
 	keychain: Arc<K>,
-	swap_api: Arc<BtcSwapApi<'a, C, B>>,
+	swap_api: Arc<Box<dyn SwapApi<K> + 'a>>,
 	message: Option<Message>,
-	phantom: PhantomData<&'a C>,
+	phantom: PhantomData<&'a K>,
 }
-impl<'a, C, B, K> BuyerSendingAcceptOfferMessage<'a, C, B, K>
+impl<'a, K> BuyerSendingAcceptOfferMessage<'a, K>
 where
-	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 	K: Keychain + 'a,
 {
 	/// Create new instance
-	pub fn new(keychain: Arc<K>, swap_api: Arc<BtcSwapApi<'a, C, B>>) -> Self {
+	pub fn new(keychain: Arc<K>, swap_api: Arc<Box<dyn SwapApi<K> + 'a>>) -> Self {
 		Self {
 			keychain,
 			swap_api,
@@ -118,10 +112,8 @@ where
 		}
 	}
 }
-impl<'a, C, B, K> State for BuyerSendingAcceptOfferMessage<'a, C, B, K>
+impl<'a, K> State for BuyerSendingAcceptOfferMessage<'a, K>
 where
-	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 	K: Keychain + 'a,
 {
 	fn get_state_id(&self) -> StateId {
@@ -188,10 +180,7 @@ where
 					))
 				}
 			}
-			Input::Execute {
-				refund_address: _,
-				fee_satoshi_per_byte: _,
-			} => {
+			Input::Execute { refund_address: _ } => {
 				debug_assert!(self.message.is_some()); // Check expected to be called first
 				if swap.message1.is_none() {
 					swap.message1 = Some(self.message.clone().unwrap());
@@ -329,21 +318,19 @@ impl State for BuyerWaitingForSellerToLock {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// State BuyerPostingSecondaryToMultisigAccount
-pub struct BuyerPostingSecondaryToMultisigAccount<'a, C, B>
+pub struct BuyerPostingSecondaryToMultisigAccount<'a, K>
 where
-	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
+	K: Keychain + 'a,
 {
-	swap_api: Arc<BtcSwapApi<'a, C, B>>,
-	phantom: PhantomData<&'a C>,
+	swap_api: Arc<Box<dyn SwapApi<K> + 'a>>,
+	phantom: PhantomData<&'a K>,
 }
-impl<'a, C, B> BuyerPostingSecondaryToMultisigAccount<'a, C, B>
+impl<'a, K> BuyerPostingSecondaryToMultisigAccount<'a, K>
 where
-	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
+	K: Keychain + 'a,
 {
 	/// Create new instance
-	pub fn new(swap_api: Arc<BtcSwapApi<'a, C, B>>) -> Self {
+	pub fn new(swap_api: Arc<Box<dyn SwapApi<K> + 'a>>) -> Self {
 		Self {
 			swap_api,
 			phantom: PhantomData,
@@ -351,10 +338,9 @@ where
 	}
 }
 
-impl<'a, C, B> State for BuyerPostingSecondaryToMultisigAccount<'a, C, B>
+impl<'a, K> State for BuyerPostingSecondaryToMultisigAccount<'a, K>
 where
-	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
+	K: Keychain + 'a,
 {
 	fn get_state_id(&self) -> StateId {
 		StateId::BuyerPostingSecondaryToMultisigAccount
@@ -396,11 +382,9 @@ where
 				}
 
 				// Check if mwc lock is already done
-				let input_script = self.swap_api.script(swap)?;
-
-				let (pending_amount, confirmed_amount, _least_confirmations, _outputs) = self
+				let (pending_amount, confirmed_amount, _least_confirmations) = self
 					.swap_api
-					.btc_balance(swap, &input_script, swap.secondary_confirmations)?;
+					.request_secondary_lock_balance(swap, swap.secondary_confirmations)?;
 
 				let chain_amount = pending_amount + confirmed_amount;
 				let time_limit = swap.get_time_start_lock();
@@ -426,12 +410,7 @@ where
 					.action(Action::DepositSecondary {
 						currency: swap.secondary_currency,
 						amount: swap.secondary_amount - chain_amount,
-						address: format!(
-							"{}",
-							swap.secondary_data
-								.unwrap_btc()?
-								.address(&input_script, swap.network)?
-						),
+						address: format!("{}", self.swap_api.get_secondary_lock_address(swap)?),
 					})
 					.time_limit(time_limit));
 				}
@@ -680,10 +659,7 @@ impl State for BuyerSendingInitRedeemMessage {
 					))
 				}
 			}
-			Input::Execute {
-				refund_address: _,
-				fee_satoshi_per_byte: _,
-			} => {
+			Input::Execute { refund_address: _ } => {
 				debug_assert!(self.message.is_some()); // Check expected to be called first
 				if swap.message2.is_none() {
 					swap.message2 = Some(self.message.clone().unwrap());
@@ -841,33 +817,30 @@ impl<K: Keychain> State for BuyerWaitingForRespondRedeemMessage<K> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// State BuyerRedeemMwc
-pub struct BuyerRedeemMwc<'a, C, B>
+pub struct BuyerRedeemMwc<'a, C>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 {
-	swap_api: Arc<BtcSwapApi<'a, C, B>>,
+	node_client: Arc<C>,
 	phantom: PhantomData<&'a C>,
 }
 
-impl<'a, C, B> BuyerRedeemMwc<'a, C, B>
+impl<'a, C> BuyerRedeemMwc<'a, C>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 {
 	/// Create a new instance
-	pub fn new(swap_api: Arc<BtcSwapApi<'a, C, B>>) -> Self {
+	pub fn new(node_client: Arc<C>) -> Self {
 		Self {
-			swap_api,
+			node_client,
 			phantom: PhantomData,
 		}
 	}
 }
 
-impl<'a, C, B> State for BuyerRedeemMwc<'a, C, B>
+impl<'a, C> State for BuyerRedeemMwc<'a, C>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 {
 	fn get_state_id(&self) -> StateId {
 		StateId::BuyerRedeemMwc
@@ -924,10 +897,7 @@ where
 					.action(Action::BuyerPublishMwcRedeemTx)
 					.time_limit(time_limit))
 			}
-			Input::Execute {
-				refund_address: _,
-				fee_satoshi_per_byte: _,
-			} => {
+			Input::Execute { refund_address: _ } => {
 				if swap::get_cur_time() > time_limit {
 					// too late, exiting
 					return Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime));
@@ -945,7 +915,7 @@ where
 					));
 				}
 
-				publish_transaction(&*self.swap_api.node_client, &swap.redeem_slate.tx, false)?;
+				swap::publish_transaction(&*self.node_client, &swap.redeem_slate.tx, false)?;
 				swap.posted_redeem = Some(swap::get_cur_time());
 				swap.add_journal_message("MWC Redeem slate is posted".to_string());
 				Ok(StateProcessRespond::new(
@@ -1221,24 +1191,20 @@ impl State for BuyerWaitingForRefundTime {
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 /// State BuyerPostingRefundForSecondary
-pub struct BuyerPostingRefundForSecondary<'a, C, B, K>
+pub struct BuyerPostingRefundForSecondary<'a, K>
 where
-	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 	K: Keychain + 'a,
 {
 	keychain: Arc<K>,
-	swap_api: Arc<BtcSwapApi<'a, C, B>>,
-	phantom: PhantomData<&'a C>,
+	swap_api: Arc<Box<dyn SwapApi<K> + 'a>>,
+	phantom: PhantomData<&'a K>,
 }
-impl<'a, C, B, K> BuyerPostingRefundForSecondary<'a, C, B, K>
+impl<'a, K> BuyerPostingRefundForSecondary<'a, K>
 where
-	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 	K: Keychain + 'a,
 {
 	/// Create new instance
-	pub fn new(keychain: Arc<K>, swap_api: Arc<BtcSwapApi<'a, C, B>>) -> Self {
+	pub fn new(keychain: Arc<K>, swap_api: Arc<Box<dyn SwapApi<K> + 'a>>) -> Self {
 		Self {
 			keychain,
 			swap_api,
@@ -1247,10 +1213,8 @@ where
 	}
 }
 
-impl<'a, C, B, K> State for BuyerPostingRefundForSecondary<'a, C, B, K>
+impl<'a, K> State for BuyerPostingRefundForSecondary<'a, K>
 where
-	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 	K: Keychain + 'a,
 {
 	fn get_state_id(&self) -> StateId {
@@ -1280,7 +1244,10 @@ where
 				}
 
 				// Check if refund is already issued
-				if tx_conf.secondary_refund_conf.is_some() {
+				if tx_conf.secondary_refund_conf.is_some()
+					&& (tx_conf.secondary_refund_conf.unwrap() > 0
+						|| !self.swap_api.is_secondary_tx_fee_changed(swap)?)
+				{
 					return Ok(StateProcessRespond::new(
 						StateId::BuyerWaitingForRefundConfirmations,
 					));
@@ -1292,16 +1259,12 @@ where
 					),
 				)
 			}
-			Input::Execute {
-				refund_address,
-				fee_satoshi_per_byte,
-			} => {
+			Input::Execute { refund_address } => {
 				self.swap_api.post_secondary_refund_tx(
 					&*self.keychain,
 					context,
 					swap,
 					refund_address.clone(),
-					fee_satoshi_per_byte.clone(),
 				)?;
 				swap.posted_refund = Some(swap::get_cur_time());
 				swap.add_journal_message(format!("{} refund is posted", swap.secondary_currency));
@@ -1326,15 +1289,30 @@ where
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// State BuyerWaitingForRefundConfirmations
-pub struct BuyerWaitingForRefundConfirmations {}
-impl BuyerWaitingForRefundConfirmations {
+pub struct BuyerWaitingForRefundConfirmations<'a, K>
+where
+	K: Keychain + 'a,
+{
+	swap_api: Arc<Box<dyn SwapApi<K> + 'a>>,
+	phantom: PhantomData<&'a K>,
+}
+impl<'a, K> BuyerWaitingForRefundConfirmations<'a, K>
+where
+	K: Keychain + 'a,
+{
 	/// Create new instance
-	pub fn new() -> Self {
-		Self {}
+	pub fn new(swap_api: Arc<Box<dyn SwapApi<K> + 'a>>) -> Self {
+		Self {
+			swap_api,
+			phantom: PhantomData,
+		}
 	}
 }
 
-impl State for BuyerWaitingForRefundConfirmations {
+impl<'a, K> State for BuyerWaitingForRefundConfirmations<'a, K>
+where
+	K: Keychain + 'a,
+{
 	fn get_state_id(&self) -> StateId {
 		StateId::BuyerWaitingForRefundConfirmations
 	}
@@ -1360,6 +1338,16 @@ impl State for BuyerWaitingForRefundConfirmations {
 						// We are done
 						swap.add_journal_message(format!("{} refund transaction has enough confirmations. The trade is completed, refund is redeemed.", swap.secondary_currency));
 						return Ok(StateProcessRespond::new(StateId::BuyerCancelledRefunded));
+					}
+
+					if conf == 0
+						&& self.swap_api.is_secondary_tx_fee_changed(swap)?
+						&& swap.posted_refund.unwrap_or(0)
+							< swap::get_cur_time() - super::state::POST_SECONDARY_RETRY_PERIOD
+					{
+						return Ok(StateProcessRespond::new(
+							StateId::BuyerPostingRefundForSecondary,
+						));
 					}
 				} else {
 					// might need to retry

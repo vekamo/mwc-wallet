@@ -131,6 +131,11 @@ pub struct Swap {
 	pub posted_refund: Option<i64>,
 	/// Event log for this swap trade.
 	pub journal: Vec<SwapJournalRecord>,
+	/// Secondary fee as it comes from the parameters.
+	/// Note, it is NOT persistent data, with every run it can be different.
+	/// It is done intentionally because user might chnage it to resubmit secondary transaciton
+	#[serde(skip_serializing)]
+	pub secondary_fee: Option<f32>,
 }
 
 impl Swap {

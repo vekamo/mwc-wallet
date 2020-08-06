@@ -15,7 +15,8 @@
       "cosign": "03b480859d2dcf9cd66f115b685b2847bf3f52f624d069d802e1dc9362be4f5bdf",
       "refund": "03434496eb1554ad47c7ec5c267e902e1b71a03e189cc4fe9c83d9513e3a4e2e5a",
       "refund_tx": null,
-      "redeem_tx": null
+      "redeem_tx": null,
+      "tx_fee": null
     }
   },
   "redeem_public": "030654f6b3b4b54db0f2b066e651dcd67709444d2131d207ae5add2167596a091a",

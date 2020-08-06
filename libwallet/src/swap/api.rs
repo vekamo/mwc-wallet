@@ -21,6 +21,7 @@ use crate::swap::fsm::machine::StateMachine;
 use crate::swap::message::SecondaryUpdate;
 use crate::swap::types::SwapTransactionsConfirmations;
 use crate::NodeClient;
+use grin_core::core::Transaction;
 use grin_core::global;
 use grin_keychain::Identifier;
 use grin_util::Mutex;
@@ -77,6 +78,15 @@ pub trait SwapApi<K: Keychain>: Sync + Send {
 		swap: &Swap,
 	) -> Result<SwapTransactionsConfirmations, ErrorKind>;
 
+	/// Check How much BTC coins are locked on the chain
+	/// Return output with at least 1 confirmations because it is needed for refunds or redeems. Both party want to take everything
+	/// Return: (<pending_amount>, <confirmed_amount>, <least_confirmations>)
+	fn request_secondary_lock_balance(
+		&self,
+		swap: &Swap,
+		confirmations_needed: u64,
+	) -> Result<(u64, u64, u64), ErrorKind>;
+
 	/// Build secondary update part of the offer message
 	fn build_offer_message_secondary_update(
 		&self,
@@ -98,7 +108,22 @@ pub trait SwapApi<K: Keychain>: Sync + Send {
 		keychain: &K,
 		swap: &mut Swap,
 		context: &Context,
-		fee_satoshi_per_byte: Option<f32>,
+	) -> Result<(), ErrorKind>;
+
+	/// Get a secondary address for the lock account
+	fn get_secondary_lock_address(&self, swap: &Swap) -> Result<String, ErrorKind>;
+
+	/// Check if tx fee for the secondary is different from the posted. compare swap.secondary_fee with
+	/// posted BTC secondary_fee
+	fn is_secondary_tx_fee_changed(&self, swap: &Swap) -> Result<bool, ErrorKind>;
+
+	/// Post Refund transaction.
+	fn post_secondary_refund_tx(
+		&self,
+		keychain: &K,
+		context: &Context,
+		swap: &mut Swap,
+		refund_address: Option<String>,
 	) -> Result<(), ErrorKind>;
 }
 

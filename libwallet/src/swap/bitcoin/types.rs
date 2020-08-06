@@ -57,6 +57,8 @@ pub struct BtcData {
 	pub refund_tx: Option<sha256d::Hash>,
 	/// BTX redeem transaction hash, needed for checking if it is posted
 	pub redeem_tx: Option<sha256d::Hash>,
+
+	pub tx_fee: Option<f32>,
 }
 
 impl BtcData {
@@ -78,6 +80,7 @@ impl BtcData {
 			refund: None,
 			refund_tx: None,
 			redeem_tx: None,
+			tx_fee: None,
 		})
 	}
 
@@ -97,6 +100,7 @@ impl BtcData {
 			refund: Some(PublicKey::from_secret_key(keychain.secp(), &key)?),
 			refund_tx: None,
 			redeem_tx: None,
+			tx_fee: None,
 		})
 	}
 
@@ -496,6 +500,7 @@ mod tests {
 			),
 			refund_tx: None,
 			redeem_tx: None,
+			tx_fee: None,
 		};
 
 		let input_script = data
@@ -538,6 +543,7 @@ mod tests {
 			refund: Some(PublicKey::from_secret_key(&secp, &refund).unwrap()),
 			refund_tx: None,
 			redeem_tx: None,
+			tx_fee: None,
 		};
 		let input_script = data
 			.script(

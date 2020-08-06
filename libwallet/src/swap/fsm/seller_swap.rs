@@ -18,7 +18,6 @@ use super::state::{
 	JOURNAL_CANCELLED_BYER_LOCK_TOO_MUCH_FUNDS, JOURNAL_CANCELLED_BY_TIMEOUT,
 	JOURNAL_CANCELLED_BY_USER, JOURNAL_NOT_LOCKED,
 };
-use crate::swap::bitcoin::{BtcNodeClient, BtcSwapApi};
 use crate::swap::fsm::state::{Input, State, StateEtaInfo, StateId, StateProcessRespond};
 use crate::swap::message::Message;
 use crate::swap::types::{Action, SwapTransactionsConfirmations};
@@ -82,25 +81,21 @@ impl State for SellerOfferCreated {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// State SellerSendingOffer
-pub struct SellerSendingOffer<'a, C, B, K>
+pub struct SellerSendingOffer<'a, K>
 where
-	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 	K: Keychain + 'a,
 {
 	keychain: Arc<K>,
-	swap_api: Arc<BtcSwapApi<'a, C, B>>,
+	swap_api: Arc<Box<dyn SwapApi<K> + 'a>>,
 	message: Option<Message>,
-	phantom: PhantomData<&'a C>,
+	phantom: PhantomData<&'a K>,
 }
-impl<'a, C, B, K> SellerSendingOffer<'a, C, B, K>
+impl<'a, K> SellerSendingOffer<'a, K>
 where
-	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 	K: Keychain + 'a,
 {
 	/// Create new instance
-	pub fn new(keychain: Arc<K>, swap_api: Arc<BtcSwapApi<'a, C, B>>) -> Self {
+	pub fn new(keychain: Arc<K>, swap_api: Arc<Box<dyn SwapApi<K> + 'a>>) -> Self {
 		Self {
 			keychain,
 			swap_api,
@@ -109,10 +104,8 @@ where
 		}
 	}
 }
-impl<'a, C, B, K> State for SellerSendingOffer<'a, C, B, K>
+impl<'a, K> State for SellerSendingOffer<'a, K>
 where
-	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 	K: Keychain + 'a,
 {
 	fn get_state_id(&self) -> StateId {
@@ -169,10 +162,7 @@ where
 					))
 				}
 			}
-			Input::Execute {
-				refund_address: _,
-				fee_satoshi_per_byte: _,
-			} => {
+			Input::Execute { refund_address: _ } => {
 				debug_assert!(self.message.is_some()); // Check expected to be called first
 				if swap.message1.is_none() {
 					swap.message1 = Some(self.message.clone().unwrap());
@@ -393,24 +383,22 @@ impl State for SellerWaitingForBuyerLock {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// State SellerPostingLockMwcSlate
-pub struct SellerPostingLockMwcSlate<'a, C, B>
+pub struct SellerPostingLockMwcSlate<'a, C>
 where
-	C: NodeClient,
-	B: BtcNodeClient,
+	C: NodeClient + 'a,
 {
-	swap_api: Arc<BtcSwapApi<'a, C, B>>,
+	node_client: Arc<C>,
 	phantom: PhantomData<&'a C>,
 }
 
-impl<'a, C, B> SellerPostingLockMwcSlate<'a, C, B>
+impl<'a, C> SellerPostingLockMwcSlate<'a, C>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 {
 	/// Create an instance
-	pub fn new(swap_api: Arc<BtcSwapApi<'a, C, B>>) -> Self {
+	pub fn new(node_client: Arc<C>) -> Self {
 		Self {
-			swap_api,
+			node_client,
 			phantom: PhantomData,
 		}
 	}
@@ -428,10 +416,9 @@ where
 	}
 }
 
-impl<'a, C, B> State for SellerPostingLockMwcSlate<'a, C, B>
+impl<'a, C> State for SellerPostingLockMwcSlate<'a, C>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 {
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerPostingLockMwcSlate
@@ -477,10 +464,7 @@ where
 					.action(Action::SellerPublishMwcLockTx)
 					.time_limit(time_limit))
 			}
-			Input::Execute {
-				refund_address: _,
-				fee_satoshi_per_byte: _,
-			} => {
+			Input::Execute { refund_address: _ } => {
 				if tx_conf.mwc_lock_conf.is_some() {
 					// Going to the next step... MWC lock is already published.
 					return Ok(StateProcessRespond::new(
@@ -493,7 +477,7 @@ where
 					return Self::generate_cancel_respond(swap);
 				}
 				// Posting the transaction
-				swap::publish_transaction(&*self.swap_api.node_client, &swap.lock_slate.tx, false)?;
+				swap::publish_transaction(&*self.node_client, &swap.lock_slate.tx, false)?;
 				swap.posted_lock = Some(swap::get_cur_time());
 				swap.add_journal_message("MWC lock slate is posted".to_string());
 
@@ -885,10 +869,7 @@ impl State for SellerSendingInitRedeemMessage {
 					))
 				}
 			}
-			Input::Execute {
-				refund_address: _,
-				fee_satoshi_per_byte: _,
-			} => {
+			Input::Execute { refund_address: _ } => {
 				debug_assert!(self.message.is_some()); // Check expected to be called first
 				if swap.message2.is_none() {
 					swap.message2 = Some(self.message.clone().unwrap());
@@ -938,24 +919,22 @@ fn check_mwc_redeem<C: NodeClient>(swap: &mut Swap, node_client: &C) -> Result<b
 }
 
 /// State SellerWaitingForBuyerToRedeemMwc
-pub struct SellerWaitingForBuyerToRedeemMwc<'a, C, B>
+pub struct SellerWaitingForBuyerToRedeemMwc<'a, C>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 {
-	swap_api: Arc<BtcSwapApi<'a, C, B>>,
+	node_client: Arc<C>,
 	phantom: PhantomData<&'a C>,
 }
 
-impl<'a, C, B> SellerWaitingForBuyerToRedeemMwc<'a, C, B>
+impl<'a, C> SellerWaitingForBuyerToRedeemMwc<'a, C>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 {
 	/// Create a new instance
-	pub fn new(swap_api: Arc<BtcSwapApi<'a, C, B>>) -> Self {
+	pub fn new(node_client: Arc<C>) -> Self {
 		Self {
-			swap_api,
+			node_client,
 			phantom: PhantomData,
 		}
 	}
@@ -965,17 +944,16 @@ fn calc_mwc_unlock_time(swap: &Swap, tip: &u64) -> i64 {
 	swap::get_cur_time() + (swap.refund_slate.lock_height.saturating_sub(*tip) * 60) as i64
 }
 
-impl<'a, C, B> State for SellerWaitingForBuyerToRedeemMwc<'a, C, B>
+impl<'a, C> State for SellerWaitingForBuyerToRedeemMwc<'a, C>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 {
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerWaitingForBuyerToRedeemMwc
 	}
 	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
 		// Time limit is defined by the chain height
-		if let Ok((height, _, _)) = self.swap_api.node_client.get_chain_tip() {
+		if let Ok((height, _, _)) = self.node_client.get_chain_tip() {
 			Some(
 				StateEtaInfo::new("Wait For Buyer to redeem MWC")
 					.end_time(calc_mwc_unlock_time(swap, &height)),
@@ -1008,7 +986,7 @@ where
 				// Checking if can redeem first because redeem can be made when we can do refund.
 				// Then we want to do redeem and refund from redeem branch.
 				if !swap.redeem_slate.tx.kernels().is_empty() {
-					if check_mwc_redeem(swap, &*self.swap_api.node_client)? {
+					if check_mwc_redeem(swap, &*self.node_client)? {
 						swap.add_journal_message(
 							"Buyer redeemed MWC, transaction published on the blockchain"
 								.to_string(),
@@ -1023,7 +1001,7 @@ where
 
 				// Check the deadline for locking
 				//
-				let (height, _, _) = self.swap_api.node_client.get_chain_tip()?;
+				let (height, _, _) = self.node_client.get_chain_tip()?;
 				if height > swap.refund_slate.lock_height {
 					swap.add_journal_message(
 						"Buyer didn't redeem, time to get a refund".to_string(),
@@ -1072,17 +1050,17 @@ where
 // Greedy approach, check the deadline for locking
 // It is fair because that code will work only of Buyer delay a lot the redeeming on MWC transaction.
 // One of the reasons to delay is attack.
-fn post_refund_if_possible<'a, C: NodeClient + 'a, B: BtcNodeClient + 'a>(
-	swap_api: Arc<BtcSwapApi<'a, C, B>>,
+fn post_refund_if_possible<C: NodeClient>(
+	node_client: Arc<C>,
 	swap: &Swap,
 	tx_conf: &SwapTransactionsConfirmations,
 ) -> Result<(), ErrorKind> {
-	let (height, _, _) = swap_api.node_client.get_chain_tip()?;
+	let (height, _, _) = node_client.get_chain_tip()?;
 	if height > swap.refund_slate.lock_height
 		&& tx_conf.mwc_redeem_conf.is_none()
 		&& tx_conf.mwc_refund_conf.is_none()
 	{
-		let res = swap::publish_transaction(&*swap_api.node_client, &swap.refund_slate.tx, false);
+		let res = swap::publish_transaction(&*node_client, &swap.refund_slate.tx, false);
 		if let Err(e) = res {
 			info!("MWC refund can be issued even likely it will fail. Trying to post it. get an error {}", e);
 		} else {
@@ -1093,37 +1071,40 @@ fn post_refund_if_possible<'a, C: NodeClient + 'a, B: BtcNodeClient + 'a>(
 }
 
 /// State SellerRedeemSecondaryCurrency
-pub struct SellerRedeemSecondaryCurrency<'a, C, B, K>
+pub struct SellerRedeemSecondaryCurrency<'a, C, K>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 	K: Keychain + 'a,
 {
 	keychain: Arc<K>,
-	swap_api: Arc<BtcSwapApi<'a, C, B>>,
-	phantom: PhantomData<&'a C>,
+	node_client: Arc<C>,
+	swap_api: Arc<Box<dyn SwapApi<K> + 'a>>,
+	phantom: PhantomData<&'a K>,
 }
 
-impl<'a, C, B, K> SellerRedeemSecondaryCurrency<'a, C, B, K>
+impl<'a, C, K> SellerRedeemSecondaryCurrency<'a, C, K>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 	K: Keychain + 'a,
 {
 	/// Create a new instance
-	pub fn new(keychain: Arc<K>, swap_api: Arc<BtcSwapApi<'a, C, B>>) -> Self {
+	pub fn new(
+		keychain: Arc<K>,
+		node_client: Arc<C>,
+		swap_api: Arc<Box<dyn SwapApi<K> + 'a>>,
+	) -> Self {
 		Self {
 			keychain,
+			node_client,
 			swap_api,
 			phantom: PhantomData,
 		}
 	}
 }
 
-impl<'a, C, B, K> State for SellerRedeemSecondaryCurrency<'a, C, B, K>
+impl<'a, C, K> State for SellerRedeemSecondaryCurrency<'a, C, K>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 	K: Keychain + 'a,
 {
 	fn get_state_id(&self) -> StateId {
@@ -1150,7 +1131,7 @@ where
 		match input {
 			Input::Check => {
 				// Be greedy, check the deadline for locking
-				post_refund_if_possible(self.swap_api.clone(), swap, tx_conf)?;
+				post_refund_if_possible(self.node_client.clone(), swap, tx_conf)?;
 
 				if !swap.redeem_kernel_updated {
 					debug_assert!(false); // That shouldn't happen
@@ -1160,8 +1141,11 @@ where
 					));
 				}
 
-				// redeem was done. Posted...
-				if tx_conf.secondary_redeem_conf.is_some() {
+				// Check if already processed
+				if tx_conf.secondary_redeem_conf.is_some()
+					&& (tx_conf.secondary_redeem_conf.unwrap() > 0
+						|| !self.swap_api.is_secondary_tx_fee_changed(swap)?)
+				{
 					return Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForRedeemConfirmations,
 					));
@@ -1176,16 +1160,9 @@ where
 						.time_limit(swap.get_time_btc_lock() - swap.get_timeinterval_btc_lock()),
 				)
 			}
-			Input::Execute {
-				refund_address: _,
-				fee_satoshi_per_byte,
-			} => {
-				self.swap_api.publish_secondary_transaction(
-					&*self.keychain,
-					swap,
-					context,
-					fee_satoshi_per_byte.clone(),
-				)?;
+			Input::Execute { refund_address: _ } => {
+				self.swap_api
+					.publish_secondary_transaction(&*self.keychain, swap, context)?;
 				debug_assert!(swap.secondary_data.unwrap_btc()?.redeem_tx.is_some());
 				swap.posted_redeem = Some(swap::get_cur_time());
 				swap.add_journal_message(format!(
@@ -1213,33 +1190,35 @@ where
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// State SellerWaitingForRedeemConfirmations
-pub struct SellerWaitingForRedeemConfirmations<'a, C, B>
+pub struct SellerWaitingForRedeemConfirmations<'a, C, K>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
+	K: Keychain + 'a,
 {
-	swap_api: Arc<BtcSwapApi<'a, C, B>>,
-	phantom: PhantomData<&'a C>,
+	node_client: Arc<C>,
+	swap_api: Arc<Box<dyn SwapApi<K> + 'a>>,
+	phantom: PhantomData<&'a K>,
 }
 
-impl<'a, C, B> SellerWaitingForRedeemConfirmations<'a, C, B>
+impl<'a, C, K> SellerWaitingForRedeemConfirmations<'a, C, K>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
+	K: Keychain + 'a,
 {
 	/// Create a new instance
-	pub fn new(swap_api: Arc<BtcSwapApi<'a, C, B>>) -> Self {
+	pub fn new(node_client: Arc<C>, swap_api: Arc<Box<dyn SwapApi<K> + 'a>>) -> Self {
 		Self {
+			node_client,
 			swap_api,
 			phantom: PhantomData,
 		}
 	}
 }
 
-impl<'a, C, B> State for SellerWaitingForRedeemConfirmations<'a, C, B>
+impl<'a, C, K> State for SellerWaitingForRedeemConfirmations<'a, C, K>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
+	K: Keychain + 'a,
 {
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerWaitingForRedeemConfirmations
@@ -1262,17 +1241,28 @@ where
 		match input {
 			Input::Check => {
 				// Be greedy, check the deadline for locking
-				post_refund_if_possible(self.swap_api.clone(), swap, tx_conf)?;
+				post_refund_if_possible(self.node_client.clone(), swap, tx_conf)?;
 
 				// Just waiting
 				if let Some(conf) = tx_conf.secondary_redeem_conf {
 					if conf >= swap.secondary_confirmations {
 						// We are done
 						swap.add_journal_message(format!(
-							"{} redeem transaction reack enough confirmations. Trade is complete",
+							"{} redeem transaction get enough confirmations. Trade is complete",
 							swap.secondary_currency
 						));
 						return Ok(StateProcessRespond::new(StateId::SellerSwapComplete));
+					}
+
+					// If transaction in the memory pool fo a long time and fee is different  now, we should do a retry
+					if conf == 0
+						&& self.swap_api.is_secondary_tx_fee_changed(swap)?
+						&& swap.posted_redeem.unwrap_or(0)
+							< swap::get_cur_time() - super::state::POST_SECONDARY_RETRY_PERIOD
+					{
+						return Ok(StateProcessRespond::new(
+							StateId::SellerRedeemSecondaryCurrency,
+						));
 					}
 				} else {
 					// might need to retry
@@ -1409,39 +1399,36 @@ impl State for SellerCancelled {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// State SellerWaitingForRefundHeight
-pub struct SellerWaitingForRefundHeight<'a, C, B>
+pub struct SellerWaitingForRefundHeight<'a, C>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 {
-	swap_api: Arc<BtcSwapApi<'a, C, B>>,
+	node_client: Arc<C>,
 	phantom: PhantomData<&'a C>,
 }
 
-impl<'a, C, B> SellerWaitingForRefundHeight<'a, C, B>
+impl<'a, C> SellerWaitingForRefundHeight<'a, C>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 {
 	/// Create a new instance
-	pub fn new(swap_api: Arc<BtcSwapApi<'a, C, B>>) -> Self {
+	pub fn new(node_client: Arc<C>) -> Self {
 		Self {
-			swap_api,
+			node_client,
 			phantom: PhantomData,
 		}
 	}
 }
 
-impl<'a, C, B> State for SellerWaitingForRefundHeight<'a, C, B>
+impl<'a, C> State for SellerWaitingForRefundHeight<'a, C>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 {
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerWaitingForRefundHeight
 	}
 	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
-		if let Ok((height, _, _)) = self.swap_api.node_client.get_chain_tip() {
+		if let Ok((height, _, _)) = self.node_client.get_chain_tip() {
 			Some(
 				StateEtaInfo::new("Wait for MWC refund to unlock")
 					.end_time(calc_mwc_unlock_time(swap, &height)),
@@ -1466,7 +1453,7 @@ where
 			Input::Check => {
 				// Check the deadline for locking
 				//
-				let (height, _, _) = self.swap_api.node_client.get_chain_tip()?;
+				let (height, _, _) = self.node_client.get_chain_tip()?;
 				if height > swap.refund_slate.lock_height {
 					swap.add_journal_message("MWC funds are unlocked".to_string());
 					return Ok(StateProcessRespond::new(StateId::SellerPostingRefundSlate));
@@ -1499,38 +1486,35 @@ where
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 /// State SellerPostingRefundSlate
-pub struct SellerPostingRefundSlate<'a, C, B>
+pub struct SellerPostingRefundSlate<'a, C>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 {
-	swap_api: Arc<BtcSwapApi<'a, C, B>>,
+	node_client: Arc<C>,
 	phantom: PhantomData<&'a C>,
 }
-impl<'a, C, B> SellerPostingRefundSlate<'a, C, B>
+impl<'a, C> SellerPostingRefundSlate<'a, C>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 {
 	/// Create a new instance
-	pub fn new(swap_api: Arc<BtcSwapApi<'a, C, B>>) -> Self {
+	pub fn new(node_client: Arc<C>) -> Self {
 		Self {
-			swap_api,
+			node_client,
 			phantom: PhantomData,
 		}
 	}
 }
 
-impl<'a, C, B> State for SellerPostingRefundSlate<'a, C, B>
+impl<'a, C> State for SellerPostingRefundSlate<'a, C>
 where
 	C: NodeClient + 'a,
-	B: BtcNodeClient + 'a,
 {
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerPostingRefundSlate
 	}
 	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
-		if let Ok((height, _, _)) = self.swap_api.node_client.get_chain_tip() {
+		if let Ok((height, _, _)) = self.node_client.get_chain_tip() {
 			let start_time_limit = calc_mwc_unlock_time(swap, &height);
 			Some(
 				StateEtaInfo::new("Post MWC Refund Slate")
@@ -1574,18 +1558,11 @@ where
 				Ok(StateProcessRespond::new(StateId::SellerPostingRefundSlate)
 					.action(Action::SellerPublishMwcRefundTx))
 			}
-			Input::Execute {
-				refund_address: _,
-				fee_satoshi_per_byte: _,
-			} => {
+			Input::Execute { refund_address: _ } => {
 				// Executing the MWC lock transaction
 				// Posting the transaction
 				debug_assert!(tx_conf.mwc_refund_conf.is_none());
-				swap::publish_transaction(
-					&*self.swap_api.node_client,
-					&swap.refund_slate.tx,
-					false,
-				)?;
+				swap::publish_transaction(&*self.node_client, &swap.refund_slate.tx, false)?;
 				swap.posted_refund = Some(swap::get_cur_time());
 				swap.add_journal_message("MWC refund slate is posted".to_string());
 				Ok(StateProcessRespond::new(

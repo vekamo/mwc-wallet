@@ -247,8 +247,6 @@ pub enum Input {
 	Execute {
 		/// Secondary currency refund address
 		refund_address: Option<String>,
-		/// Refund transaction fee
-		fee_satoshi_per_byte: Option<f32>,
 	},
 
 	/// Process Income message
@@ -260,7 +258,6 @@ impl Input {
 	pub fn execute() -> Self {
 		Self::Execute {
 			refund_address: None,
-			fee_satoshi_per_byte: None,
 		}
 	}
 }

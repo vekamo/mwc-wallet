@@ -30,6 +30,7 @@ use crate::{NodeClient, Slate};
 use bitcoin::{Address, Script};
 use bitcoin_hashes::sha256d;
 use failure::_core::marker::PhantomData;
+use grin_core::core::Transaction;
 use grin_keychain::{Identifier, Keychain, SwitchCommitmentType};
 use grin_util::secp;
 use grin_util::secp::aggsig::export_secnonce_single as generate_nonce;
@@ -75,7 +76,7 @@ where
 	}
 
 	/// Update swap.secondary_data with a roll back script.
-	pub fn script(&self, swap: &Swap) -> Result<Script, ErrorKind> {
+	pub(crate) fn script(&self, swap: &Swap) -> Result<Script, ErrorKind> {
 		let btc_data = swap.secondary_data.unwrap_btc()?;
 		let sekp = secp::Secp256k1::new();
 		Ok(btc_data.script(
@@ -92,7 +93,7 @@ where
 
 	/// Check BTC amount at the chain.
 	/// Return output with at least 1 confirmations because it is needed for refunds or redeems. Both party want to take everything
-	pub fn btc_balance(
+	pub(crate) fn btc_balance(
 		&self,
 		swap: &Swap,
 		input_script: &Script,
@@ -197,7 +198,6 @@ where
 		swap: &mut Swap,
 		refund_address: &Address,
 		input_script: &Script,
-		fee_satoshi_per_byte: Option<f32>,
 	) -> Result<(), ErrorKind> {
 		let (pending_amount, confirmed_amount, _, conf_outputs) =
 			self.btc_balance(swap, input_script, 0)?;
@@ -220,7 +220,8 @@ where
 			keychain.secp(),
 			refund_address,
 			input_script,
-			fee_satoshi_per_byte.unwrap_or(self.get_default_fee_satoshi_per_byte(&swap.network)),
+			swap.secondary_fee
+				.unwrap_or(self.get_default_fee_satoshi_per_byte(&swap.network)),
 			btc_lock_time,
 			&refund_key,
 			&conf_outputs,
@@ -229,7 +230,7 @@ where
 		let tx = refund_tx.tx.clone();
 		self.btc_node_client.lock().post_tx(tx)?;
 		btc_data.refund_tx = Some(refund_tx.txid);
-
+		btc_data.tx_fee = swap.secondary_fee;
 		Ok(())
 	}
 
@@ -280,7 +281,7 @@ where
 	}
 
 	/// Retrieve confirmation number for BTC transaction.
-	pub fn get_btc_confirmation_number(
+	fn get_btc_confirmation_number(
 		&self,
 		btc_tip: &u64,
 		tx_hash: Option<sha256d::Hash>,
@@ -304,40 +305,6 @@ where
 			Network::Floonet => 1.4 as f32,
 			Network::Mainnet => 26.0 as f32,
 		}
-	}
-
-	/// Post BTC refund transaction
-	pub fn post_secondary_refund_tx<K: Keychain>(
-		&self,
-		keychain: &K,
-		context: &Context,
-		swap: &mut Swap,
-		refund_address: Option<String>,
-		fee_satoshi_per_byte: Option<f32>,
-	) -> Result<(), ErrorKind> {
-		assert!(!swap.is_seller());
-
-		let refund_address_str = refund_address.ok_or(ErrorKind::Generic(
-			"Please define BTC refund address".to_string(),
-		))?;
-
-		let refund_address = Address::from_str(&refund_address_str).map_err(|e| {
-			ErrorKind::Generic(format!(
-				"Unable to parse BTC address {}, {}",
-				refund_address_str, e
-			))
-		})?;
-
-		let input_script = self.script(swap)?;
-		self.buyer_refund(
-			keychain,
-			context,
-			swap,
-			&refund_address,
-			&input_script,
-			fee_satoshi_per_byte,
-		)?;
-		Ok(())
 	}
 }
 
@@ -488,7 +455,6 @@ where
 		keychain: &K,
 		swap: &mut Swap,
 		context: &Context,
-		fee_satoshi_per_byte: Option<f32>,
 	) -> Result<(), ErrorKind> {
 		assert!(swap.is_seller());
 
@@ -499,13 +465,14 @@ where
 			swap,
 			context,
 			&input_script,
-			fee_satoshi_per_byte,
+			swap.secondary_fee,
 		)?;
 
 		self.btc_node_client.lock().post_tx(btc_tx.tx)?;
 
 		let btc_data = swap.secondary_data.unwrap_btc_mut()?;
 		btc_data.redeem_tx = Some(btc_tx.txid);
+		btc_data.tx_fee = swap.secondary_fee;
 		Ok(())
 	}
 
@@ -569,10 +536,28 @@ where
 		})
 	}
 
+	/// Check How much BTC coins are locked on the chain
+	/// Return output with at least 1 confirmations because it is needed for refunds or redeems. Both party want to take everything
+	/// Return: (<pending_amount>, <confirmed_amount>, <least_confirmations>)
+	fn request_secondary_lock_balance(
+		&self,
+		swap: &Swap,
+		confirmations_needed: u64,
+	) -> Result<(u64, u64, u64), ErrorKind> {
+		let input_script = self.script(swap)?;
+
+		let (pending_amount, confirmed_amount, least_confirmations, _outputs) =
+			self.btc_balance(swap, &input_script, confirmations_needed)?;
+
+		Ok((pending_amount, confirmed_amount, least_confirmations))
+	}
+
 	// Build state machine that match the swap data
 	fn get_fsm(&self, keychain: &K, swap: &Swap) -> StateMachine {
 		let kc = Arc::new(keychain.clone());
-		let swap_api = Arc::new((*self).clone());
+		let nc = self.node_client.clone();
+		let b: Box<dyn SwapApi<K> + 'a> = Box::new((*self).clone());
+		let swap_api = Arc::new(b);
 
 		if swap.is_seller() {
 			StateMachine::new(vec![
@@ -585,9 +570,7 @@ where
 					kc.clone(),
 				)),
 				Box::new(seller_swap::SellerWaitingForBuyerLock::new()),
-				Box::new(seller_swap::SellerPostingLockMwcSlate::new(
-					swap_api.clone(),
-				)),
+				Box::new(seller_swap::SellerPostingLockMwcSlate::new(nc.clone())),
 				Box::new(seller_swap::SellerWaitingForLockConfirmations::new(
 					kc.clone(),
 				)),
@@ -596,20 +579,20 @@ where
 				)),
 				Box::new(seller_swap::SellerSendingInitRedeemMessage::new()),
 				Box::new(seller_swap::SellerWaitingForBuyerToRedeemMwc::new(
-					swap_api.clone(),
+					nc.clone(),
 				)),
 				Box::new(seller_swap::SellerRedeemSecondaryCurrency::new(
 					kc.clone(),
+					nc.clone(),
 					swap_api.clone(),
 				)),
 				Box::new(seller_swap::SellerWaitingForRedeemConfirmations::new(
+					nc.clone(),
 					swap_api.clone(),
 				)),
 				Box::new(seller_swap::SellerSwapComplete::new()),
-				Box::new(seller_swap::SellerWaitingForRefundHeight::new(
-					swap_api.clone(),
-				)),
-				Box::new(seller_swap::SellerPostingRefundSlate::new(swap_api.clone())),
+				Box::new(seller_swap::SellerWaitingForRefundHeight::new(nc.clone())),
+				Box::new(seller_swap::SellerPostingRefundSlate::new(nc.clone())),
 				Box::new(seller_swap::SellerWaitingForRefundConfirmations::new()),
 				Box::new(seller_swap::SellerCancelledRefunded::new()),
 				Box::new(seller_swap::SellerCancelled::new()),
@@ -632,7 +615,7 @@ where
 				Box::new(buyer_swap::BuyerWaitingForRespondRedeemMessage::new(
 					kc.clone(),
 				)),
-				Box::new(buyer_swap::BuyerRedeemMwc::new(swap_api.clone())),
+				Box::new(buyer_swap::BuyerRedeemMwc::new(nc.clone())),
 				Box::new(buyer_swap::BuyerWaitForRedeemMwcConfirmations::new()),
 				Box::new(buyer_swap::BuyerSwapComplete::new()),
 				Box::new(buyer_swap::BuyerWaitingForRefundTime::new()),
@@ -640,10 +623,53 @@ where
 					kc.clone(),
 					swap_api.clone(),
 				)),
-				Box::new(buyer_swap::BuyerWaitingForRefundConfirmations::new()),
+				Box::new(buyer_swap::BuyerWaitingForRefundConfirmations::new(
+					swap_api.clone(),
+				)),
 				Box::new(buyer_swap::BuyerCancelledRefunded::new()),
 				Box::new(buyer_swap::BuyerCancelled::new()),
 			])
 		}
+	}
+
+	/// Get a secondary address for the lock account
+	fn get_secondary_lock_address(&self, swap: &Swap) -> Result<String, ErrorKind> {
+		let input_script = self.script(swap)?;
+		let adrress = swap
+			.secondary_data
+			.unwrap_btc()?
+			.address(&input_script, swap.network)?;
+		Ok(adrress.to_string())
+	}
+
+	/// Check if tx fee for the secondary is different from the posted
+	fn is_secondary_tx_fee_changed(&self, swap: &Swap) -> Result<bool, ErrorKind> {
+		Ok(swap.secondary_data.unwrap_btc()?.tx_fee != swap.secondary_fee)
+	}
+
+	/// Post BTC refund transaction
+	fn post_secondary_refund_tx(
+		&self,
+		keychain: &K,
+		context: &Context,
+		swap: &mut Swap,
+		refund_address: Option<String>,
+	) -> Result<(), ErrorKind> {
+		assert!(!swap.is_seller());
+
+		let refund_address_str = refund_address.ok_or(ErrorKind::Generic(
+			"Please define BTC refund address".to_string(),
+		))?;
+
+		let refund_address = Address::from_str(&refund_address_str).map_err(|e| {
+			ErrorKind::Generic(format!(
+				"Unable to parse BTC address {}, {}",
+				refund_address_str, e
+			))
+		})?;
+
+		let input_script = self.script(swap)?;
+		self.buyer_refund(keychain, context, swap, &refund_address, &input_script)?;
+		Ok(())
 	}
 }

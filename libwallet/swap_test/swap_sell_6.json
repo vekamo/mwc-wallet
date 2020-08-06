@@ -20,7 +20,8 @@
       "cosign": "03b480859d2dcf9cd66f115b685b2847bf3f52f624d069d802e1dc9362be4f5bdf",
       "refund": "03434496eb1554ad47c7ec5c267e902e1b71a03e189cc4fe9c83d9513e3a4e2e5a",
       "refund_tx": null,
-      "redeem_tx": "5b3e15af3c7284a9cd5a65e6dd075654112ef555530f3df511e6a1934e99586f"
+      "redeem_tx": "5b3e15af3c7284a9cd5a65e6dd075654112ef555530f3df511e6a1934e99586f",
+      "tx_fee": null
     }
   },
   "redeem_public": "030654f6b3b4b54db0f2b066e651dcd67709444d2131d207ae5add2167596a091a",
@@ -439,7 +440,7 @@
     },
     {
       "time": 1567632152,
-      "message": "BTC redeem transaction reack enough confirmations. Trade is complete"
+      "message": "BTC redeem transaction get enough confirmations. Trade is complete"
     }
   ]
 }

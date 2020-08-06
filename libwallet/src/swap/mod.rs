@@ -1444,7 +1444,6 @@ mod tests {
 				let _sr = trader
 					.process(Input::Execute {
 						refund_address: Some("mjdcskZm4Kimq7yzUGLtzwiEwMdBdTa3No".to_string()),
-						fee_satoshi_per_byte: Some(26.0),
 					})
 					.unwrap();
 				assert_eq!(
@@ -1454,7 +1453,6 @@ mod tests {
 			} else {
 				let sr = trader.process(Input::Execute {
 					refund_address: Some("mjdcskZm4Kimq7yzUGLtzwiEwMdBdTa3No".to_string()),
-					fee_satoshi_per_byte: Some(26.0),
 				});
 				assert_eq!(sr.is_err(), true);
 			}
@@ -1467,7 +1465,6 @@ mod tests {
 				let _sr = trader
 					.process(Input::Execute {
 						refund_address: Some("mjdcskZm4Kimq7yzUGLtzwiEwMdBdTa3No".to_string()),
-						fee_satoshi_per_byte: Some(26.0),
 					})
 					.unwrap();
 				assert_eq!(
@@ -1477,7 +1474,6 @@ mod tests {
 			} else {
 				let sr = trader.process(Input::Execute {
 					refund_address: Some("mjdcskZm4Kimq7yzUGLtzwiEwMdBdTa3No".to_string()),
-					fee_satoshi_per_byte: Some(26.0),
 				});
 				assert_eq!(sr.is_err(), true);
 			}
@@ -1534,7 +1530,7 @@ mod tests {
 	#[serial]
 	// The primary goal for this test is to cover all code path for edge cases
 	fn test_swap_fsm() {
-		activate_test_response(true);
+		activate_test_response(false);
 		set_test_mode(true);
 		swap::set_testing_cur_time(START_TIME);
 		global::set_mining_mode(ChainTypes::Floonet);
@@ -3245,7 +3241,6 @@ mod tests {
 			let res = buyer
 				.process(Input::Execute {
 					refund_address: Some("mjdcskZm4Kimq7yzUGLtzwiEwMdBdTa3No".to_string()),
-					fee_satoshi_per_byte: Some(26.0),
 				})
 				.unwrap();
 			assert_eq!(
@@ -3262,6 +3257,33 @@ mod tests {
 				res.next_state_id,
 				StateId::BuyerWaitingForRefundConfirmations
 			);
+
+			{
+				// BRANCH - check if buyer can resubmit the Secondary refund transaction
+				// Checking if resubmit works
+				buyer.pushs();
+				let cur_time = swap::get_cur_time();
+
+				let res = buyer.process(Input::Check).unwrap();
+				assert_eq!(
+					res.next_state_id,
+					StateId::BuyerWaitingForRefundConfirmations
+				);
+
+				swap::set_testing_cur_time(cur_time * 61 * 5);
+				let res = buyer.process(Input::Check).unwrap();
+				assert_eq!(
+					res.next_state_id,
+					StateId::BuyerWaitingForRefundConfirmations
+				);
+				// Changing fees, expecting to switch back to the posting
+				buyer.swap.secondary_fee = Some(12.0);
+				let res = buyer.process(Input::Check).unwrap();
+				assert_eq!(res.next_state_id, StateId::BuyerPostingRefundForSecondary);
+
+				swap::set_testing_cur_time(cur_time);
+				buyer.pops();
+			}
 
 			// checking retry scenarion
 			let btc_state_refund_posted = btc_nc.get_state();
@@ -3298,6 +3320,36 @@ mod tests {
 				None,
 				None,
 			);
+
+			{
+				// BRANCH - check if buyer can't resubmit the refund transaction because it is already mined
+				// Checking if resubmit works
+				buyer.pushs();
+				let cur_time = swap::get_cur_time();
+
+				let res = buyer.process(Input::Check).unwrap();
+				assert_eq!(
+					res.next_state_id,
+					StateId::BuyerWaitingForRefundConfirmations
+				);
+
+				swap::set_testing_cur_time(cur_time * 61 * 5);
+				let res = buyer.process(Input::Check).unwrap();
+				assert_eq!(
+					res.next_state_id,
+					StateId::BuyerWaitingForRefundConfirmations
+				);
+				// Changing fees, expecting to switch back to the posting
+				buyer.swap.secondary_fee = Some(12.0);
+				let res = buyer.process(Input::Check).unwrap();
+				assert_eq!(
+					res.next_state_id,
+					StateId::BuyerWaitingForRefundConfirmations
+				);
+
+				swap::set_testing_cur_time(cur_time);
+				buyer.pops();
+			}
 
 			btc_nc.mine_blocks(BTC_CONFIRMATION);
 			test_responds(
@@ -4616,6 +4668,33 @@ mod tests {
 		);
 		assert_eq!(res.time_limit.is_none(), true);
 
+		{
+			// BRANCH - check if seller can resubmit the Secondary transaction
+			// Checking if resubmit works
+			seller.pushs();
+			let cur_time = swap::get_cur_time();
+
+			let res = seller.process(Input::Check).unwrap();
+			assert_eq!(
+				res.next_state_id,
+				StateId::SellerWaitingForRedeemConfirmations
+			);
+
+			swap::set_testing_cur_time(cur_time * 61 * 5);
+			let res = seller.process(Input::Check).unwrap();
+			assert_eq!(
+				res.next_state_id,
+				StateId::SellerWaitingForRedeemConfirmations
+			);
+			// Changing fees, expecting to switch back to the posting
+			seller.swap.secondary_fee = Some(12.0);
+			let res = seller.process(Input::Check).unwrap();
+			assert_eq!(res.next_state_id, StateId::SellerRedeemSecondaryCurrency);
+
+			swap::set_testing_cur_time(cur_time);
+			seller.pops();
+		}
+
 		// Bith party waiting for confirmations
 		nc.mine_blocks(MWC_CONFIRMATION / 2 - 14);
 		btc_nc.mine_blocks(BTC_CONFIRMATION / 2);
@@ -4648,6 +4727,36 @@ mod tests {
 			None,
 			None,
 		);
+
+		{
+			// BRANCH - check if seller unable to resubmit the Secondary transaction. It is already mined
+			// Checking if resubmit works
+			seller.pushs();
+			let cur_time = swap::get_cur_time();
+
+			let res = seller.process(Input::Check).unwrap();
+			assert_eq!(
+				res.next_state_id,
+				StateId::SellerWaitingForRedeemConfirmations
+			);
+
+			swap::set_testing_cur_time(cur_time * 61 * 5);
+			let res = seller.process(Input::Check).unwrap();
+			assert_eq!(
+				res.next_state_id,
+				StateId::SellerWaitingForRedeemConfirmations
+			);
+			// Changing fees, because Tx is already mined, nothing should happen
+			seller.swap.secondary_fee = Some(12.0);
+			let res = seller.process(Input::Check).unwrap();
+			assert_eq!(
+				res.next_state_id,
+				StateId::SellerWaitingForRedeemConfirmations
+			);
+
+			swap::set_testing_cur_time(cur_time);
+			seller.pops();
+		}
 
 		// Mine more, and all must be happy now
 		nc.mine_blocks(MWC_CONFIRMATION / 2 + 1);

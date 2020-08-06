@@ -414,7 +414,7 @@ pub fn swap_process<'a, L, C, K, F>(
 	message_sender: F,
 	message_file_name: Option<String>,
 	buyer_refund_address: Option<String>,
-	fee_satoshi_per_byte: Option<f32>,
+	secondary_fee: Option<f32>,
 ) -> Result<StateProcessRespond, Error>
 where
 	L: WalletLCProvider<'a, C, K>,
@@ -435,6 +435,8 @@ where
 	let _l = swap_lock.lock();
 
 	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey, &*swap_lock)?;
+
+	swap.secondary_fee = secondary_fee;
 
 	let swap_api =
 		crate::swap::api::create_instance(&swap.secondary_currency, node_client.clone())?;
@@ -596,7 +598,6 @@ where
 			process_respond = fsm.process(
 				Input::Execute {
 					refund_address: buyer_refund_address,
-					fee_satoshi_per_byte,
 				},
 				&mut swap,
 				&context,
