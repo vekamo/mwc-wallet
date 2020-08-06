@@ -195,10 +195,12 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
+	// Need to lock first to check if the wallet is open
+	wallet_lock!(wallet_inst, w);
+
 	let swap_id = trades::list_swap_trades()?;
 	let mut result: Vec<(String, String)> = Vec::new();
 
-	wallet_lock!(wallet_inst, w);
 	let keychain = w.keychain(keychain_mask)?;
 	let skey = get_swap_storage_key(&keychain)?;
 
