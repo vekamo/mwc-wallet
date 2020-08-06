@@ -21,7 +21,6 @@ use crate::swap::fsm::machine::StateMachine;
 use crate::swap::message::SecondaryUpdate;
 use crate::swap::types::SwapTransactionsConfirmations;
 use crate::NodeClient;
-use grin_core::core::Transaction;
 use grin_core::global;
 use grin_keychain::Identifier;
 use grin_util::Mutex;

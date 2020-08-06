@@ -57,7 +57,7 @@ pub struct BtcData {
 	pub refund_tx: Option<sha256d::Hash>,
 	/// BTX redeem transaction hash, needed for checking if it is posted
 	pub redeem_tx: Option<sha256d::Hash>,
-
+	/// Last transaction fee that was used for BTC. Needed to detect the fact that it is changed.
 	pub tx_fee: Option<f32>,
 }
 

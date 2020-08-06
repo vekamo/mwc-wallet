@@ -30,7 +30,6 @@ use crate::{NodeClient, Slate};
 use bitcoin::{Address, Script};
 use bitcoin_hashes::sha256d;
 use failure::_core::marker::PhantomData;
-use grin_core::core::Transaction;
 use grin_keychain::{Identifier, Keychain, SwitchCommitmentType};
 use grin_util::secp;
 use grin_util::secp::aggsig::export_secnonce_single as generate_nonce;
