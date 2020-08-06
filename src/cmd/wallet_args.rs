@@ -1005,8 +1005,8 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		command::SwapSubcommand::Adjust
 	} else if args.is_present("autoswap") {
 		command::SwapSubcommand::Autoswap
-	} else if args.is_present("terminate_auto_swap") {
-		command::SwapSubcommand::Terminate
+	} else if args.is_present("stop_auto_swap") {
+		command::SwapSubcommand::StopAllAutoSwap
 	} else {
 		return Err(ParseError::ArgumentError(format!(
 			"Please define some action to do"

@@ -1385,7 +1385,7 @@ pub enum SwapSubcommand {
 	Autoswap,
 	Adjust,
 	Dump,
-	Terminate,
+	StopAllAutoSwap,
 }
 
 /// Arguments for the swap command
@@ -1873,12 +1873,6 @@ where
 					.name("wallet-auto-swap".to_string())
 					.spawn(move || {
 						loop {
-							// check if the thread is asked to stop
-							if cli_mode && stop_thread_clone.load(Ordering::Relaxed) {
-								println!("Auto swap thread is now terminated. You can continue with the swap manually by entering individual commands.");
-								break;
-							};
-
 							// we can't exit by error from the loop.
 							let (
 								mut curr_state,
@@ -1969,10 +1963,24 @@ where
 								prev_action = curr_action;
 							}
 
-							if was_executed {
-								thread::sleep(Duration::from_millis(10000));
+							let seconds_to_sleep = if was_executed {
+								10
 							} else {
-								thread::sleep(Duration::from_millis(60000));
+								60
+							};
+
+							let mut exited = false;
+							for _i in 0..seconds_to_sleep {
+								// check if the thread is asked to stop
+								if stop_thread_clone.load(Ordering::Relaxed) {
+									println!("Auto swap for trade {} is stopped. You can continue with the swap manually by entering individual commands.", swap_id2);
+									exited = true;
+									break;
+								};
+								thread::sleep(Duration::from_millis(1000));
+							}
+							if exited {
+								break;
 							}
 						}
 					});
@@ -1992,10 +2000,10 @@ where
 			})?;
 			Ok(())
 		}
-		SwapSubcommand::Terminate => {
+		SwapSubcommand::StopAllAutoSwap => {
 			let mut answer = String::new();
 			let input = io::stdin();
-			println!("This command is going to terminate the ongoing auto-swap threads. You can continue with the swap manually by entering commands step by step after the termination.");
+			println!("This command is going to stop all the ongoing auto-swap threads. You can continue with the swap manually by entering commands step by step.");
 			println!("Do you want to continue? Please answer Yes/No");
 			input.read_line(&mut answer).map_err(|e| {
 				ErrorKind::LibWallet(format!(
@@ -2004,11 +2012,10 @@ where
 				))
 			})?;
 
-			if answer.trim() == "Yes" {
-				println!("Terminating..... It might take up to one minute for the thread to come to the full stop.");
+			if answer.trim().to_lowercase().starts_with("y") {
+				println!("Stopping.....");
 				stop_thread.swap(true, Ordering::Relaxed);
 			}
-
 			Ok(())
 		}
 		SwapSubcommand::Dump => {

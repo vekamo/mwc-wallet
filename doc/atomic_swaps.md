@@ -264,10 +264,10 @@ Command 'swap' completed successfully
 # Discontinuing Auto-Swap
 To stop auto-swap, do:
 ```asm
-mwc-wallet> swap --terminate_auto_swap
-This command is going to terminate the ongoing auto-swap threads. You can continue with the swap manually by entering commands step by step after the termination.
+mwc-wallet> swap --stop_auto_swap
+This command is going to stop all the ongoing auto-swap threads. You can continue with the swap manually by entering commands step by step.
 Do you want to continue? Please answer Yes/No
 Yes
-Terminating..... It might take up to one minute for the thread to come to the full stop.
+Stopping.....
 Command 'swap' completed
 ```

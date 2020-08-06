@@ -601,10 +601,10 @@ subcommands:
               - BuyerWaitingForRefundConfirmations
               - BuyerCancelledRefunded
               - BuyerCancelled
-        - terminate_auto_swap:
-            help: Stop the ongoing auto swap process
+        - stop_auto_swap:
+            help: Stop all the ongoing auto swap processes
             short: t
-            long: terminate_auto_swap
+            long: stop_auto_swap
             takes_value: false
         - swap_id:
             help: Id of swap trade. Required for some commands
