@@ -625,7 +625,9 @@ where
 			.into());
 		}
 
-		if orig_proof_info.receiver_address.public_key != p.receiver_address.public_key {
+		if orig_proof_info.receiver_address.public_key != p.receiver_address.public_key
+			&& orig_proof_info.receiver_address.public_key != p.sender_address.public_key
+		{
 			return Err(ErrorKind::PaymentProof(
 				"Recipient address on slate does not match original recipient address".to_owned(),
 			)
@@ -648,7 +650,7 @@ where
 			}
 		};
 		//verify the proof signature
-		if orig_proof_info.receiver_address.public_key.len() == 52 {
+		if p.receiver_address.public_key.len() == 52 {
 			let secp = Secp256k1::new();
 			let signature_ser = util::from_hex(&sig).map_err(|e| {
 				ErrorKind::TxProofGenericError(format!(
@@ -661,9 +663,9 @@ where
 			})?;
 			debug!(
 				"the receiver pubkey is {}",
-				orig_proof_info.receiver_address.clone().public_key
+				p.receiver_address.clone().public_key
 			);
-			let receiver_pubkey = orig_proof_info.receiver_address.public_key().map_err(|e| {
+			let receiver_pubkey = p.receiver_address.public_key().map_err(|e| {
 				ErrorKind::TxProofGenericError(format!("Unable to get receiver address, {}", e))
 			})?;
 			crypto::verify_signature(&msg, &signature, &receiver_pubkey)

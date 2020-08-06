@@ -19,12 +19,14 @@ use crate::grin_keychain::Keychain;
 use crate::grin_util::secp::key::SecretKey;
 use crate::grin_util::Mutex;
 use crate::internal::{tx, updater};
+use crate::proof::proofaddress::ProvableAddress;
 use crate::slate_versions::SlateVersion;
 use crate::{
 	address, BlockFees, CbData, Error, ErrorKind, NodeClient, Slate, TxLogEntryType, VersionInfo,
 	WalletBackend, WalletInst, WalletLCProvider,
 };
 use grin_core::core::amount_to_hr_string;
+use grin_wallet_util::OnionV3Address;
 use std::sync::Arc;
 use std::sync::RwLock;
 use strum::IntoEnumIterator;
@@ -201,6 +203,17 @@ where
 	let excess = ret_slate.calc_excess(&keychain)?;
 
 	if let Some(ref mut p) = ret_slate.payment_proof {
+		if p.sender_address
+			.public_key
+			.eq(&p.receiver_address.public_key)
+		{
+			debug!("file proof, replace the receiver address with its address");
+			let sec_key =
+				address::address_from_derivation_path(&keychain, &parent_key_id, address_index)?;
+			let onion_address = OnionV3Address::from_private(&sec_key.0)?;
+			let dalek_pubkey = onion_address.to_ov3_str();
+			p.receiver_address = ProvableAddress::from_str(&dalek_pubkey)?;
+		}
 		let sig = tx::create_payment_proof_signature(
 			ret_slate.amount,
 			&excess,

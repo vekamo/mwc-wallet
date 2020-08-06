@@ -403,12 +403,24 @@ where
 	// TODO: Note we only use single derivation path for now,
 	// probably want to allow sender to specify which one
 	let deriv_path = 0u32;
+	let k = w.keychain(keychain_mask)?;
+	let sender_a = proofaddress::payment_proof_address(&k, &parent_key_id, deriv_path)?;
+
+	if let Some(a) = args.address {
+		if a.eq("file_proof") {
+			debug!("doing file proof");
+			//in file proof, we are putting the same address both both sender_address and receiver_address
+			slate.payment_proof = Some(PaymentInfo {
+				sender_address: sender_a.clone(),
+				receiver_address: sender_a.clone(),
+				receiver_signature: None,
+			});
+
+			context.payment_proof_derivation_index = Some(deriv_path);
+		}
+	}
 
 	if let Some(a) = args.payment_proof_recipient_address {
-		let k = w.keychain(keychain_mask)?;
-
-		let sender_a = proofaddress::payment_proof_address(&k, &parent_key_id, deriv_path)?;
-
 		slate.payment_proof = Some(PaymentInfo {
 			sender_address: sender_a,
 			receiver_address: a,
