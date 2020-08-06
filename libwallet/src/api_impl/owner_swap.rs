@@ -113,7 +113,7 @@ where
 		let swap_reserved_amount_str =
 			grin_core::core::amount_to_hr_string(swap_reserved_amount, true);
 		info!("Running swaps reserved {} coins", swap_reserved_amount);
-		println!("WARNING. Running Swap trades are reserved {} MWC. If you don't have anough amount for trading, please finish or cancel them.", swap_reserved_amount_str);
+		println!("WARNING. Running Swap trades are reserved {} MWC. If you don't have enough amount for trading, please finish or cancel them.", swap_reserved_amount_str);
 	}
 
 	let outputs: Vec<&str> = outs.keys().map(AsRef::as_ref).collect();

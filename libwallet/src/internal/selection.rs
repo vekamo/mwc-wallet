@@ -543,9 +543,9 @@ where
 		if total < amount_with_fee {
 			return Err(ErrorKind::NotEnoughFunds {
 				available: total as u64,
-				available_disp: amount_to_hr_string(total, false),
+				available_disp: amount_to_hr_string(total, true),
 				needed: amount_with_fee as u64,
-				needed_disp: amount_to_hr_string(amount_with_fee as u64, false),
+				needed_disp: amount_to_hr_string(amount_with_fee as u64, true),
 			})?;
 		}
 	}
