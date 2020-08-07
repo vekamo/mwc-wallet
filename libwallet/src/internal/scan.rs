@@ -69,6 +69,30 @@ pub struct OutputResult {
 	pub is_coinbase: bool,
 }
 
+impl OutputResult {
+	/// Compare parameters.
+	pub fn params_equal_to(&self, output: &OutputData) -> bool {
+		// Skipping commit because caller does selection by that
+		// mmr index excluded because it serve mostly flag purpose
+		self.key_id == output.key_id
+			&& self.n_child == output.n_child
+			&& self.value == output.value
+			&& self.height == output.height
+			&& self.lock_height == output.lock_height
+			&& self.is_coinbase == output.is_coinbase
+	}
+
+	/// Copy self params into output
+	pub fn params_push_to(&self, output: &mut OutputData) {
+		output.key_id = self.key_id.clone();
+		output.n_child = self.n_child;
+		output.value = self.value;
+		output.height = self.height;
+		output.lock_height = self.lock_height;
+		output.is_coinbase = self.is_coinbase;
+	}
+}
+
 #[derive(Debug, Clone)]
 /// Collect stats in case we want to just output a single tx log entry
 /// for restored non-coinbase outputs
@@ -369,32 +393,6 @@ impl WalletTxInfo {
 			}
 		}
 	}
-
-	// return true if output was added. false - output already exist
-	pub fn add_output(
-		&mut self,
-		input_commits: &mut HashSet<String>,
-		output_commits: &mut HashSet<String>,
-		commit: &String,
-	) {
-		if self.tx_log.tx_type == TxLogEntryType::TxSent
-			|| self.tx_log.tx_type == TxLogEntryType::TxSentCancelled
-		{
-			if self.tx_log.is_cancelled() || !input_commits.contains(commit) {
-				self.input_commit.insert(commit.clone());
-				if !self.tx_log.is_cancelled() {
-					input_commits.insert(commit.clone());
-				}
-			}
-		} else {
-			if self.tx_log.is_cancelled() || !output_commits.contains(commit) {
-				self.output_commit.insert(commit.clone());
-				if !self.tx_log.is_cancelled() {
-					output_commits.insert(commit.clone());
-				}
-			}
-		}
-	}
 }
 
 // Getting: - transactions from wallet,
@@ -501,55 +499,6 @@ where
 		output_commits.extend(wtx.output_commit.iter().map(|s| s.clone()));
 
 		transactions.insert(wtx.tx_uuid.clone(), wtx);
-	}
-
-	// Legacy restored transactions/Coinbases might not have any mapping. We can map them by height.
-	// Better than nothing
-	// Key: height + parent_key_id
-	let height_to_orphan_txuuid: HashMap<String, String> = transactions
-		.values()
-		.filter(|t| {
-			t.output_commit.is_empty() && t.input_commit.is_empty() && t.tx_log.output_height > 0
-		})
-		.map(|t| {
-			(
-				format!(
-					"{}/{}",
-					t.tx_log.output_height,
-					t.tx_log.parent_key_id.to_hex()
-				),
-				t.tx_uuid.clone(),
-			)
-		})
-		.collect();
-
-	// Apply Output to transaction mapping from Outputs
-	// Normally Outputs suppose to have transaction Id.
-	for w_out in outputs.values_mut() {
-		if let Some(tx_id) = w_out.output.tx_log_entry {
-			let tx_id = format!("{}/{}", tx_id, w_out.output.root_key_id.to_hex());
-			if let Some(tx_uuid) = transactions_id2uuid.get_mut(&tx_id) {
-				// tx_log_entry is not reliable source. Using it only if transaction doesn't have any info
-				let tx = transactions.get_mut(tx_uuid).unwrap();
-				if tx.output_commit.is_empty() && tx.input_commit.is_empty() {
-					tx.add_output(&mut input_commits, &mut output_commits, &w_out.commit);
-				}
-			}
-		}
-
-		// Covering legacy coinbase and legacy recovery
-		let height_id = format!(
-			"{}/{}",
-			w_out.output.height,
-			w_out.output.root_key_id.to_hex()
-		);
-		if let Some(tx_uuid) = height_to_orphan_txuuid.get(&height_id) {
-			transactions.get_mut(tx_uuid).unwrap().add_output(
-				&mut input_commits,
-				&mut output_commits,
-				&w_out.commit,
-			);
-		}
 	}
 
 	// Propagate tx to output mapping to outputs
@@ -913,7 +862,7 @@ where
 		}
 	}
 
-	// Now let's process inputs from trsnacaction that change it's status from confirmed to non confirmed
+	// Now let's process inputs from transaction that change it's status from confirmed to non confirmed
 	// the issue that some Spent can be exist on the chain and they must be turn to Locked for now
 	let mut commits: HashSet<String> = HashSet::new();
 
@@ -1017,7 +966,7 @@ where
 
 	// Validated outputs states against the chain
 	let mut found_parents: HashMap<Identifier, u32> = HashMap::new();
-	validate_outputs(
+	let outputs2del = validate_outputs(
 		wallet_inst.clone(),
 		keychain_mask.clone(),
 		start_height,
@@ -1044,7 +993,7 @@ where
 
 	// Let's check the consistency. Report is we found any discrepency, so users can do the check or restore.
 	{
-		validate_consistancy(&mut outputs, &mut transactions, status_send_channel);
+		validate_consistancy(&mut outputs, &mut transactions);
 	}
 
 	// Here we are done with all state changes of Outputs and transactions. Now we need to save them at the DB
@@ -1085,6 +1034,7 @@ where
 		store_transactions_outputs(
 			wallet_inst.clone(),
 			keychain_mask.clone(),
+			&outputs2del,
 			&mut outputs,
 			tip_height,
 			&last_output,
@@ -1150,6 +1100,9 @@ where
 }
 
 // Validated outputs states against the chain
+// Returns Output that need to be deleted. It is possible because
+// We might find that Key Id is broken and Outputs are stored by this key_id.
+// That is why we need to delete prev copy.
 fn validate_outputs<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
@@ -1159,7 +1112,7 @@ fn validate_outputs<'a, L, C, K>(
 	transaction: &HashMap<String, WalletTxInfo>,
 	status_send_channel: &Option<Sender<StatusMessage>>,
 	found_parents: &mut HashMap<Identifier, u32>,
-) -> Result<(), Error>
+) -> Result<Vec<OutputData>, Error>
 where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
@@ -1172,6 +1125,8 @@ where
 		}
 	}
 
+	let mut outputs2del: Vec<OutputData> = Vec::new();
+
 	// Update wallet outputs with found at the chain outputs
 	// Check how sync they are
 	for ch_out in chain_outs {
@@ -1183,16 +1138,13 @@ where
 				// It is mean that w_out does exist at the chain (confirmed) and doing well
 				w_out.at_chain = true;
 
-				// Updating mmr Index for output. It can be changed because of reorg
-				// It is normal routine event, no need to notify the user.
-				if w_out.output.height != ch_out.height {
-					w_out.output.height = ch_out.height;
-					w_out.updated = true;
-				}
-
-				// Value can be broken because of bugs. Even we fix the bugs, it is better to do the best with scan
-				if w_out.output.value != ch_out.value {
-					w_out.output.value = ch_out.value;
+				// Sync up the data. ch_out is source of truth
+				if !ch_out.params_equal_to(&w_out.output) {
+					// Some parameters can be updated. ch_out is source if truth
+					if ch_out.key_id != w_out.output.key_id {
+						outputs2del.push(w_out.output.clone());
+					}
+					ch_out.params_push_to(&mut w_out.output);
 					w_out.updated = true;
 				}
 
@@ -1226,7 +1178,7 @@ where
 				};
 			}
 			None => {
-				// Spotted unknow output. Probably another copy of wallet send it or it is a backup data?
+				// Spotted unknown output. Probably another copy of wallet send it or it is a backup data?
 				// In any case it is pretty nice output that we can spend.
 				// Just create a new transaction for this output.
 				if let Some(ref s) = status_send_channel {
@@ -1280,7 +1232,7 @@ where
 		}
 	}
 
-	Ok(())
+	Ok(outputs2del)
 }
 
 // Processing slate based transactions. Just need to update 'confirmed flag' and height
@@ -1563,16 +1515,12 @@ fn delete_unconfirmed(
 	}
 }
 
-// consistency checking. Report is we found any discrepency, so users can do the check or restore.
+// consistency checking. Report is we found any discrepancy, so users can do the check or restore.
 // Here not much what we can do because full node scan or restore from the seed is required.
 fn validate_consistancy(
 	outputs: &mut HashMap<String, WalletOutputInfo>,
 	transactions: &mut HashMap<String, WalletTxInfo>,
-	status_send_channel: &Option<Sender<StatusMessage>>,
 ) {
-	let mut collision_transactions: HashSet<String> = HashSet::new();
-	let mut collision_commits: HashSet<String> = HashSet::new();
-
 	for tx_info in transactions.values_mut() {
 		if tx_info.tx_log.is_cancelled() {
 			continue;
@@ -1583,10 +1531,6 @@ fn validate_consistancy(
 			// Inputs can't be spendable
 			for out in &tx_info.input_commit {
 				if let Some(out) = outputs.get_mut(out) {
-					if out.output.is_spendable() {
-						collision_transactions.insert(tx_info.tx_uuid.clone());
-						collision_commits.insert(out.commit.clone());
-					}
 					if out.output.status == OutputStatus::Unconfirmed {
 						out.output.status = OutputStatus::Spent;
 						out.updated = true;
@@ -1607,10 +1551,6 @@ fn validate_consistancy(
 			// Output can't be valid.
 			for out in &tx_info.output_commit {
 				if let Some(out) = outputs.get_mut(out) {
-					if out.output.is_spendable() {
-						collision_transactions.insert(tx_info.tx_uuid.clone());
-						collision_commits.insert(out.commit.clone());
-					}
 					if out.output.status == OutputStatus::Spent {
 						out.output.status = OutputStatus::Unconfirmed;
 						out.updated = true;
@@ -1619,30 +1559,13 @@ fn validate_consistancy(
 			}
 		}
 	}
-
-	if !(collision_transactions.is_empty() || collision_commits.is_empty()) {
-		if let Some(ref s) = status_send_channel {
-			let transactions_str = collision_transactions
-				.iter()
-				.map(|s| String::from(s.split('/').next().unwrap_or("????")))
-				.collect::<Vec<String>>()
-				.join(", ");
-			let outputs_str = collision_commits
-				.iter()
-				.map(|s| s.clone())
-				.collect::<Vec<String>>()
-				.join(", ");
-			let _ = s.send(StatusMessage::Warning(
-				format!( "Wallet transaction/outputs state is inconsistent, please consider to run full scan for your wallet or restore it from the seed. Collided transaction: {}, outputs: {}",
-						 transactions_str, outputs_str )));
-		}
-	}
 }
 
 // Apply last data updates and saving the data into DB.
 fn store_transactions_outputs<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
+	outputs2del: &Vec<OutputData>,
 	outputs: &mut HashMap<String, WalletOutputInfo>,
 	tip_height: u64, // tip
 	last_output: &String,
@@ -1664,6 +1587,10 @@ where
 		}
 	}
 
+	for o2d in outputs2del {
+		batch.delete(&o2d.key_id, &o2d.mmr_index)?;
+	}
+
 	// Save Slate Outputs to DB
 	for output in outputs.values() {
 		if output.updated {
@@ -1677,7 +1604,7 @@ where
 		{
 			if let Some(ref s) = status_send_channel {
 				let _ = s.send(StatusMessage::Warning(format!(
-					"Deleting unconfirmed Output without any transaction. Commit: {}",
+					"Deleting unconfirmed Output not mapped to any transaction. Commit: {}",
 					output
 						.output
 						.commit
