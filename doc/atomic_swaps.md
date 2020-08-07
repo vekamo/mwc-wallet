@@ -4,14 +4,14 @@ As of mwc-wallet 3.2.2, atomic swaps are supported by mwc-wallet. This feature w
 any Secondary currency from supported currency list. Swap trade workflow is controlled by the wallet and can be run in 
 manual or automatic mode. 
 
-This document explain how Atomic Swaps can be done in automatic mode. Please note, there is also manual mode that allow 
-to run swap trade step by step and use files for message exchanges. 
+This document explains how Atomic Swaps can be done in automatic mode. Please note, there is also a manual mode that allows 
+the user to run a swap trade step by step and use files for message exchanges. 
 
 We strongly recommend use automatic mode for the normal usage.
 
 # Configuration #
 
-The configuration include some parameter in the mwc-wallet.toml.  Every secondary supported currency will require 
+The configuration includes some parameters in the mwc-wallet.toml.  Every secondary supported currency will require 
 it's own node to monitor the blockchain and process transactions with a secondary currency. Default values point to the 
 community node, you can install your ouwn to get more security. 
 
