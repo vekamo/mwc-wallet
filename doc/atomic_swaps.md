@@ -22,17 +22,17 @@ electrum_node_addr = "52.23.248.83:8000"
 
 # Atomic swap workflow #
 
-First Seller (person who sell MWC coins) and Buyer (person who buy MWC coins) need to contact with each other, define the
-exchange rate, amounts of the coins to exchange. Exchange with wallet addresses (atomic swaps can use mwcmqs or tor for 
+First, the Seller (the person who is selling MWC coins) and the Buyer (the person who is buying  MWC coins) need to contact each other to define the
+exchange rate and amounts of coins to exchange. They will also need to exchange wallet addresses (atomic swaps can use mwcmqs or tor for 
 communications). 
 
-* Atomic swap is started by the Seller (person who want to sell MWC coins and buy some other coins). Seller should specify 
-the swap trade parameters and Buyer destination address. Seller can use `swap_start` command to create a swap trade.
-Please note, this command will not start atomic swap trade.
+The Atomic swap is started by the Seller (the person who want to sell MWC coins and buy some other type of coin). The seller should specify 
+the swap trade parameters and Buyer destination address. The seller can use the `swap_start` command to create a swap trade.
+Please note, this command will not start the atomic swap trade.
 
-This example creates the atomic swap trade where 5.6 MWC tarded to 0.087 BTC. MWC transactions will require 500 confirmations,
-BTC transactions will require 6 confirmations. Time interval required for emessage exchange and redeem are 1 hour (60 minutes).
-BTC redeem address is n4GUrta1qhA1Zgy4DUkmDgxULtJKjDhEc6. Seller will lock the funds first.
+This example creates an atomic swap trade where 5.6 MWC traded to 0.087 BTC. MWC transactions will require 500 confirmations, and
+BTC transactions will require 6 confirmations. The time interval required for the message exchange and redeem are 1 hour (60 minutes).
+The BTC redeem address is n4GUrta1qhA1Zgy4DUkmDgxULtJKjDhEc6. The seller will lock the funds first.
 
 ```
 $ mwc-wallet cli
@@ -110,7 +110,7 @@ Swap Trade 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5: Offer message was sent
 Swap Trade 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5: Waiting for Accept Offer message
 ```
 
-* Buyer waiting for the message that swap offer is received. The offer Swap Id will be printed.
+* Buyer is waiting for the message that swap offer has been received. The offer Swap Id will be printed.
 ```
 You get an offer to swap BTC to MWC. SwapID is 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5
 ```
@@ -189,9 +189,9 @@ Swap Trade 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5: Response to offer message was s
 Swap Trade 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5: Seller locking funds, waiting for 1 MWC lock confirmations, has 0
 ```
 
-* Seller should get a message that swap is accepted and automactic mode will process to the next steps. At this moment 
-Seller need to keep wallet running until trade will be finished. There is no need to be around, swap for Seller will go 
-in automatic mode. If Buyer didn't act in reasonable and timely manner, the swap trade will be cancelled and refunded automatically.
+* The seller should get a message that the swap has been accepted and automactic mode will process the next steps. At this moment 
+the seller needs to keep the wallet running until the trade has finished. There is no need to be around, the swap for the seller will continue 
+in automatic mode. If the buyer didn't act in a reasonable and timely manner, the swap trade will be cancelled and refunded automatically.
 
 ```
 Processed Offer Accept message
@@ -199,8 +199,8 @@ Swap Trade 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5: MWC lock slate is posted
 Swap Trade 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5: MWC Lock transaction, waiting for 500 MWC lock confirmations, has 0
 ```
 
-* Buyer will need to wait until he will need to deposit Secondary (for example BTC) coins to a multisig lock account. 
-In a few minutes after starting the trade, Buyer should see a message `Please deposit exactly XXXXXX BTC at <address>`
+* The buyer will need to wait until they need to deposit Secondary (for example BTC) coins to a multisig lock account. 
+A few minutes after starting the trade, the buyer should see a message `Please deposit exactly XXXXXX BTC at <address>`
  
 ```
 Swap Trade 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5: Please deposit exactly 0.087 BTC at 2N4YMbGBzP39WjhJMEFtrMhCxLz8iifcepW
@@ -209,16 +209,16 @@ Swap Trade 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5: Please deposit exactly 0.087 BT
 * Buyer should post the funds to that address. Please specify enough transaction fees. Transation must be mined before 
 expiration time. 
 
-* At this moment Buyer need to keep wallet running until trade will be finished. There is no need to be around, swap will
- go in automatic mode. If Seller didn't act in reasonable and timely manner, the swap trade will be cancelled and refunded automatically.
+* At this moment Buyer needs to keep the wallet running until the trade will be finished. There is no need to be around, the swap will
+ continue in automatic mode. If the seller didn't act in a reasonable and timely manner, the swap trade will be cancelled and refunded automatically.
 
 
 # Cancellation #
 
-The swap trade can be cancelled at the starting stage, until Buyer posted a redeem transaction. Depend on the stage of this transaction,
-the waiting for refund might be required.
+The swap trade can be cancelled at the starting stage, until the buyer has posted a redeem transaction. Depending on the stage of this transaction,
+waiting for refund might be required.
 
-In this example Buyer didn't lock any funds yet, so his trade is cancelled immediately. 
+In this example buyer didn't lock any funds yet, so his trade is cancelled immediately. 
 ```
 mwc-wallet> swap --adjust cancel  -i 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5
 Swap trade 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5 was successfully adjusted. New state: Buyer swap was cancelled, nothing was locked, no need to refund
