@@ -219,7 +219,7 @@ impl HttpDataSender {
 			&self.tor_config_dir, MAIN_SEPARATOR, TOR_CONFIG_PATH
 		);
 		warn!(
-			"Starting TOR Process for send at {:?}",
+			"Starting Tor Process for send at {:?}",
 			self.socks_proxy_addr
 		);
 		tor_config::output_tor_sender_config(
@@ -231,7 +231,7 @@ impl HttpDataSender {
 				))?
 				.to_string(),
 		)
-		.map_err(|e| ErrorKind::TorConfig(format!("Failed to config tor, {}", e)))?;
+		.map_err(|e| ErrorKind::TorConfig(format!("Failed to config Tor, {}", e)))?;
 		// Start TOR process
 		let tor_cmd = format!("{}/torrc", &tor_dir);
 		tor.torrc_path(&tor_cmd)
@@ -240,7 +240,7 @@ impl HttpDataSender {
 			.completion_percent(100)
 			.launch()
 			.map_err(|e| {
-				ErrorKind::TorProcess(format!("Unable to start tor process {}, {:?}", tor_cmd, e))
+				ErrorKind::TorProcess(format!("Unable to start Tor process {}, {:?}", tor_cmd, e))
 			})?;
 
 		Ok(tor)
@@ -273,7 +273,7 @@ impl HttpDataSender {
 					))?
 					.to_string(),
 			)
-			.map_err(|e| ErrorKind::TorConfig(format!("Failed to config tor, {}", e)))?;
+			.map_err(|e| ErrorKind::TorConfig(format!("Failed to config Tor, {}", e)))?;
 			// Start TOR process
 			let tor_cmd = format!("{}/torrc", &tor_dir);
 			tor.torrc_path(&tor_cmd)
@@ -283,7 +283,7 @@ impl HttpDataSender {
 				.launch()
 				.map_err(|e| {
 					ErrorKind::TorProcess(format!(
-						"Unable to start tor process {}, {:?}",
+						"Unable to start Tor process {}, {:?}",
 						tor_cmd, e
 					))
 				})?;
@@ -398,7 +398,7 @@ impl SwapMessageSender for HttpDataSender {
 		let (url_str, _tor) = self.set_up_tor_send_process()?;
 		let message_ser = &serde_json::to_string(&swap_message).map_err(|e| {
 			ErrorKind::SwapMessageGenericError(format!(
-				"Failed to convert swap message to json in preparation for tor request, {}",
+				"Failed to convert swap message to json in preparation for Tor request, {}",
 				e
 			))
 		})?;

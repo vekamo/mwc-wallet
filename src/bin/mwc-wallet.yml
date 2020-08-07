@@ -73,7 +73,7 @@ subcommands:
             default_value: http
             takes_value: true
         - no_tor:
-            help: Don't start TOR listener when starting HTTP listener
+            help: Don't start Tor listener when starting HTTP listener
             short: n
             long: no_tor
             takes_value: false
@@ -154,15 +154,15 @@ subcommands:
             long: apisecret
             takes_value: true
         - request_payment_proof:
-            help: Request a payment proof from the recipient. If sending to a tor address, the address will be filled automatically.
+            help: Request a payment proof from the recipient. If sending to a Tor address, the address will be filled automatically.
             short: y
             long: request_payment_proof
         - proof:
-            help: Request a payment proof from the recipient. If sending to a tor address, the address will be filled automatically.
+            help: Request a payment proof from the recipient. If sending to a Tor address, the address will be filled automatically.
             short: pf
             long: proof
         - proof_address:
-            help: Recipient proof address. If not using TOR, must be provided seprarately by the recipient
+            help: Recipient proof address. If not using Tor, must be provided seprarately by the recipient
             short: z
             long: proof_address
             takes_value: true
@@ -627,7 +627,7 @@ subcommands:
             long: dest
             takes_value: true
         - apisecret:
-            help: swapping counterpart apisecret. Applicable to tor address only. Default is none
+            help: swapping counterpart apisecret. Applicable to Tor address only. Default is none
             short: s
             long: apisecret
             takes_value: true
@@ -644,7 +644,7 @@ subcommands:
             long: buyer_refund_address
             takes_value: true
         - start_listener:
-            help: Only needed if in CLI mode doing auto swap and the method is TOR or MWCMQS. Please specify false if listener was started in previous auto swap in the same CLI session.
+            help: Only needed if in CLI mode doing auto swap and the method is Tor or mwcmqs. Please specify false if listener was started in previous auto swap in the same CLI session.
             long: start_listener
             takes_value: false
 
