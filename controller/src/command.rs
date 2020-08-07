@@ -331,6 +331,7 @@ pub struct SendArgs {
 	pub ttl_blocks: Option<u64>,
 	pub exclude_change_outputs: bool,
 	pub minimum_confirmations_change_outputs: u64,
+	pub address: Option<String>, //this is only for file proof.
 }
 
 pub fn send<L, C, K>(
@@ -362,6 +363,7 @@ where
 					estimate_only: Some(true),
 					exclude_change_outputs: Some(args.exclude_change_outputs),
 					minimum_confirmations_change_outputs: args.minimum_confirmations_change_outputs,
+					address: args.address.clone(),
 					..Default::default()
 				};
 				let slate = api.init_send_tx(m, init_args, None, 1)?;
@@ -379,6 +381,7 @@ where
 				message: args.message.clone(),
 				target_slate_version: args.target_slate_version,
 				payment_proof_recipient_address: args.payment_proof_address.clone(),
+				address: args.address.clone(),
 				ttl_blocks: args.ttl_blocks,
 				send_args: None,
 				exclude_change_outputs: Some(args.exclude_change_outputs),

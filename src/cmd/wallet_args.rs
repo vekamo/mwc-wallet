@@ -59,6 +59,7 @@ macro_rules! arg_parse {
 /// Simple error definition, just so we can return errors from all commands
 /// and let the caller figure out what to do
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
+
 pub enum ParseError {
 	#[fail(display = "Invalid Arguments: {}", _0)]
 	ArgumentError(String),
@@ -451,6 +452,15 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 
 	// method
 	let method = parse_required(args, "method")?;
+	let address = {
+		if method == "file" && args.is_present("proof") {
+			Some("file_proof".to_owned())
+		} else if method == "file" {
+			Some("file".to_owned())
+		} else {
+			None.to_owned()
+		}
+	};
 
 	// dest
 	let dest = {
@@ -508,7 +518,9 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 	};
 
 	let payment_proof_address = {
-		match args.is_present("request_payment_proof") || args.is_present("proof") {
+		match args.is_present("request_payment_proof")
+			|| (args.is_present("proof") && method != "file")
+		{
 			true => {
 				// if the destination address is a TOR address, we don't need the address
 				// separately
@@ -564,6 +576,7 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 			target_slate_version: target_slate_version,
 			exclude_change_outputs: exclude_change_outputs,
 			minimum_confirmations_change_outputs: minimum_confirmations_change_outputs,
+			address: address,
 		})
 	}
 }
