@@ -113,12 +113,12 @@ where
 		let swap_reserved_amount_str =
 			grin_core::core::amount_to_hr_string(swap_reserved_amount, true);
 		info!("Running swaps reserved {} coins", swap_reserved_amount);
-		println!("WARNING. Running Swap trades are reserved {} MWC. If you don't have enough amount for trading, please finish or cancel them.", swap_reserved_amount_str);
+		println!("WARNING. This swap will need to reserve {} MWC. If you don't have enough funds, please cancel it.", swap_reserved_amount_str);
 	}
 
 	let outputs: Vec<&str> = outs.keys().map(AsRef::as_ref).collect();
-
 	let secondary_currency = Currency::try_from(params.secondary_currency.as_str())?;
+
 	let mut swap_api = crate::swap::api::create_instance(&secondary_currency, node_client)?;
 
 	let parent_key_id = w.parent_key_id(); // account is current one
@@ -723,6 +723,7 @@ where
 				&offer_update.secondary_currency,
 				node_client.clone(),
 			)?;
+
 			// Creating Buyer context
 			let context = create_context(
 				&mut **w,
@@ -736,7 +737,6 @@ where
 			)?;
 
 			let (id, offer, secondary_update) = message.unwrap_offer()?;
-
 			let swap = BuyApi::accept_swap_offer(
 				&keychain,
 				&context,
@@ -747,7 +747,10 @@ where
 			)?;
 
 			trades::store_swap_trade(&context, &swap, &skey, &*lock)?;
-			println!("You get an offer to swap BTC to MWC. SwapID is {}", swap.id);
+			println!(
+				"You get an offer to swap {} to MWC. SwapID is {}",
+				swap.secondary_currency, swap.id
+			);
 			Some(Message::new(
 				id,
 				Update::MessageAcknowledge(1),

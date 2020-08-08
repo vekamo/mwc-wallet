@@ -34,26 +34,26 @@ pub const SWAP_DEAL_SAVE_DIR: &'static str = "saved_swap_deal";
 
 lazy_static! {
 	static ref TRADE_DEALS_PATH: RwLock<Option<PathBuf>> = RwLock::new(None);
-	static ref ELECTRUM_X_URI: RwLock<Option<String>> = RwLock::new(None);
+	static ref ELECTRUM_X_URI: RwLock<Option<HashMap<String, String>>> = RwLock::new(None);
 	// Locks for the swap reads. Note, all instances are in the memory, we don't expect too many of them
 	static ref SWAP_LOCKS: RwLock<HashMap< String, Arc<Mutex<()>>>> = RwLock::new(HashMap::new());
 }
 
 /// Init for file storage for saving swap deals
-pub fn init_swap_trade_backend(data_file_dir: &str, electrumx_uri: Option<String>) {
+pub fn init_swap_trade_backend(data_file_dir: &str, electrumx_uri: HashMap<String, String>) {
 	let stored_swap_deal_path = Path::new(data_file_dir).join(SWAP_DEAL_SAVE_DIR);
 	fs::create_dir_all(&stored_swap_deal_path)
 		.expect("Could not create swap deal storage directory!");
 
 	TRADE_DEALS_PATH.write().replace(stored_swap_deal_path);
 
-	if let Some(uri) = electrumx_uri {
-		ELECTRUM_X_URI.write().replace(uri);
+	if electrumx_uri.capacity() > 0 {
+		ELECTRUM_X_URI.write().replace(electrumx_uri);
 	}
 }
 
 /// Get ElextrumX URL.
-pub fn get_electrumx_uri() -> Option<String> {
+pub fn get_electrumx_uri() -> Option<HashMap<String, String>> {
 	ELECTRUM_X_URI.read().clone()
 }
 

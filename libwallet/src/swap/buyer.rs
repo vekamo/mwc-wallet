@@ -185,7 +185,8 @@ impl BuyApi {
 		}
 
 		// Checking Secondary data. Focus on timing issues
-		if offer.secondary_currency != Currency::Btc {
+		if offer.secondary_currency != Currency::Btc &&
+			offer.secondary_currency != Currency::Bch {
 			return Err(ErrorKind::InvalidMessageData(
 				"Unexpected currency value".to_string(),
 			));

@@ -488,8 +488,9 @@ subcommands:
             long: secondary_currency
             takes_value: true
             possible_values:
+              - bch
               - btc
-            default_value: btc
+            default_value: bch
         - secondary_amount:
             help: BTC amount excluding fees
             short: b

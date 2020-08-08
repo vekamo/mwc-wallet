@@ -17,6 +17,7 @@ use crate::util::secp::key::SecretKey;
 use crate::util::Mutex;
 use clap::App;
 //use colored::Colorize;
+use crate::cmd::wallet_args::get_supported_secondary_currency_node_addrs;
 use grin_wallet_api::Owner;
 use grin_wallet_config::{MQSConfig, TorConfig, WalletConfig};
 use grin_wallet_controller::command::GlobalArgs;
@@ -31,7 +32,7 @@ use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
 use rustyline::{CompletionType, Config, Context, EditMode, Editor, Helper, OutputStreamType};
 use std::borrow::Cow::{self, Borrowed, Owned};
-use std::sync::{ Arc, atomic::AtomicBool };
+use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
 
 const COLORED_PROMPT: &'static str = "\x1b[36mmwc-wallet>\x1b[0m ";
@@ -184,9 +185,11 @@ where
 
 								let wallet_inst = lc.wallet_inst()?;
 
+								let secondary_currency_node_addrs =
+									get_supported_secondary_currency_node_addrs(wallet_config)?;
 								grin_wallet_libwallet::swap::trades::init_swap_trade_backend(
 									wallet_inst.get_data_file_dir(),
-									wallet_config.electrum_node_addr.clone(),
+									secondary_currency_node_addrs,
 								);
 
 								if let Some(account) = args.value_of("account") {

@@ -1824,10 +1824,10 @@ where
 					if !swap.is_seller() {
 						match &args.buyer_refund_address {
 							Some(addr) => match swap.secondary_currency {
-								Currency::Btc => {
+								Currency::Btc | Currency::Bch => {
 									let _ = BitcoinAddress::from_str(&addr).map_err(|e| {
 										ErrorKind::GenericError(format!(
-											"Unable to parse BTC redeem address {}, {}",
+											"Unable to parse secondary currency redeem address {}, {}",
 											addr, e
 										))
 									})?;

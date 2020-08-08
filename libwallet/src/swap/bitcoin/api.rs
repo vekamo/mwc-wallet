@@ -319,7 +319,7 @@ where
 		secondary_currency: Currency,
 		_is_seller: bool,
 	) -> Result<usize, ErrorKind> {
-		if secondary_currency != Currency::Btc {
+		if secondary_currency != Currency::Btc && secondary_currency != Currency::Bch {
 			return Err(ErrorKind::UnexpectedCoinType);
 		}
 
@@ -335,7 +335,7 @@ where
 		change_amount: u64,
 		keys: Vec<Identifier>,
 	) -> Result<Context, ErrorKind> {
-		if secondary_currency != Currency::Btc {
+		if secondary_currency != Currency::Btc && secondary_currency != Currency::Bch {
 			return Err(ErrorKind::UnexpectedCoinType);
 		}
 
@@ -392,12 +392,12 @@ where
 		// Checking if address is valid
 		let _redeem_address = Address::from_str(&secondary_redeem_address).map_err(|e| {
 			ErrorKind::Generic(format!(
-				"Unable to parse BTC redeem address {}, {}",
+				"Unable to parse secondary currency redeem address {}, {}",
 				secondary_redeem_address, e
 			))
 		})?;
 
-		if secondary_currency != Currency::Btc {
+		if secondary_currency != Currency::Btc && secondary_currency != Currency::Bch {
 			return Err(ErrorKind::UnexpectedCoinType);
 		}
 
@@ -407,7 +407,7 @@ where
 			context,
 			primary_amount,
 			secondary_amount,
-			Currency::Btc,
+			secondary_currency,
 			secondary_redeem_address,
 			height,
 			seller_lock_first,

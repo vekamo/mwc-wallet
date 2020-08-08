@@ -185,10 +185,10 @@ impl SellApi {
 		let change = sum_in - primary_amount - lock_slate.fee;
 
 		match secondary_currency {
-			Currency::Btc => {
+			Currency::Btc | Currency::Bch => {
 				let _ = Address::from_str(&secondary_redeem_address).map_err(|e| {
 					ErrorKind::Generic(format!(
-						"Unable to parse BTC redeem address {}, {}",
+						"Unable to parse secondary currency redeem address {}, {}",
 						secondary_redeem_address, e
 					))
 				})?;

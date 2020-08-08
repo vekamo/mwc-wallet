@@ -76,25 +76,27 @@ pub enum Role {
 	Buyer,
 }
 
-/// Secondary currency that swap support
+/// Secondary currency that swap supports
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Currency {
 	/// Bitcoin Segwit
 	Btc,
+	/// Bitcoin Cash
+	Bch,
 }
 
 impl Currency {
 	/// Satoshi to 1 conversion
 	pub fn exponent(&self) -> usize {
 		match self {
-			Currency::Btc => 8,
+			Currency::Btc | Currency::Bch => 8,
 		}
 	}
 
 	/// Block period for this coin (seconds)
 	pub fn block_time_period_sec(&self) -> i64 {
 		match self {
-			Currency::Btc => 10 * 60,
+			Currency::Btc | Currency::Bch => 10 * 60,
 		}
 	}
 
@@ -149,6 +151,7 @@ impl fmt::Display for Currency {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let disp = match &self {
 			Currency::Btc => "BTC",
+			Currency::Bch => "BCH",
 		};
 		write!(f, "{}", disp)
 	}
@@ -160,6 +163,7 @@ impl TryFrom<&str> for Currency {
 	fn try_from(value: &str) -> Result<Self, Self::Error> {
 		match value.to_lowercase().as_str() {
 			"btc" => Ok(Currency::Btc),
+			"bch" => Ok(Currency::Bch),
 			_ => Err(ErrorKind::InvalidCurrency(value.to_string())),
 		}
 	}

@@ -65,8 +65,14 @@ pub struct WalletConfig {
 	pub keybase_notify_ttl: Option<u16>,
 	/// Wallet data directory. Default none is 'wallet_data'
 	pub wallet_data_dir: Option<String>,
-	/// Electrum node address
-	pub electrum_node_addr: Option<String>,
+	/// Electrum node for BCH mainnet address
+	pub electrumx_mainnet_bch_node_addr: Option<String>,
+	/// Electrum node for BCH testnet address
+	pub electrumx_testnet_bch_node_addr: Option<String>,
+	/// Electrum node for BTC mainnet address
+	pub electrumx_mainnet_btc_node_addr: Option<String>,
+	/// Electrum node for BTC testnet address
+	pub electrumx_testnet_btc_node_addr: Option<String>,
 }
 
 impl Default for WalletConfig {
@@ -90,7 +96,10 @@ impl Default for WalletConfig {
 			dark_background_color_scheme: Some(true),
 			keybase_notify_ttl: Some(1440),
 			wallet_data_dir: None,
-			electrum_node_addr: Some("52.23.248.83:8000".to_string()),
+			electrumx_mainnet_bch_node_addr: Some("52.23.248.83:8000".to_string()),
+			electrumx_testnet_bch_node_addr: Some("52.23.248.83:8000".to_string()),
+			electrumx_mainnet_btc_node_addr: Some("52.23.248.83:8000".to_string()),
+			electrumx_testnet_btc_node_addr: Some("52.23.248.83:8000".to_string()),
 		}
 	}
 }

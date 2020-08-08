@@ -42,6 +42,7 @@ use grin_wallet_util::grin_keychain as keychain;
 use linefeed::terminal::Signal;
 use linefeed::{Interface, ReadResult};
 use rpassword;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{atomic::AtomicBool, Arc};
 
@@ -941,6 +942,12 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<command::SwapStartArgs
 	let min_c = parse_u64(min_c, "minimum_confirmations")?;
 
 	let secondary_currency = parse_required(args, "secondary_currency")?;
+	let secondary_currency = secondary_currency.to_lowercase();
+	if secondary_currency == "btc" {
+		return Err(ParseError::ArgumentError(format!(
+			"BTC is not supported yet and will be in the near future. Please stay tuned."
+		)));
+	}
 
 	let btc_amount = parse_required(args, "secondary_amount")?;
 	let btc_amount = Currency::Btc.amount_from_hr_string(btc_amount);
@@ -1040,6 +1047,53 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 	})
 }
 
+pub fn get_supported_secondary_currency_node_addrs(
+	wallet_config: &WalletConfig,
+) -> Result<HashMap<String, String>, Error> {
+	let wallet_config = wallet_config.clone();
+	let mut node_addrs = HashMap::new();
+	match wallet_config.electrumx_mainnet_bch_node_addr {
+		None => {}
+		Some(bch_mainnet_node_addr) => {
+			node_addrs.insert(
+				"electrumx_mainnet_bch_node_addr".to_string(),
+				bch_mainnet_node_addr,
+			);
+		}
+	}
+
+	match wallet_config.electrumx_testnet_bch_node_addr {
+		None => {}
+		Some(bch_testnet_node_addr) => {
+			node_addrs.insert(
+				"electrumx_testnet_bch_node_addr".to_string(),
+				bch_testnet_node_addr,
+			);
+		}
+	}
+
+	match wallet_config.electrumx_mainnet_btc_node_addr {
+		None => {}
+		Some(btc_mainnet_node_addr) => {
+			node_addrs.insert(
+				"electrumx_mainnet_btc_node_addr".to_string(),
+				btc_mainnet_node_addr,
+			);
+		}
+	}
+
+	match wallet_config.electrumx_testnet_btc_node_addr {
+		None => {}
+		Some(btc_testnet_node_addr) => {
+			node_addrs.insert(
+				"electrumx_testnet_btc_node_addr".to_string(),
+				btc_testnet_node_addr,
+			);
+		}
+	}
+
+	Ok(node_addrs)
+}
 pub fn wallet_command<C, F>(
 	wallet_args: &ArgMatches,
 	mut wallet_config: WalletConfig,
@@ -1165,9 +1219,12 @@ where
 
 			let wallet_inst = lc.wallet_inst()?;
 
+			let secondary_currency_node_addrs =
+				get_supported_secondary_currency_node_addrs(&wallet_config)?;
+
 			grin_wallet_libwallet::swap::trades::init_swap_trade_backend(
 				wallet_inst.get_data_file_dir(),
-				wallet_config.electrum_node_addr.clone(),
+				secondary_currency_node_addrs,
 			);
 
 			if let Some(account) = wallet_args.value_of("account") {
