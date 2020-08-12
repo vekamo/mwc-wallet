@@ -521,12 +521,12 @@ subcommands:
             takes_value: true
             default_value: "3"
         - message_exchange_time:
-            help: How much time, in minutes, is reserved for every session of message exchange (Offer exchange and create redeem transaction sessions). Please reserve enough time, if you go over the time limit, your swap will automatically be cancelled.
+            help: How much time, in minutes, is reserved for every session of message exchange (Offer exchange and create redeem transaction sessions). Please reserve enough time. If you go over the time limit, your swap will automatically be cancelled.
             long: message_exchange_time
             takes_value: true
             default_value: "60"
         - redeem_time:
-            help: How much time, in minutes, is reserved for execution of redeem or refund transaction. Please reserve enough time for this operation, if you go over the time limit, your swap will automatically be cancelled.
+            help: How much time, in minutes, is reserved for execution of redeem or refund transaction. Please reserve enough time for this operation. If you go over the time limit, your swap will automatically be cancelled.
             long: redeem_time
             takes_value: true
             default_value: "60"
@@ -564,7 +564,7 @@ subcommands:
             long: dump
             takes_value: false
         - adjust:
-            help: Modify the swap trade workflow. Normally it is not needed. Sometimes you can use 'cancel'. We do not recommend adjusting unless you know ehat you are doing
+            help: Modify the swap trade workflow. You can use this to cancel a swap. For all other values, please only proceed if you know what you are doing!
             short: j
             long: adjust
             takes_value: true
@@ -628,7 +628,7 @@ subcommands:
             long: dest
             takes_value: true
         - apisecret:
-            help: swapping counterpart apisecret. Applicable to Tor address only. Default is none
+            help: Swapping counterpart apisecret. Applicable to Tor address only. Default is none.
             short: s
             long: apisecret
             takes_value: true
