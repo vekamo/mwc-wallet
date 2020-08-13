@@ -1337,7 +1337,7 @@ where
 		);
 		match result {
 			Ok(swap_id) => {
-				warn!("Seller Swap trade is created: {}", swap_id);
+				println!("Seller Swap trade is created: {}", swap_id);
 				Ok(())
 			}
 			Err(e) => {
