@@ -120,7 +120,8 @@ pub fn get_tor_address<L, C, K>(
 	let sec_key = address::address_from_derivation_path(&k, &parent_key_id, address_index).map_err(|e| {
 		ErrorKind::TorConfig(format!("Unable to build key for onion address, {}", e))
 	})?;
-	Ok(format!("{}", OnionV3Address::from_private(&sec_key.0).unwrap()))
+	let onion_addr = OnionV3Address::from_private(&sec_key.0).map_err(|e| ErrorKind::GenericError(format!("Unable to build Onion address, {}", e)))?;
+	Ok(format!("{}", onion_addr))
 }
 
 /// initiate the tor listener

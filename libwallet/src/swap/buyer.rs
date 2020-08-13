@@ -303,7 +303,10 @@ impl BuyApi {
 		swap.message(
 			Update::AcceptOffer(AcceptOfferUpdate {
 				multisig: swap.multisig.export()?,
-				redeem_public: swap.redeem_public.unwrap().clone(),
+				redeem_public: swap
+					.redeem_public
+					.clone()
+					.ok_or(ErrorKind::Generic("redeem_public is empty".to_string()))?,
 				lock_participant: swap.lock_slate.participant_data[id].clone(),
 				refund_participant: swap.refund_slate.participant_data[id].clone(),
 			}),

@@ -160,7 +160,7 @@ pub fn get_swap_trade(
 			format!("Unable to read data from {}, {}", path.to_str().unwrap(), e),
 		)
 	})?;
-	let enc_swap_content: EncryptedSwap = serde_json::from_str(&content).unwrap();
+	let enc_swap_content: EncryptedSwap = serde_json::from_str(&content)?;
 	let dec_swap_content = enc_swap_content.decrypt(&dec_key)?;
 
 	let mut split = dec_swap_content.split("<#>");
@@ -168,7 +168,7 @@ pub fn get_swap_trade(
 	let context_str = split.next();
 	let swap_str = split.next();
 
-	if context_str.is_none() || context_str.is_none() {
+	if context_str.is_none() || swap_str.is_none() {
 		return Err(ErrorKind::TradeIoError(
 			swap_id.to_string(),
 			"Not found all packages".to_string(),
@@ -239,7 +239,7 @@ pub fn store_swap_trade(
 			)
 		})?;
 		let res_str = context_ser + "<#>" + swap_ser.as_str();
-		let encrypted_swap = EncryptedSwap::from_json(&res_str, enc_key).unwrap();
+		let encrypted_swap = EncryptedSwap::from_json(&res_str, enc_key)?;
 		let enc_swap_ser = serde_json::to_string(&encrypted_swap).map_err(|e| {
 			ErrorKind::TradeEncDecError(format!("Unable to serialize encrypted swap, {}", e))
 		})?;
@@ -317,7 +317,7 @@ pub fn dump_swap_trade(
 			format!("Unable to read data from {}, {}", path.to_str().unwrap(), e),
 		)
 	})?;
-	let enc_swap_content: EncryptedSwap = serde_json::from_str(&content).unwrap();
+	let enc_swap_content: EncryptedSwap = serde_json::from_str(&content)?;
 	let dec_swap_content = enc_swap_content.decrypt(&dec_key)?;
 
 	Ok(dec_swap_content)
@@ -346,7 +346,8 @@ impl EncryptedSwap {
 			.to_vec();
 
 		let nonce: [u8; 12] = thread_rng().gen();
-		let unbound_key = aead::UnboundKey::new(&aead::AES_256_GCM, &enc_key.0).unwrap();
+		let unbound_key = aead::UnboundKey::new(&aead::AES_256_GCM, &enc_key.0)
+			.map_err(|e| ErrorKind::Generic(format!("Unable to build a key, {}", e)))?;
 		let sealing_key: aead::LessSafeKey = aead::LessSafeKey::new(unbound_key);
 		let aad = aead::Aad::from(&[]);
 		let res = sealing_key.seal_in_place_append_tag(
@@ -392,7 +393,8 @@ impl EncryptedSwap {
 
 		let mut n = [0u8; 12];
 		n.copy_from_slice(&nonce[0..12]);
-		let unbound_key = aead::UnboundKey::new(&aead::AES_256_GCM, &dec_key.0).unwrap();
+		let unbound_key = aead::UnboundKey::new(&aead::AES_256_GCM, &dec_key.0)
+			.map_err(|e| ErrorKind::Generic(format!("Unable to build a key, {}", e)))?;
 		let opening_key: aead::LessSafeKey = aead::LessSafeKey::new(unbound_key);
 		let aad = aead::Aad::from(&[]);
 

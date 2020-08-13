@@ -1591,7 +1591,11 @@ where
 								thread::sleep(Duration::from_millis(2000));
 							}
 							"tor" => {
-								let tor_config = tor_config.clone();
+								let tor_config = tor_config.clone().ok_or(
+									crate::libwallet::ErrorKind::GenericError(
+										"Tor configuration is not defined".to_string(),
+									),
+								)?;
 								let _api_thread = thread::Builder::new()
 									.name("wallet-http-listener".to_string())
 									.spawn(move || {
@@ -1600,7 +1604,7 @@ where
 											Arc::new(Mutex::new(km)),
 											&config2.api_listen_addr(),
 											g_args2.tls_conf.clone(),
-											tor_config.unwrap().use_tor_listener,
+											tor_config.use_tor_listener,
 											config2.grinbox_address_index(),
 										);
 										if let Err(e) = res {
@@ -1726,7 +1730,9 @@ where
 							}
 
 							// Starting tor
-							let tor_config = tor_config.clone();
+							let tor_config = tor_config.clone().ok_or(ErrorKind::GenericError(
+								"Tor configuration is not defined".to_string(),
+							))?;
 							let _api_thread = thread::Builder::new()
 								.name("wallet-http-listener".to_string())
 								.spawn(move || {
@@ -1735,7 +1741,7 @@ where
 										Arc::new(Mutex::new(km)),
 										&config2.api_listen_addr(),
 										g_args2.tls_conf.clone(),
-										tor_config.unwrap().use_tor_listener,
+										tor_config.use_tor_listener,
 										config2.grinbox_address_index(),
 									);
 									if let Err(e) = res {

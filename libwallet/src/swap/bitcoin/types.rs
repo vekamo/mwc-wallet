@@ -247,7 +247,10 @@ impl BtcData {
 			let hash = tx.signature_hash(idx, &input_script, 0x01);
 			let msg = Message::from_slice(hash.deref())?;
 
-			tx.input.get_mut(idx).unwrap().script_sig = self.redeem_script_sig(
+			tx.input
+				.get_mut(idx)
+				.ok_or(ErrorKind::Generic("Not found expected input".to_string()))?
+				.script_sig = self.redeem_script_sig(
 				secp,
 				input_script,
 				&secp.sign(&msg, cosign_secret)?,
@@ -332,8 +335,10 @@ impl BtcData {
 			let hash = tx.signature_hash(idx, input_script, 0x01);
 			let msg = Message::from_slice(hash.deref())?;
 
-			tx.input.get_mut(idx).unwrap().script_sig =
-				self.refund_script_sig(secp, &secp.sign(&msg, buyer_btc_secret)?, input_script)?;
+			tx.input
+				.get_mut(idx)
+				.ok_or(ErrorKind::Generic("Not found expected input".to_string()))?
+				.script_sig = self.refund_script_sig(secp, &secp.sign(&msg, buyer_btc_secret)?, input_script)?;
 		}
 
 		let mut cursor = Cursor::new(Vec::with_capacity(tx_size));
