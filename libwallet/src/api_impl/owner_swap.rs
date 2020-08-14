@@ -331,6 +331,30 @@ where
 	Ok(dump_res)
 }
 
+fn update_swap_status_action_impl<'a, C, K>(
+	swap: &mut Swap,
+	context: &Context,
+	node_client: C,
+	keychain: K,
+) -> Result<(StateId, Action, Option<i64>, Vec<StateEtaInfo>), Error>
+where
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
+{
+	let swap_api = crate::swap::api::create_instance(&swap.secondary_currency, node_client)?;
+	let mut fsm = swap_api.get_fsm(&keychain, swap);
+	let tx_conf = swap_api.request_tx_confirmations(&keychain, swap)?;
+	let resp = fsm.process(Input::Check, swap, &context, &tx_conf)?;
+	let eta = fsm.get_swap_roadmap(swap)?;
+
+	Ok((
+		resp.next_state_id,
+		resp.action.unwrap_or(Action::None),
+		resp.time_limit,
+		eta,
+	))
+}
+
 /// Refresh and get a status and current expected action for the swap.
 /// return: <state>, <Action>, <time limit>
 /// time limit shows when this action will be expired
@@ -362,22 +386,17 @@ where
 
 	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey, &*swap_lock)?;
 
-	let swap_api = crate::swap::api::create_instance(&swap.secondary_currency, node_client)?;
-	let mut fsm = swap_api.get_fsm(&keychain, &swap);
-	let tx_conf = swap_api.request_tx_confirmations(&keychain, &mut swap)?;
-	let resp = fsm.process(Input::Check, &mut swap, &context, &tx_conf)?;
-	let eta = fsm.get_swap_roadmap(&swap)?;
-
-	// Action might update the states. Need to save it
-	trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
-
-	Ok((
-		resp.next_state_id,
-		resp.action.unwrap_or(Action::None),
-		resp.time_limit,
-		eta,
-		swap.journal,
-	))
+	match update_swap_status_action_impl(&mut swap, &context, node_client, keychain) {
+		Ok((next_state_id, action, time_limit, eta)) => {
+			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+			Ok((next_state_id, action, time_limit, eta, swap.journal))
+		}
+		Err(e) => {
+			swap.add_journal_message(format!("Processing error: {}", e));
+			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+			Err(e)
+		}
+	}
 }
 
 /// Get a status of the transactions that involved into the swap.
@@ -406,13 +425,14 @@ where
 	Ok(res)
 }
 
-/// Process the action for the swap. Action has to match the expected one
-/// message_sender - method that can send the message to another party. Caller defines how it can be done
-/// Return: new State & Action
-pub fn swap_process<'a, L, C, K, F>(
+fn swap_process_impl<'a, L, C, K, F>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
-	swap_id: &str,
+	swap_lock: Arc<Mutex<()>>,
+	swap: &mut Swap,
+	context: &Context,
+	node_client: C,
+	keychain: K,
 	message_sender: F,
 	message_file_name: Option<String>,
 	buyer_refund_address: Option<String>,
@@ -424,32 +444,15 @@ where
 	K: Keychain + 'a,
 	F: FnOnce(Message) -> Result<bool, Error> + 'a,
 {
-	let (node_client, keychain, parent_key_id) = {
-		wallet_lock!(wallet_inst, w);
-		let node_client = w.w2n_client().clone();
-		let keychain = w.keychain(keychain_mask)?;
-		let parent_key_id = w.parent_key_id();
-		(node_client, keychain, parent_key_id)
-	};
-
-	let skey = get_swap_storage_key(&keychain)?;
-	let swap_lock = trades::get_swap_lock(&swap_id.to_string());
-	let _l = swap_lock.lock();
-
-	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey, &*swap_lock)?;
-
 	swap.secondary_fee = secondary_fee;
 
 	let swap_api =
 		crate::swap::api::create_instance(&swap.secondary_currency, node_client.clone())?;
 
-	let tx_conf = swap_api.request_tx_confirmations(&keychain, &swap)?;
-	let mut fsm = swap_api.get_fsm(&keychain, &swap);
+	let tx_conf = swap_api.request_tx_confirmations(&keychain, swap)?;
+	let mut fsm = swap_api.get_fsm(&keychain, swap);
 
-	let mut process_respond = fsm.process(Input::Check, &mut swap, &context, &tx_conf)?;
-
-	// Action might update the states. Need to save it
-	trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+	let mut process_respond = fsm.process(Input::Check, swap, &context, &tx_conf)?;
 
 	if process_respond.action.is_none() {
 		return Ok(process_respond);
@@ -461,7 +464,7 @@ where
 		| Action::BuyerSendInitRedeemMessage(message)
 		| Action::SellerSendRedeemMessage(message) => {
 			let has_ack = message_sender(message)?;
-			process_respond = fsm.process(Input::execute(), &mut swap, &context, &tx_conf)?;
+			process_respond = fsm.process(Input::execute(), swap, &context, &tx_conf)?;
 			if has_ack {
 				match process_respond.action.clone().unwrap() {
 					Action::SellerSendOfferMessage(_) | Action::BuyerSendAcceptOfferMessage(_) => {
@@ -470,7 +473,6 @@ where
 					_ => swap.ack_msg2(),
 				}
 			}
-			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 		}
 		Action::SellerWaitingForOfferMessage
 		| Action::SellerWaitingForInitRedeemMessage
@@ -524,7 +526,7 @@ where
 						None,
 						seller_context.change_amount,
 					)],
-					parent_key_id,
+					w.parent_key_id(),
 					0,
 				)?;
 				selection::lock_tx_context(
@@ -532,20 +534,17 @@ where
 					keychain_mask,
 					&swap.lock_slate,
 					&slate_context,
-					Some(format!("Swap {} Lock", swap_id)),
+					Some(format!("Swap {} Lock", swap.id)),
 				)?;
 			}
 
-			process_respond = fsm.process(Input::execute(), &mut swap, &context, &tx_conf)?;
-			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+			process_respond = fsm.process(Input::execute(), swap, &context, &tx_conf)?;
 		}
 		Action::SellerPublishTxSecondaryRedeem(_currency) => {
-			process_respond = fsm.process(Input::execute(), &mut swap, &context, &tx_conf)?;
-			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+			process_respond = fsm.process(Input::execute(), swap, &context, &tx_conf)?;
 		}
 		Action::BuyerPublishMwcRedeemTx => {
-			process_respond = fsm.process(Input::execute(), &mut swap, &context, &tx_conf)?;
-			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+			process_respond = fsm.process(Input::execute(), swap, &context, &tx_conf)?;
 
 			wallet_lock!(wallet_inst, w);
 
@@ -561,14 +560,13 @@ where
 					&mut **w,
 					keychain_mask,
 					&swap.redeem_slate,
-					format!("Swap {}", swap_id),
+					format!("Swap {}", swap.id),
 					&buyer_context.redeem,
 				)?;
 			}
 		}
 		Action::SellerPublishMwcRefundTx => {
-			process_respond = fsm.process(Input::execute(), &mut swap, &context, &tx_conf)?;
-			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+			process_respond = fsm.process(Input::execute(), swap, &context, &tx_conf)?;
 
 			wallet_lock!(wallet_inst, w);
 
@@ -583,7 +581,7 @@ where
 					&mut **w,
 					keychain_mask,
 					&swap.refund_slate,
-					format!("Swap {} Refund", swap_id),
+					format!("Swap {} Refund", swap.id),
 					&seller_context.refund_output,
 				)?;
 			}
@@ -601,16 +599,71 @@ where
 				Input::Execute {
 					refund_address: buyer_refund_address,
 				},
-				&mut swap,
+				swap,
 				&context,
 				&tx_conf,
 			)?;
-			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 		}
 		_ => (), // Nothing to do
 	}
 
 	Ok(process_respond)
+}
+
+/// Process the action for the swap. Action has to match the expected one
+/// message_sender - method that can send the message to another party. Caller defines how it can be done
+/// Return: new State & Action
+pub fn swap_process<'a, L, C, K, F>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
+	swap_id: &str,
+	message_sender: F,
+	message_file_name: Option<String>,
+	buyer_refund_address: Option<String>,
+	secondary_fee: Option<f32>,
+) -> Result<StateProcessRespond, Error>
+where
+	L: WalletLCProvider<'a, C, K>,
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
+	F: FnOnce(Message) -> Result<bool, Error> + 'a,
+{
+	let (node_client, keychain) = {
+		wallet_lock!(wallet_inst, w);
+		let node_client = w.w2n_client().clone();
+		let keychain = w.keychain(keychain_mask)?;
+		(node_client, keychain)
+	};
+
+	let skey = get_swap_storage_key(&keychain)?;
+	let swap_lock = trades::get_swap_lock(&swap_id.to_string());
+	let _l = swap_lock.lock();
+
+	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey, &*swap_lock)?;
+
+	match swap_process_impl(
+		wallet_inst,
+		keychain_mask,
+		swap_lock.clone(),
+		&mut swap,
+		&context,
+		node_client,
+		keychain,
+		message_sender,
+		message_file_name,
+		buyer_refund_address,
+		secondary_fee,
+	) {
+		Ok(respond) => {
+			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+			Ok(respond)
+		}
+		Err(e) => {
+			swap.add_journal_message(format!("Processing error: {}", e));
+			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+			Err(e)
+		}
+	}
 }
 
 // Creating Transaction and output for expected recieve slate
