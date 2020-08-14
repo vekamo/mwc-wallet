@@ -620,7 +620,6 @@ subcommands:
               - tor
               - file
               - mwcmqs
-            default_value: file
             takes_value: true
         - dest:
             help: destination to send swap file to (i.e. onion address or file location)

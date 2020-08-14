@@ -408,7 +408,7 @@ impl Client {
 					panic!(e)
 				}
 			}*/
-			handle.join().unwrap_or(Ok("???".to_string()))
+			handle.join().unwrap_or(Ok("Error in client sending request".to_string()))
 		})
 		.unwrap()
 	}

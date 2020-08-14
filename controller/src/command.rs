@@ -1556,7 +1556,9 @@ where
 					"Not found expected 'swap_id' argument".to_string(),
 				))?;
 
-				let method = args.method.clone().unwrap_or("file".to_string());
+				let method = args.method.clone().ok_or(ErrorKind::ArgumentError(
+					"Expected 'method' argument is missing.".to_string(),
+				))?;
 
 				// Creating message delivery transport as a closure
 				let destination = args.destination.clone();
@@ -1613,7 +1615,7 @@ where
 									});
 								thread::sleep(Duration::from_millis(2000));
 							}
-							_ => {
+							"file" => {
 								// File, let's process it here
 								let msg_str = swap_message.to_json()?;
 								let mut file = File::create(dest.clone())?;
@@ -1625,6 +1627,14 @@ where
 								})?;
 								println!("Message is written into the file {}", dest);
 								return Ok(true); // ack if true, because file is concidered as delivered
+							}
+							_ => {
+								error!("Please specify a method (mwcmqs, tor, or file) for transporting swap messages to the other party with whom you're doing the swap!");
+								return Err(crate::libwallet::Error::from(
+									crate::libwallet::ErrorKind::SwapError(
+										"Expected 'method' argument is not found".to_string(),
+									),
+								));
 							}
 						}
 
