@@ -536,10 +536,10 @@ impl fmt::Display for Action {
 			Action::None => "None".to_string(),
 			Action::SellerSendOfferMessage(_) => "Sending Offer message".to_string(),
 			Action::BuyerSendAcceptOfferMessage(_) => "Sending Accept Offer message".to_string(),
-			Action::SellerWaitingForOfferMessage => "Waiting for Accept Offer message".to_string(),
+			Action::SellerWaitingForOfferMessage => "Waiting for Accept Offer message, please make sure that your listener is running".to_string(),
 			Action::BuyerSendInitRedeemMessage(_) => "Sending Init Redeem Message".to_string(),
 			Action::SellerWaitingForInitRedeemMessage => {
-				"Waiting for Init Redeem Message".to_string()
+				"Waiting for Init Redeem Message, please make sure that your listener is running".to_string()
 			}
 			Action::SellerSendRedeemMessage(_) => "Sending Finalize Redeem Message".to_string(),
 			Action::BuyerWaitingForRedeemMessage => {

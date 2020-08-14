@@ -477,7 +477,7 @@ where
 		Action::SellerWaitingForOfferMessage
 		| Action::SellerWaitingForInitRedeemMessage
 		| Action::BuyerWaitingForRedeemMessage => {
-			let message_fn = message_file_name.ok_or(ErrorKind::Generic("Please define '--message_file_name' value if you you are processing income message from the file".to_string()))?;
+			let message_fn = message_file_name.ok_or(ErrorKind::Generic("Please run the appropriate listener to receive the messages. If you are using files for messages exchange, please specify income message file name with '--message_file_name' value".to_string()))?;
 
 			let mut file = File::open(message_fn.clone()).map_err(|e| {
 				ErrorKind::Generic(format!("Unable to open file {}, {}", message_fn, e))

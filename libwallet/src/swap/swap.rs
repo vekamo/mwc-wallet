@@ -294,7 +294,7 @@ impl Swap {
 			message: msg,
 		});
 		// We want to limit journal to 1000 items because of the performance.
-		while self.journal.len()>1000 {
+		while self.journal.len() > 1000 {
 			self.journal.remove(0);
 		}
 	}
