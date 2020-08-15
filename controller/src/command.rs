@@ -1556,11 +1556,8 @@ where
 					"Not found expected 'swap_id' argument".to_string(),
 				))?;
 
-				let method = args.method.clone().ok_or(ErrorKind::ArgumentError(
-					"Expected 'method' argument is missing.".to_string(),
-				))?;
-
 				// Creating message delivery transport as a closure
+				let method = args.method.clone();
 				let destination = args.destination.clone();
 				let apisecret = args.apisecret.clone();
 				let config2 = config.clone();
@@ -1570,6 +1567,10 @@ where
 					move |swap_message: Message| -> Result<(bool, String), crate::libwallet::Error> {
 						let dest = destination.ok_or(crate::libwallet::ErrorKind::SwapError(
 							"Expected 'destination' argument is not found".to_string(),
+						))?;
+
+						let method = method.ok_or(crate::libwallet::ErrorKind::SwapError(
+							"Expected 'method' argument is missing.".to_string(),
 						))?;
 
 						let destination_str = format!("{} {}", method, dest);
