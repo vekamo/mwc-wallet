@@ -1578,44 +1578,48 @@ where
 						// And there will be a single call only.
 						match method.as_str() {
 							"mwcmqs" => {
-								let _ = controller::init_start_mwcmqs_listener(
-									config2.clone(),
-									wallet_inst.clone(),
-									mqs_config.expect("No MQS config found!").clone(),
-									Arc::new(Mutex::new(km)),
-									false,
-									//None,
-								)
-								.map_err(|e| {
-									crate::libwallet::ErrorKind::SwapError(format!(
-										"Unable to start mwcmqs listener, {}",
-										e
-									))
-								})?;
-								thread::sleep(Duration::from_millis(2000));
+								if grin_wallet_impls::adapters::get_mwcmqs_brocker().is_none() {
+									let _ = controller::init_start_mwcmqs_listener(
+										config2.clone(),
+										wallet_inst.clone(),
+										mqs_config.expect("No MQS config found!").clone(),
+										Arc::new(Mutex::new(km)),
+										false,
+										//None,
+									)
+										.map_err(|e| {
+											crate::libwallet::ErrorKind::SwapError(format!(
+												"Unable to start mwcmqs listener, {}",
+												e
+											))
+										})?;
+									thread::sleep(Duration::from_millis(2000));
+								}
 							}
 							"tor" => {
-								let tor_config = tor_config.clone().ok_or(
-									crate::libwallet::ErrorKind::GenericError(
-										"Tor configuration is not defined".to_string(),
-									),
-								)?;
-								let _api_thread = thread::Builder::new()
-									.name("wallet-http-listener".to_string())
-									.spawn(move || {
-										let res = controller::foreign_listener(
-											wallet_inst,
-											Arc::new(Mutex::new(km)),
-											&config2.api_listen_addr(),
-											g_args2.tls_conf.clone(),
-											tor_config.use_tor_listener,
-											config2.grinbox_address_index(),
-										);
-										if let Err(e) = res {
-											error!("Error starting http listener: {}", e);
-										}
-									});
-								thread::sleep(Duration::from_millis(2000));
+								if !controller::is_foreign_api_running() {
+									let tor_config = tor_config.clone().ok_or(
+										crate::libwallet::ErrorKind::GenericError(
+											"Tor configuration is not defined".to_string(),
+										),
+									)?;
+									let _api_thread = thread::Builder::new()
+										.name("wallet-http-listener".to_string())
+										.spawn(move || {
+											let res = controller::foreign_listener(
+												wallet_inst,
+												Arc::new(Mutex::new(km)),
+												&config2.api_listen_addr(),
+												g_args2.tls_conf.clone(),
+												tor_config.use_tor_listener,
+												config2.grinbox_address_index(),
+											);
+											if let Err(e) = res {
+												error!("Error starting http listener: {}", e);
+											}
+										});
+									thread::sleep(Duration::from_millis(2000));
+								}
 							}
 							"file" => {
 								// File, let's process it here
