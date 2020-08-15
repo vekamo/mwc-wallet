@@ -442,7 +442,7 @@ where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
-	F: FnOnce(Message) -> Result<bool, Error> + 'a,
+	F: FnOnce(Message) -> Result<(bool, String), Error> + 'a,
 {
 	swap.secondary_fee = secondary_fee;
 
@@ -463,8 +463,9 @@ where
 		| Action::BuyerSendAcceptOfferMessage(message)
 		| Action::BuyerSendInitRedeemMessage(message)
 		| Action::SellerSendRedeemMessage(message) => {
-			let has_ack = message_sender(message)?;
-			process_respond = fsm.process(Input::execute(), swap, &context, &tx_conf)?;
+			let (has_ack, dest_str) = message_sender(message)?;
+			let process_respond = fsm.process(Input::execute(), swap, &context, &tx_conf)?;
+			swap.append_to_last_message(&format!(", {}", dest_str));
 			if has_ack {
 				match process_respond.action.clone().unwrap() {
 					Action::SellerSendOfferMessage(_) | Action::BuyerSendAcceptOfferMessage(_) => {
@@ -626,7 +627,7 @@ where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
-	F: FnOnce(Message) -> Result<bool, Error> + 'a,
+	F: FnOnce(Message) -> Result<(bool, String), Error> + 'a,
 {
 	let (node_client, keychain) = {
 		wallet_lock!(wallet_inst, w);

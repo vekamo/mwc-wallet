@@ -2448,7 +2448,7 @@ where
 		fee_satoshi_per_byte: Option<f32>,
 	) -> Result<StateProcessRespond, Error>
 	where
-		F: FnOnce(Message) -> Result<bool, crate::libwallet::Error> + 'static,
+		F: FnOnce(Message) -> Result<(bool, String), crate::libwallet::Error> + 'static,
 	{
 		owner_swap::swap_process(
 			self.wallet_inst.clone(),

@@ -1567,10 +1567,12 @@ where
 				let g_args2 = g_args.clone();
 				let swap_id2 = swap_id.clone();
 				let message_sender =
-					move |swap_message: Message| -> Result<bool, crate::libwallet::Error> {
+					move |swap_message: Message| -> Result<(bool, String), crate::libwallet::Error> {
 						let dest = destination.ok_or(crate::libwallet::ErrorKind::SwapError(
 							"Expected 'destination' argument is not found".to_string(),
 						))?;
+
+						let destination_str = format!("{} {}", method, dest);
 
 						// Starting the listener first. For this case we know that they are not started yet
 						// And there will be a single call only.
@@ -1626,7 +1628,7 @@ where
 									))
 								})?;
 								println!("Message is written into the file {}", dest);
-								return Ok(true); // ack if true, because file is concidered as delivered
+								return Ok((true, destination_str)); // ack if true, because file is concidered as delivered
 							}
 							_ => {
 								error!("Please specify a method (mwcmqs, tor, or file) for transporting swap messages to the other party with whom you're doing the swap!");
@@ -1665,7 +1667,7 @@ where
 									e
 								))
 							})?;
-						Ok(ack)
+						Ok((ack, destination_str))
 					};
 
 				let result = api.swap_process(
@@ -1805,7 +1807,7 @@ where
 				let apisecret = args.apisecret.clone();
 				let swap_id2 = swap_id.clone();
 				let message_sender =
-					move |swap_message: Message| -> Result<bool, crate::libwallet::Error> {
+					move |swap_message: Message| -> Result<(bool, String), crate::libwallet::Error> {
 						// File is processed, the online send will be handled here
 						let sender = create_swap_message_sender(
 							method.as_str(),
@@ -1825,7 +1827,7 @@ where
 								swap_id2, method, e
 							))
 						})?;
-						Ok(ack)
+						Ok((ack, format!("{} {}", method, destination)))
 					};
 
 				// Calling mostly for params and environment validation. Also it is a nice chance to print the status of the deal that will be started

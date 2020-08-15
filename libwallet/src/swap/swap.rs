@@ -299,6 +299,13 @@ impl Swap {
 		}
 	}
 
+	/// Append to the last message.
+	pub fn append_to_last_message(&mut self, msg: &String) {
+		if let Some(last) = self.journal.last_mut() {
+			last.message.push_str(msg.as_str());
+		}
+	}
+
 	// Time management functions
 
 	/// Trade starting time
