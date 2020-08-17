@@ -165,6 +165,8 @@ where
 		params.secondary_confirmations,
 		params.message_exchange_time_sec,
 		params.redeem_time_sec,
+		params.buyer_communication_method.clone(),
+		params.buyer_communication_address.clone(),
 	)?;
 
 	// Store swap result into the file.
@@ -256,11 +258,14 @@ where
 }
 
 /// Update the state of Swap trade. Returns the new state
+/// method & destination required for adjust_cmd='destination'
 pub fn swap_adjust<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	swap_id: &str,
 	adjust_cmd: &str,
+	method: Option<String>,
+	destination: Option<String>,
 ) -> Result<(StateId, Action), Error>
 where
 	L: WalletLCProvider<'a, C, K>,
@@ -280,35 +285,53 @@ where
 		crate::swap::api::create_instance(&swap.secondary_currency, node_client.clone())?;
 	let mut fsm = swap_api.get_fsm(&keychain, &swap);
 
-	if adjust_cmd == "cancel" {
-		if !fsm.is_cancellable(&swap)? {
-			return Err(ErrorKind::Generic(
-				"Swap Trade is not cancellable at current stage".to_string(),
-			)
-			.into());
+	match adjust_cmd {
+		"cancel" => {
+			if !fsm.is_cancellable(&swap)? {
+				return Err(ErrorKind::Generic(
+					"Swap Trade is not cancellable at current stage".to_string(),
+				)
+				.into());
+			}
+
+			// Cancelling the trade
+			let tx_conf = swap_api.request_tx_confirmations(&keychain, &swap)?;
+			let resp = fsm.process(Input::Cancel, &mut swap, &context, &tx_conf)?;
+			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+
+			return Ok((swap.state.clone(), resp.action.unwrap_or(Action::None)));
 		}
+		"destination" => {
+			if method.is_none() || destination.is_none() {
+				return Err(ErrorKind::Generic(
+					"Please define both '--method' and '--dest' values".to_string(),
+				)
+				.into());
+			}
+			swap.communication_method = method.unwrap();
+			swap.communication_address = destination.unwrap();
+			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 
-		// Cancelling the trade
-		let tx_conf = swap_api.request_tx_confirmations(&keychain, &swap)?;
-		let resp = fsm.process(Input::Cancel, &mut swap, &context, &tx_conf)?;
-		trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+			return Ok((swap.state.clone(), Action::None));
+		}
+		adjusted_state => {
+			let state = StateId::from_cmd_str(adjusted_state)?;
+			if !fsm.has_state(&state) {
+				return Err(ErrorKind::Generic(format!(
+					"State {} is invalid for this trade",
+					adjusted_state
+				))
+				.into());
+			}
+			swap.state = state;
 
-		return Ok((swap.state.clone(), resp.action.unwrap_or(Action::None)));
+			let tx_conf = swap_api.request_tx_confirmations(&keychain, &swap)?;
+			let resp = fsm.process(Input::Check, &mut swap, &context, &tx_conf)?;
+			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+
+			return Ok((swap.state.clone(), resp.action.unwrap_or(Action::None)));
+		}
 	}
-
-	let state = StateId::from_cmd_str(adjust_cmd)?;
-	if !fsm.has_state(&state) {
-		return Err(
-			ErrorKind::Generic(format!("State {} is invalid for this trade", adjust_cmd)).into(),
-		);
-	}
-	swap.state = state;
-
-	let tx_conf = swap_api.request_tx_confirmations(&keychain, &swap)?;
-	let resp = fsm.process(Input::Check, &mut swap, &context, &tx_conf)?;
-	trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
-
-	return Ok((swap.state.clone(), resp.action.unwrap_or(Action::None)));
 }
 
 /// Dump the swap file content
@@ -442,7 +465,7 @@ where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
-	F: FnOnce(Message) -> Result<(bool, String), Error> + 'a,
+	F: FnOnce(Message, String, String) -> Result<(bool, String), Error> + 'a,
 {
 	swap.secondary_fee = secondary_fee;
 
@@ -463,7 +486,11 @@ where
 		| Action::BuyerSendAcceptOfferMessage(message)
 		| Action::BuyerSendInitRedeemMessage(message)
 		| Action::SellerSendRedeemMessage(message) => {
-			let (has_ack, dest_str) = message_sender(message)?;
+			let (has_ack, dest_str) = message_sender(
+				message,
+				swap.communication_method.clone(),
+				swap.communication_address.clone(),
+			)?;
 			let process_respond = fsm.process(Input::execute(), swap, &context, &tx_conf)?;
 			swap.append_to_last_message(&format!(", {}", dest_str));
 			if has_ack {
@@ -627,7 +654,7 @@ where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
-	F: FnOnce(Message) -> Result<(bool, String), Error> + 'a,
+	F: FnOnce(Message, String, String) -> Result<(bool, String), Error> + 'a,
 {
 	let (node_client, keychain) = {
 		wallet_lock!(wallet_inst, w);

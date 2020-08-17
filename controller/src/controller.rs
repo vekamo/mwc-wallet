@@ -61,6 +61,8 @@ lazy_static! {
 
 	static ref FOREIGN_API_RUNNING: RwLock<bool> = RwLock::new(false);
 	static ref OWNER_API_RUNNING: RwLock<bool> = RwLock::new(false);
+	// Current address that is tor is listening on
+	static ref TOR_ONION_ADDRESS: RwLock<Option<String>> = RwLock::new(None);
 }
 
 pub fn is_foreign_api_running() -> bool {
@@ -69,6 +71,10 @@ pub fn is_foreign_api_running() -> bool {
 
 pub fn is_owner_api_running() -> bool {
 	*OWNER_API_RUNNING.read().unwrap()
+}
+
+pub fn get_current_tor_address() -> Option<String> {
+	(*TOR_ONION_ADDRESS.read().unwrap()).clone()
 }
 
 // This function has to use libwallet errots because of callback and runs on libwallet side
@@ -174,6 +180,9 @@ pub fn init_tor_listener<L, C, K>(
 		.map_err(|e| {
 			ErrorKind::TorProcess(format!("Unable to start tor at {}, {}", tor_path, e).into())
 		})?;
+
+	TOR_ONION_ADDRESS.write().unwrap().replace( format!("{}", onion_address) );
+
 	Ok(process)
 }
 

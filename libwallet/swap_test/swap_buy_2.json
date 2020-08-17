@@ -4,6 +4,8 @@
   "version": 1,
   "network": "Floonet",
   "role": "Buyer",
+  "communication_method": "file",
+  "communication_address": "Fix me",
   "seller_lock_first": false,
   "started": "2019-09-04T21:22:32Z",
   "state": "BuyerWaitingForRespondRedeemMessage",

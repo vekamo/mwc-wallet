@@ -250,6 +250,11 @@ impl Publisher for MWCMQPublisher {
 			.post_take(message, &to_address, &self.address, &self.secret_key)?;
 		Ok(())
 	}
+
+	// Address of this publisher (from address)
+	fn get_publisher_address(&self) -> Result<Box<dyn Address>, Error> {
+		Ok(Box::new(self.address.clone()))
+	}
 }
 
 #[derive(Clone)]
@@ -327,9 +332,6 @@ struct MWCMQSBroker {
 	pub mwcmqs_port: u16,
 	pub print_to_log: bool,
 	pub handler: Arc<Mutex<Box<dyn SubscriptionHandler + Send>>>,
-	pub mwc_node_uri: Option<String>,
-	pub mwc_api_secret: Option<String>,
-	pub electrum_node_uri: Option<String>,
 }
 
 impl MWCMQSBroker {
@@ -345,9 +347,6 @@ impl MWCMQSBroker {
 			mwcmqs_port,
 			print_to_log,
 			handler: Arc::new(Mutex::new(handler)),
-			mwc_node_uri: None,
-			mwc_api_secret: None,
-			electrum_node_uri: None,
 		}
 	}
 

@@ -31,6 +31,8 @@ pub trait Publisher {
 		source_address: &ProvableAddress,
 	) -> Result<String, Error>;
 	fn post_take(&self, message: &Message, to: &dyn Address) -> Result<(), Error>;
+	// Address of this publisher (from address)
+	fn get_publisher_address(&self) -> Result<Box<dyn Address>, Error>;
 }
 
 pub trait Subscriber {

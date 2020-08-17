@@ -388,6 +388,8 @@ where
 		secondary_confirmations: u64,
 		message_exchange_time_sec: u64,
 		redeem_time_sec: u64,
+		communication_method: String,
+		buyer_destination_address: String,
 	) -> Result<Swap, ErrorKind> {
 		// Checking if address is valid
 		let _redeem_address = Address::from_str(&secondary_redeem_address).map_err(|e| {
@@ -415,6 +417,8 @@ where
 			secondary_confirmations,
 			message_exchange_time_sec,
 			redeem_time_sec,
+			communication_method,
+			buyer_destination_address,
 		)?;
 
 		let btc_data = BtcData::new(keychain, context.unwrap_seller()?.unwrap_btc()?)?;

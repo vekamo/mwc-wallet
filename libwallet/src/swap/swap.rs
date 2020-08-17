@@ -61,6 +61,10 @@ pub struct Swap {
 	pub network: Network,
 	/// Role of the party (Byer or Seller)
 	pub role: Role,
+	/// Method how we are sending message to other party
+	pub communication_method: String,
+	/// destination address of the other party
+	pub communication_address: String,
 	/// Flag that specify the Locking fund order (Will wait for the fact that transaction is publishing, not for all confirmations).
 	///    true: Seller lock MWC first, then Buyer BTC.
 	///    false: Buyer lock BTC first, then Seller does lock.

@@ -2385,18 +2385,23 @@ where
 		owner_swap::swap_get(self.wallet_inst.clone(), keychain_mask, &swap_id)
 	}
 
-	/// Adjust the sate of swap trade
+	/// Adjust the sate of swap trade.
+	/// method & destination required for adjust_cmd='destination'
 	pub fn swap_adjust(
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		swap_id: String,
 		adjust_cmd: String,
+		method: Option<String>,
+		destination: Option<String>,
 	) -> Result<(StateId, Action), Error> {
 		owner_swap::swap_adjust(
 			self.wallet_inst.clone(),
 			keychain_mask,
 			&swap_id,
 			&adjust_cmd,
+			method,
+			destination,
 		)
 	}
 
@@ -2448,7 +2453,8 @@ where
 		fee_satoshi_per_byte: Option<f32>,
 	) -> Result<StateProcessRespond, Error>
 	where
-		F: FnOnce(Message) -> Result<(bool, String), crate::libwallet::Error> + 'static,
+		F: FnOnce(Message, String, String) -> Result<(bool, String), crate::libwallet::Error>
+			+ 'static,
 	{
 		owner_swap::swap_process(
 			self.wallet_inst.clone(),

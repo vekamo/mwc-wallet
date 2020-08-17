@@ -473,7 +473,7 @@ subcommands:
       args:
         - mwc_amount:
             help: MWC amount to trade
-            short: m
+            short: w
             long: mwc_amount
             takes_value: true
         - minimum_confirmations:
@@ -530,6 +530,20 @@ subcommands:
             long: redeem_time
             takes_value: true
             default_value: "60"
+        - method:
+            help: Method for sending the message to the Buyer
+            short: m
+            long: method
+            possible_values:
+               - tor
+               - file
+               - mwcmqs
+            takes_value: true
+        - dest:
+            help: destination to send swap file to (i.e. onion address or file location)
+            short: d
+            long: dest
+            takes_value: true
   - swap:
       about: Trade MWC with another currency (BTC) via atomic swap
       args:
@@ -570,6 +584,7 @@ subcommands:
             takes_value: true
             possible_values:
               - cancel
+              - destination
               - SellerOfferCreated
               - SellerSendingOffer
               - SellerWaitingForAcceptanceMessage

@@ -441,6 +441,8 @@ mod tests {
 				3,
 				3600,
 				3600,
+				"file".to_string(),
+				"/tmp/del.me".to_string(),
 			)
 			.unwrap();
 		let mut fsm_sell = api_sell.get_fsm(&kc_sell, &swap);
@@ -512,6 +514,8 @@ mod tests {
 				6,
 				3600,
 				3600,
+				"file".to_string(),
+				"/tmp/del.me".to_string(),
 			)
 			.unwrap();
 
@@ -1564,6 +1568,8 @@ mod tests {
 					BTC_CONFIRMATION,
 					MSG_EXCHANGE_TIME as u64,
 					REDEEM_TIME as u64,
+					"file".to_string(),
+					"/tmp/del.me".to_string(),
 				)
 				.unwrap();
 			let fsm_sell = api_sell.get_fsm(&kc_sell, &swap_sell);

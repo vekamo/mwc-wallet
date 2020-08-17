@@ -734,6 +734,18 @@ pub fn swap_trade(
 	} else {
 		println!("    {} Lock expired", swap.secondary_currency);
 	}
+	println!("");
+	if swap.is_seller() {
+		println!(
+			"    Buyer address: {}, {}",
+			swap.communication_method, swap.communication_address
+		);
+	} else {
+		println!(
+			"    Seller address: {}, {}",
+			swap.communication_method, swap.communication_address
+		);
+	}
 
 	let expired_str = swap::left_from_time_limit(time_limit);
 	let action_str = if expired_str.is_empty() {

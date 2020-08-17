@@ -65,6 +65,8 @@ pub trait SwapApi<K: Keychain>: Sync + Send {
 		secondary_confirmations: u64,
 		message_exchange_time_sec: u64,
 		redeem_time_sec: u64,
+		communication_method: String,
+		buyer_destination_address: String,
 	) -> Result<Swap, ErrorKind>;
 
 	/// get state machine fro this trade.
