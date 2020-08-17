@@ -1396,13 +1396,9 @@ where
 			//let a = arg_parse!(parse_export_proof_args(&args));
 			//command::proof_export(owner_api, km, a)
 		}
-		("verify_proof", Some(_args)) => {
-			return Err(ErrorKind::ArgumentError(
-				"Command verify_proof is not implemented yet".to_string(),
-			)
-			.into());
-			//let a = arg_parse!(parse_verify_proof_args(&args));
-			//command::proof_verify(owner_api, km, a)
+		("verify_proof", Some(args)) => {
+			let a = arg_parse!(parse_verify_proof_args(&args));
+			command::proof_verify(owner_api, km, a)
 		}
 		("address", Some(_)) => command::address(owner_api, &global_wallet_args, km),
 		("scan", Some(args)) => {

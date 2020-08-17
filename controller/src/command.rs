@@ -22,9 +22,7 @@ use crate::error::{Error, ErrorKind};
 use crate::impls::{create_sender, SlateGetter as _};
 use crate::impls::{PathToSlate, SlatePutter};
 use crate::keychain;
-use crate::libwallet::{
-	InitTxArgs, IssueInvoiceTxArgs, NodeClient, PaymentProof, WalletLCProvider,
-};
+use crate::libwallet::{InitTxArgs, IssueInvoiceTxArgs, NodeClient, WalletLCProvider};
 use crate::util::secp::key::SecretKey;
 use crate::util::{Mutex, ZeroingString};
 use crate::{controller, display};
@@ -33,18 +31,22 @@ use grin_wallet_impls::adapters::{create_swap_message_sender, validate_tor_addre
 use grin_wallet_impls::{Address, MWCMQSAddress, Publisher};
 use grin_wallet_libwallet::api_impl::owner_swap;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
-use grin_wallet_libwallet::swap::message;
-use grin_wallet_libwallet::swap::types::Action;
-use grin_wallet_libwallet::{Slate, TxLogEntry, WalletInst};
+use grin_wallet_libwallet::proof::tx_proof::TxProof;
+use grin_wallet_libwallet::swap::message::Message;
+use grin_wallet_libwallet::swap::types::Currency;
+use grin_wallet_libwallet::BitcoinAddress;
+use grin_wallet_libwallet::{Slate, TxLogEntry};
 use serde_json as json;
 use serde_json::json;
 use std::fs::File;
 use std::io;
 use std::io::{Read, Write};
+use std::path::Path;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
+use std::{env, thread};
 use uuid::Uuid;
 
 lazy_static! {
@@ -1130,6 +1132,7 @@ where
 		// Just address at derivation index 0 for now
 		let pub_key = api.get_public_proof_address(m, 0)?;
 		let addr = ProvableAddress::from_pub_key(&pub_key);
+
 		println!();
 		println!("Address for account - {}", g_args.account);
 		println!("-------------------------------------");
@@ -1204,8 +1207,8 @@ pub struct ProofVerifyArgs {
 }
 
 pub fn proof_verify<L, C, K>(
-	owner_api: &mut Owner<L, C, K>,
-	keychain_mask: Option<&SecretKey>,
+	_owner_api: &mut Owner<L, C, K>,
+	_keychain_mask: Option<&SecretKey>,
 	args: ProofVerifyArgs,
 ) -> Result<(), Error>
 where
@@ -1213,55 +1216,88 @@ where
 	C: NodeClient + 'static,
 	K: keychain::Keychain + 'static,
 {
-	controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, m| {
-		let mut proof_f = match File::open(&args.input_file) {
-			Ok(p) => p,
-			Err(e) => {
-				let msg = format!(
-					"Unable to open payment proof file at {}: {}",
-					args.input_file, e
-				);
-				error!("{}", msg);
-				return Err(ErrorKind::LibWallet(msg).into());
-			}
-		};
-		let mut proof = String::new();
-		proof_f
-			.read_to_string(&mut proof)
-			.map_err(|e| ErrorKind::LibWallet(format!("Unable to read proof data, {}", e)))?;
-		// read
-		let proof: PaymentProof = match json::from_str(&proof) {
-			Ok(p) => p,
-			Err(e) => {
-				let msg = format!("{}", e);
-				error!("Unable to parse payment proof file: {}", e);
-				return Err(ErrorKind::LibWallet(msg).into());
-			}
-		};
-		let result = api.verify_payment_proof(m, &proof);
-		match result {
-			Ok((iam_sender, iam_recipient)) => {
-				println!("Payment proof's signatures are valid.");
-				if iam_sender {
-					println!("The proof's sender address belongs to this wallet.");
-				}
-				if iam_recipient {
-					println!("The proof's recipient address belongs to this wallet.");
-				}
-				if !iam_recipient && !iam_sender {
-					println!(
-						"Neither the proof's sender nor recipient address belongs to this wallet."
-					);
-				}
-				Ok(())
-			}
-			Err(e) => {
-				error!("Proof not valid: {}", e);
-				Err(ErrorKind::LibWallet(format!("Proof not valid: {}", e)).into())
-			}
+	//	controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, m| {
+	//		let mut proof_f = match File::open(&args.input_file) {
+	//			Ok(p) => p,
+	//			Err(e) => {
+	//				let msg = format!(
+	//					"Unable to open payment proof file at {}: {}",
+	//					args.input_file, e
+	//				);
+	//				error!("{}", msg);
+	//				return Err(ErrorKind::LibWallet(msg).into());
+	//			}
+	//		};
+	//		let mut proof = String::new();
+	//		proof_f
+	//			.read_to_string(&mut proof)
+	//			.map_err(|e| ErrorKind::LibWallet(format!("Unable to read proof data, {}", e)))?;
+	//		// read
+	//		let proof: PaymentProof = match json::from_str(&proof) {
+	//			Ok(p) => p,
+	//			Err(e) => {
+	//				let msg = format!("{}", e);
+	//				error!("Unable to parse payment proof file: {}", e);
+	//				return Err(ErrorKind::LibWallet(msg).into());
+	//			}
+	//		};
+	//		let result = api.verify_payment_proof(m, &proof);
+	//		match result {
+	//			Ok((iam_sender, iam_recipient)) => {
+	//				println!("Payment proof's signatures are valid.");
+	//				if iam_sender {
+	//					println!("The proof's sender address belongs to this wallet.");
+	//				}
+	//				if iam_recipient {
+	//					println!("The proof's recipient address belongs to this wallet.");
+	//				}
+	//				if !iam_recipient && !iam_sender {
+	//					println!(
+	//						"Neither the proof's sender nor recipient address belongs to this wallet."
+	//					);
+	//				}
+	//				Ok(())
+	//			}
+	//			Err(e) => {
+	//				error!("Proof not valid: {}", e);
+	//				Err(ErrorKind::LibWallet(format!("Proof not valid: {}", e)).into())
+	//			}
+	//		}
+	//	})?;
+	//	Ok(())
+
+	//read the file.
+
+	let input = &args.input_file;
+	let home_dir = std::env::current_exe()
+		.unwrap()
+		.map_err(|e| ErrorKind::LibWallet(format!("Unable to get home dir, {}", e)))?;
+	let path = Path::new(&input.replace("~", &home_dir)).to_path_buf();
+	if !path.exists() {
+		let msg = format!("Unable to open payment proof file at {}", args.input_file);
+		error!("{}", msg);
+		return Err(ErrorKind::LibWallet(msg).into());
+	}
+	let mut file = File::open(path)
+		.map_err(|e| ErrorKind::LibWallet(format!("Unable to open proof data, {}", e)))?;
+	let mut proof = String::new();
+	file.read_to_string(&mut proof)
+		.map_err(|e| ErrorKind::LibWallet(format!("Unable to read proof data, {}", e)))?;
+	let tx_pf: TxProof = serde_json::from_str(&proof)
+		.map_err(|e| ErrorKind::LibWallet(format!("Unable to deserialize proof data, {}", e)))?;
+
+	match grin_wallet_libwallet::proof::tx_proof::verify_tx_proof_wrapper(&tx_pf) {
+		Ok((sender, receiver, amount, outputs, kernel)) => {
+			grin_wallet_libwallet::proof::tx_proof::proof_ok(
+				sender, receiver, amount, outputs, kernel,
+			);
+			Ok(())
 		}
-	})?;
-	Ok(())
+		Err(e) => {
+			error!("Unable to verify proof. {}", e);
+			Err(ErrorKind::LibWallet(format!("Proof not valid: {}", e)).into())
+		}
+	}
 }
 
 pub fn dump_wallet_data<L, C, K>(

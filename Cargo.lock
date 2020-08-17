@@ -1447,6 +1447,7 @@ dependencies = [
  "blake2-rfc",
  "byteorder",
  "chrono",
+ "colored",
  "data-encoding",
  "digest 0.7.6",
  "ed25519-dalek",

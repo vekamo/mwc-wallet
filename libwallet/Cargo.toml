@@ -37,6 +37,7 @@ ripemd160 = "0.7"
 signature = "1.1.0"
 hex = "0.3"
 base64 = "0.9"
+colored ="1.6"
 bitcoin = { version = "0.19", git = "https://github.com/mwcproject/rust-bitcoin", branch = "zkp", features = ["bitcoinconsensus"] }
 bitcoin_hashes = { version = "0.7", features = ["serde"] }
 serial_test = "0.4.0"

@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate colored;
 use crate::grin_util as util;
-use crate::grin_util::secp::key::SecretKey;
+use crate::grin_util::secp::key::{PublicKey, SecretKey};
 use crate::grin_util::secp::pedersen::Commitment;
-use crate::grin_util::secp::Secp256k1;
-use crate::grin_util::secp::Signature;
+use crate::grin_util::secp::{pedersen, ContextFlag, Secp256k1, Signature};
+use crate::proof::crypto::Hex;
 
 use super::crypto;
 use super::message::EncryptedMessage;
@@ -33,10 +34,16 @@ use std::path::Path;
 use std::{fs, path};
 use util::Mutex;
 
+use colored::*;
+use grin_core::core::amount_to_hr_string;
+use grin_core::global;
+use std::collections::HashSet;
+
 /// Dir name with proof files
 pub const TX_PROOF_SAVE_DIR: &'static str = "saved_proofs";
 
 lazy_static! {
+
 	/// Global proof in memory storage.
 	static ref SLATE_PROOFS: Mutex< HashMap<uuid::Uuid, TxProof> > = Mutex::new(HashMap::new());
 }
@@ -488,4 +495,198 @@ impl TxProof {
 		stored_tx.sync_all()?;
 		Ok(())
 	}
+}
+
+///support mwc713 payment proof message
+pub fn proof_ok(
+	sender: Option<String>,
+	receiver: String,
+	amount: u64,
+	outputs: Vec<String>,
+	kernel: String,
+) {
+	let sender_message = sender
+		.as_ref()
+		.map(|s| format!(" from [{}]", s.bright_green()))
+		.unwrap_or(String::new());
+
+	let tor_sender_message = sender
+		.as_ref()
+		.map(|s| {
+			format!(
+				" from [{}{}{}]",
+				"http://".bright_green(),
+				s.bright_green(),
+				".onion".bright_green()
+			)
+		})
+		.unwrap_or(String::new());
+
+	if receiver.len() == 56 {
+		println!(
+			"this file proves that [{}] MWCs was sent to [{}]{}",
+			amount_to_hr_string(amount, false).bright_green(),
+			format!(
+				"{}{}{}",
+				"http://".bright_green(),
+				receiver.bright_green(),
+				".onion".bright_green()
+			),
+			tor_sender_message
+		);
+	} else {
+		println!(
+			"this file proves that [{}] MWCs was sent to [{}]{}",
+			amount_to_hr_string(amount, false).bright_green(),
+			receiver.bright_green(),
+			sender_message
+		);
+	}
+
+	if sender.is_none() {
+		println!(
+			"{}: this proof does not prove which address sent the funds, only which received it",
+			"WARNING".bright_yellow()
+		);
+	}
+
+	println!("\noutputs:");
+	if global::is_mainnet() {
+		for output in outputs {
+			println!(
+				"   {}: https://explorer.mwc.mw/#o{}",
+				output.bright_magenta(),
+				output
+			);
+		}
+		println!("kernel:");
+		println!(
+			"   {}: https://explorer.mwc.mw/#k{}",
+			kernel.bright_magenta(),
+			kernel
+		);
+	} else {
+		for output in outputs {
+			println!(
+				"   {}: https://explorer.floonet.mwc.mw/#o{}",
+				output.bright_magenta(),
+				output
+			);
+		}
+		println!("kernel:");
+		println!(
+			"   {}: https://explorer.floonet.mwc.mw/#k{}",
+			kernel.bright_magenta(),
+			kernel
+		);
+	}
+	println!("\n{}: this proof should only be considered valid if the kernel is actually on-chain with sufficient confirmations", "WARNING".bright_yellow());
+	println!("please use a mwc block explorer to verify this is the case.");
+}
+
+//to support mwc713 payment proof verification
+fn verify_tx_proof(
+	tx_proof: &TxProof,
+) -> Result<
+	(
+		Option<ProvableAddress>,
+		ProvableAddress,
+		u64,
+		Vec<pedersen::Commitment>,
+		pedersen::Commitment,
+	),
+	Error,
+> {
+	let secp = &Secp256k1::with_caps(ContextFlag::Commit);
+
+	let (destination, slate) = tx_proof.verify_extract(None).map_err(|e| {
+		ErrorKind::TxProofGenericError(format!("Unable to extract destination and slate, {}", e))
+	})?;
+
+	let inputs_ex = tx_proof.inputs.iter().collect::<HashSet<_>>();
+
+	let mut inputs: Vec<pedersen::Commitment> = slate
+		.tx
+		.inputs()
+		.iter()
+		.map(|i| i.commitment())
+		.filter(|c| !inputs_ex.contains(c))
+		.collect();
+
+	let outputs_ex = tx_proof.outputs.iter().collect::<HashSet<_>>();
+
+	let outputs: Vec<pedersen::Commitment> = slate
+		.tx
+		.outputs()
+		.iter()
+		.map(|o| o.commitment())
+		.filter(|c| !outputs_ex.contains(c))
+		.collect();
+
+	let excess = &slate.participant_data[1].public_blind_excess;
+
+	let excess_parts: Vec<&PublicKey> = slate
+		.participant_data
+		.iter()
+		.map(|p| &p.public_blind_excess)
+		.collect();
+	let excess_sum = PublicKey::from_combination(secp, excess_parts).map_err(|e| {
+		ErrorKind::TxProofGenericError(format!("Unable to combine public keys, {}", e))
+	})?;
+
+	let commit_amount = secp.commit_value(tx_proof.amount)?;
+	inputs.push(commit_amount);
+
+	let commit_excess = secp.commit_sum(outputs.clone(), inputs)?;
+	let pubkey_excess = commit_excess.to_pubkey(secp)?;
+
+	if excess != &pubkey_excess {
+		return Err(
+			ErrorKind::TxProofGenericError("Excess Public keys mismatch".to_string()).into(),
+		);
+	}
+
+	let mut input_com: Vec<pedersen::Commitment> =
+		slate.tx.inputs().iter().map(|i| i.commitment()).collect();
+
+	let mut output_com: Vec<pedersen::Commitment> =
+		slate.tx.outputs().iter().map(|o| o.commitment()).collect();
+
+	input_com.push(secp.commit(0, slate.tx.offset.secret_key(secp)?)?);
+
+	output_com.push(secp.commit_value(slate.fee)?);
+
+	let excess_sum_com = secp.commit_sum(output_com, input_com)?;
+
+	if excess_sum_com.to_pubkey(secp)? != excess_sum {
+		return Err(ErrorKind::TxProofGenericError("Excess sum mismatch".to_string()).into());
+	}
+
+	return Ok((
+		Some(destination),
+		tx_proof.address.clone(),
+		tx_proof.amount,
+		outputs,
+		excess_sum_com,
+	));
+}
+
+///to support mwc713 payment proof verification
+pub fn verify_tx_proof_wrapper(
+	tx_proof: &TxProof,
+) -> Result<(Option<String>, String, u64, Vec<String>, String), Error> {
+	let (sender, receiver, amount, outputs, excess_sum) = verify_tx_proof(tx_proof)?;
+
+	let outputs = outputs
+		.iter()
+		.map(|o| grin_util::to_hex(o.0.to_vec()))
+		.collect();
+
+	Ok((
+		sender.map(|a| a.public_key.clone()),
+		receiver.public_key.clone(),
+		amount,
+		outputs,
+		excess_sum.to_hex(),
+	))
 }
