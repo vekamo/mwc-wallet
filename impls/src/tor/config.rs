@@ -36,7 +36,7 @@ const TOR_DATA_DIR: &str = "data";
 const AUTH_CLIENTS_DIR: &str = "authorized_clients";
 const HIDDEN_SERVICES_DIR: &str = "onion_service_addresses";
 
-#[cfg(unix)]
+#[cfg(not(windows))]
 fn set_permissions(file_path: &str) -> Result<(), Error> {
 	use std::os::unix::prelude::*;
 	fs::set_permissions(file_path, fs::Permissions::from_mode(0o700)).map_err(|e| {
