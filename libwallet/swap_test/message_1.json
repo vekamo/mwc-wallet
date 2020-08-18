@@ -5,6 +5,8 @@
       "start_time": "2019-09-04T21:22:32Z",
       "version": 1,
       "network": "Floonet",
+      "communication_method": "file",
+      "from_address": "Fix me",
       "seller_lock_first": true,
       "primary_amount": "100000000000",
       "secondary_amount": "3000000",

@@ -61,6 +61,10 @@ pub struct Swap {
 	pub network: Network,
 	/// Role of the party (Byer or Seller)
 	pub role: Role,
+	/// Method how we are sending message to other party
+	pub communication_method: String,
+	/// destination address of the other party
+	pub communication_address: String,
 	/// Flag that specify the Locking fund order (Will wait for the fact that transaction is publishing, not for all confirmations).
 	///    true: Seller lock MWC first, then Buyer BTC.
 	///    false: Buyer lock BTC first, then Seller does lock.
@@ -293,6 +297,17 @@ impl Swap {
 			time: get_cur_time(),
 			message: msg,
 		});
+		// We want to limit journal to 1000 items because of the performance.
+		while self.journal.len() > 1000 {
+			self.journal.remove(0);
+		}
+	}
+
+	/// Append to the last message.
+	pub fn append_to_last_message(&mut self, msg: &String) {
+		if let Some(last) = self.journal.last_mut() {
+			last.message.push_str(msg.as_str());
+		}
 	}
 
 	// Time management functions

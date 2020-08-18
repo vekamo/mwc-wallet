@@ -58,6 +58,8 @@ impl SellApi {
 		secondary_confirmations: u64,
 		message_exchange_time_sec: u64,
 		redeem_time_sec: u64,
+		communication_method: String,
+		buyer_destination_address: String,
 	) -> Result<Swap, ErrorKind> {
 		#[cfg(test)]
 		let test_mode = is_test_mode();
@@ -92,6 +94,8 @@ impl SellApi {
 			version: CURRENT_VERSION,
 			network: Network::current_network()?,
 			role: Role::Seller("".to_string(), 0), // will be updated later
+			communication_method,
+			communication_address: buyer_destination_address,
 			seller_lock_first,
 			started,
 			state: StateId::SellerOfferCreated,
@@ -339,7 +343,8 @@ impl SellApi {
 		Ok(redeem)
 	}
 
-	/// Generate Offer message
+	/// Generate Offer message.
+	/// Note: from_address need to be update by the caller because only caller knows about communication layer.
 	pub fn offer_message(
 		swap: &Swap,
 		secondary_update: SecondaryUpdate,
@@ -349,6 +354,8 @@ impl SellApi {
 			Update::Offer(OfferUpdate {
 				start_time: swap.started,
 				version: swap.version,
+				communication_method: swap.communication_method.clone(),
+				from_address: "Fix me".to_string(),
 				network: swap.network,
 				seller_lock_first: swap.seller_lock_first,
 				primary_amount: swap.primary_amount,

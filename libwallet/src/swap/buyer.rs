@@ -185,8 +185,7 @@ impl BuyApi {
 		}
 
 		// Checking Secondary data. Focus on timing issues
-		if offer.secondary_currency != Currency::Btc &&
-			offer.secondary_currency != Currency::Bch {
+		if offer.secondary_currency != Currency::Btc && offer.secondary_currency != Currency::Bch {
 			return Err(ErrorKind::InvalidMessageData(
 				"Unexpected currency value".to_string(),
 			));
@@ -229,6 +228,8 @@ impl BuyApi {
 			version: CURRENT_VERSION,
 			network: offer.network,
 			role: Role::Buyer,
+			communication_method: offer.communication_method,
+			communication_address: offer.from_address,
 			seller_lock_first: offer.seller_lock_first,
 			started,
 			state: StateId::BuyerOfferCreated,
@@ -303,7 +304,10 @@ impl BuyApi {
 		swap.message(
 			Update::AcceptOffer(AcceptOfferUpdate {
 				multisig: swap.multisig.export()?,
-				redeem_public: swap.redeem_public.unwrap().clone(),
+				redeem_public: swap
+					.redeem_public
+					.clone()
+					.ok_or(ErrorKind::Generic("redeem_public is empty".to_string()))?,
 				lock_participant: swap.lock_slate.participant_data[id].clone(),
 				refund_participant: swap.refund_slate.participant_data[id].clone(),
 			}),

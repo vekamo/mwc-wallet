@@ -341,4 +341,8 @@ pub struct SwapStartArgs {
 	pub message_exchange_time_sec: u64,
 	/// Time interval needed to redeem or execute a refund transaction.
 	pub redeem_time_sec: u64,
+	/// Method how we are sending message to the buyer
+	pub buyer_communication_method: String,
+	/// Buyer destination address
+	pub buyer_communication_address: String,
 }

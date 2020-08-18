@@ -150,6 +150,10 @@ pub struct OfferUpdate {
 	pub version: u8,
 	/// The type of the network. Floonet or mainnet
 	pub network: Network,
+	/// Method how we are sending message, should match to what we are using
+	pub communication_method: String,
+	/// from destination address
+	pub from_address: String,
 	/// Flag that specify the Locking fund order (Will wait for the fact that transaction is publishing, not for all confirmations).
 	///    true: Seller lock MWC first, then Buyer BTC.
 	///    false: Buyer lock BTC first, then Seller does lock.

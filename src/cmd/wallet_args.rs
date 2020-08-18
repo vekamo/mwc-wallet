@@ -981,6 +981,9 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<command::SwapStartArgs
 	let redeem_time = parse_required(args, "redeem_time")?;
 	let redeem_time = parse_u64(redeem_time, "redeem_time")?;
 
+	let method = parse_required(args, "method")?;
+	let destination = parse_required(args, "dest")?;
+
 	Ok(command::SwapStartArgs {
 		mwc_amount,
 		secondary_currency: secondary_currency.to_string(),
@@ -992,6 +995,8 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<command::SwapStartArgs
 		secondary_confirmations: btc_lock,
 		message_exchange_time_sec: message_exchange_time * 60,
 		redeem_time_sec: redeem_time * 60,
+		buyer_communication_method: method.to_string(),
+		buyer_communication_address: destination.to_string(),
 	})
 }
 

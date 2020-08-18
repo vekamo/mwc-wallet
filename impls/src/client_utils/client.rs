@@ -398,7 +398,17 @@ impl Client {
 					})?;
 				rt.block_on(task)
 			});
-			handle.join().unwrap()
+			/*match handle.join() {
+				Ok(_) => Ok("Request successfully sent".to_string()),
+				Err(e) => {
+					println!("Error sending client request: {:?}", e);
+					//Err(Error::from(ErrorKind::Internal(format!(
+					//	"Error sending client request"
+					//))))
+					panic!(e)
+				}
+			}*/
+			handle.join().unwrap_or(Ok("Error in client sending request".to_string()))
 		})
 		.unwrap()
 	}

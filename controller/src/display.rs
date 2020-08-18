@@ -650,25 +650,33 @@ pub fn swap_trade(
 	show_requied_action: bool,
 ) -> Result<(), Error> {
 	println!("");
-	println!("    Swap ID: {}", swap.id);
+	println!("    Swap ID: {}", swap.id.to_string().bold().bright_white());
 	match swap.role.clone() {
 		Role::Seller(btc_address, _) => {
 			println!(
 				"    Selling {} MWC for {} {}. {} redeem address: {}",
-				core::amount_to_hr_string(swap.primary_amount, true),
+				core::amount_to_hr_string(swap.primary_amount, true)
+					.bold()
+					.yellow(),
 				swap.secondary_currency
-					.amount_to_hr_string(swap.secondary_amount, true),
+					.amount_to_hr_string(swap.secondary_amount, true)
+					.bold()
+					.yellow(),
 				swap.secondary_currency,
 				swap.secondary_currency,
-				btc_address
+				btc_address.bold().yellow()
 			);
 		}
 		Role::Buyer => {
 			println!(
 				"    Buying {} MWC for {} {}",
-				core::amount_to_hr_string(swap.primary_amount, true),
+				core::amount_to_hr_string(swap.primary_amount, true)
+					.bold()
+					.yellow(),
 				swap.secondary_currency
-					.amount_to_hr_string(swap.secondary_amount, true),
+					.amount_to_hr_string(swap.secondary_amount, true)
+					.bold()
+					.yellow(),
 				swap.secondary_currency,
 			);
 		}
@@ -676,30 +684,36 @@ pub fn swap_trade(
 
 	println!(
 		"    Requied lock confirmations: {} for MWC and {} for {}",
-		swap.mwc_confirmations, swap.secondary_confirmations, swap.secondary_currency
-	);
-	println!(
-		"    Time limits: {} minutes for messages exchange and {} minutes for redeem/refund",
-		swap.message_exchange_time_sec / 60,
-		swap.redeem_time_sec / 60
+		swap.mwc_confirmations.to_string().bold().yellow(),
+		swap.secondary_confirmations.to_string().bold().yellow(),
+		swap.secondary_currency
 	);
 
-	if swap.seller_lock_first {
-		println!("    Locking order: Seller lock MWC first");
+	let s1 = format!("{} minutes", swap.message_exchange_time_sec / 60);
+	let s2 = format!("{} minutes", swap.redeem_time_sec / 60);
+
+	println!(
+		"    Time limits: {} for messages exchange and {} for redeem/refund",
+		s1.bold().yellow(),
+		s2.bold().yellow()
+	);
+
+	let lock_str = if swap.seller_lock_first {
+		format!("{}", "Seller lock MWC first".yellow())
 	} else {
-		println!(
-			"    Locking order: Buyer lock {} first",
-			swap.secondary_currency
-		);
-	}
+		format!("Buyer lock {} first", swap.secondary_currency)
+	};
+	println!("    Locking order: {}", lock_str.bold().yellow());
 
 	if tx_conf.mwc_tip < swap.refund_slate.lock_height {
 		let mwc_lock_sec = (swap.refund_slate.lock_height - tx_conf.mwc_tip) * 60;
 		let sel_lock_h = mwc_lock_sec / 3600;
 		let sel_lock_m = (mwc_lock_sec % 3600) / 60;
+		let est_time_str = format!("{} hours and {} minutes", sel_lock_h, sel_lock_m);
 		println!(
-			"    MWC funds locked until block {}, expected to be mined in {} hours and {} minutes",
-			swap.refund_slate.lock_height, sel_lock_h, sel_lock_m
+			"    MWC funds locked until block {}, expected to be mined in {}",
+			swap.refund_slate.lock_height.to_string().bold().yellow(),
+			est_time_str.bold().yellow(),
 		);
 	} else {
 		println!("    MWC Lock expired");
@@ -711,12 +725,26 @@ pub fn swap_trade(
 		let buyer_lock_time = btc_lock_time - now_ts;
 		let buy_lock_h = buyer_lock_time / 3600;
 		let buy_lock_m = (buyer_lock_time % 3600) / 60;
+		let est_time_str = format!("{} hours and {} minutes", buy_lock_h, buy_lock_m);
 		println!(
-			"    {} funds locked for {} hours and {} minutes",
-			swap.secondary_currency, buy_lock_h, buy_lock_m
+			"    {} funds locked for {}",
+			swap.secondary_currency,
+			est_time_str.bold().yellow()
 		);
 	} else {
 		println!("    {} Lock expired", swap.secondary_currency);
+	}
+	println!("");
+	if swap.is_seller() {
+		println!(
+			"    Buyer address: {}, {}",
+			swap.communication_method, swap.communication_address
+		);
+	} else {
+		println!(
+			"    Seller address: {}, {}",
+			swap.communication_method, swap.communication_address
+		);
 	}
 
 	let expired_str = swap::left_from_time_limit(time_limit);
@@ -730,8 +758,11 @@ pub fn swap_trade(
 	println!("");
 	println!("-------- Execution plan --------");
 	for eta in roadmap {
-		let prefix = if eta.active { "--> " } else { "    " };
-		print!("{}{:40}", prefix, eta.name);
+		if eta.active {
+			print!("{}{:40}", "--> ".yellow(), eta.name.bold().yellow());
+		} else {
+			print!("{}{:40}", "    ", eta.name);
+		}
 
 		if let Some(t) = eta.start_time {
 			print!("  started {}", timestamp_to_local_time(t));
@@ -742,7 +773,7 @@ pub fn swap_trade(
 		println!("");
 		if eta.active && !action.is_none() {
 			// prining action below...
-			println!("        {}", action_str);
+			println!("        {}", action_str.bold().cyan());
 		}
 	}
 
@@ -756,7 +787,7 @@ pub fn swap_trade(
 		if action.can_execute() {
 			println!("");
 			println!("-------- Required Action --------");
-			println!("    {}", action_str);
+			println!("    {}", action_str.bold().cyan());
 		}
 	}
 	println!("");

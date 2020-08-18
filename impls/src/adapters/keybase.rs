@@ -211,6 +211,16 @@ impl Publisher for KeybasePublisher {
 	fn post_take(&self, _message: &Message, _to: &dyn Address) -> Result<(), Error> {
 		unimplemented!();
 	}
+
+	// Address of this publisher (from address)
+	fn get_publisher_address(&self) -> Result<Box<dyn Address>, Error> {
+		// we are not supporting keybase for this workflow. The problem that we don't know
+		// our our address so far.
+		Err(ErrorKind::GenericError(
+			"get_publisher_address for Ketbase address is not defined".to_string(),
+		)
+		.into())
+	}
 }
 
 impl Subscriber for KeybaseSubscriber {
