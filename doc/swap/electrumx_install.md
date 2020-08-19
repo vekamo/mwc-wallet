@@ -52,7 +52,7 @@ cat /usr/local/lib/python3.7/dist-packages/electrumx/lib/coins.py | grep ' NAME 
 ```
 If your coin is there, you are good go
 
-# Creating Script for a cpecific coin #
+# Creating Script for a Specific coin #
 
 We are almost ready to to start.
 
