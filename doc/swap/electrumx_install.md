@@ -77,7 +77,7 @@ export DAEMON_URL=http://user:password@host:port
 # Port thet electrum will listen
 TCP_PORT=8000
 
-
+echo "Starting Electum X server"
 electrumx_server
 ```
 
