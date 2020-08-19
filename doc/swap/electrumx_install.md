@@ -74,6 +74,10 @@ export COIN=$COIN_NAME
 # Address of the Node
 export DAEMON_URL=http://user:password@host:port
 
+# Port thet electrum will listen
+TCP_PORT=8000
+
+
 electrumx_server
 ```
 
