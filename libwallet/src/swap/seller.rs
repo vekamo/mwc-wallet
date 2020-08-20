@@ -149,6 +149,13 @@ impl SellApi {
 			refund_slate.id = Uuid::parse_str("703fac15-913c-4e66-a7c2-5f648ca4ca7d").unwrap();
 		}
 		refund_slate.fee = tx_fee(1, 1, 1, None);
+		if primary_amount <= refund_slate.fee {
+			return Err(ErrorKind::Generic(
+				"MWC amount to trade is too low, it doesn't cover the fees".to_string(),
+			)
+			.into());
+		}
+
 		refund_slate.height = height;
 		// Calculating lock height from locking time. For MWC the mining speed is about 1 minute
 		refund_slate.lock_height = height + (mwc_lock_time - start_time) as u64 / 60 + 1;
