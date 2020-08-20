@@ -12,6 +12,12 @@ we need to know the location of the DB.
 
 export ELECTRUM_DB=<db_path>
 
+# Prerequisites
+
+You will need python 3.7+. You can probably use programs like apt to install it, but that is beyond the scope of this document. You will also need python3-pip to be installed. On debian based systems that can be done with the following command:
+
+```# apt install python3-pip```
+
 # Installation
 
 Cleanup prev electrum instance. We don't want to use update, instead we want to install all package that might be needed. 
