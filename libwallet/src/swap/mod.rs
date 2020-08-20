@@ -1534,7 +1534,7 @@ mod tests {
 	#[serial]
 	// The primary goal for this test is to cover all code path for edge cases
 	fn test_swap_fsm() {
-		activate_test_response(false);
+		activate_test_response(true);
 		set_test_mode(true);
 		swap::set_testing_cur_time(START_TIME);
 		global::set_mining_mode(ChainTypes::Floonet);
@@ -2353,6 +2353,13 @@ mod tests {
 				"WaitForSecondaryConfirmations"
 			);
 
+			// Double processing should be fine as well
+			assert_eq!(seller.swap.state, StateId::SellerWaitingForBuyerLock);
+			let res = seller
+				.process(Input::IncomeMessage(message2.clone()))
+				.unwrap();
+			assert_eq!(res.next_state_id, StateId::SellerWaitingForBuyerLock);
+
 			test_responds(
 				&mut seller,
 				StateId::SellerWaitingForBuyerLock,
@@ -2536,6 +2543,13 @@ mod tests {
 		assert_eq!(res.time_limit.clone().unwrap(), lock_start_timelimit);
 		assert_eq!(res.action.unwrap().get_id_str(), "SellerPublishMwcLockTx");
 
+		// Double processing should be fine
+		assert_eq!(seller.swap.state, StateId::SellerPostingLockMwcSlate);
+		let res = seller
+			.process(Input::IncomeMessage(message2.clone()))
+			.unwrap();
+		assert_eq!(res.next_state_id, StateId::SellerPostingLockMwcSlate);
+
 		swap::set_testing_cur_time(START_TIME + 150);
 
 		test_responds(
@@ -2667,6 +2681,19 @@ mod tests {
 			assert_eq!(
 				seller.swap.posted_lock.clone().unwrap(),
 				swap::get_cur_time()
+			);
+
+			// Double processing should be fine
+			assert_eq!(
+				seller.swap.state,
+				StateId::SellerWaitingForLockConfirmations
+			);
+			let res = seller
+				.process(Input::IncomeMessage(message2.clone()))
+				.unwrap();
+			assert_eq!(
+				res.next_state_id,
+				StateId::SellerWaitingForLockConfirmations
 			);
 
 			nc.mine_blocks(2);
@@ -3953,6 +3980,13 @@ mod tests {
 		);
 		assert_eq!(res.action.unwrap().get_id_str(), "BuyerPublishMwcRedeemTx");
 
+		// Double processing should be fine
+		assert_eq!(buyer.swap.state, StateId::BuyerRedeemMwc);
+		let res = buyer
+			.process(Input::IncomeMessage(message4.clone()))
+			.unwrap();
+		assert_eq!(res.next_state_id, StateId::BuyerRedeemMwc);
+
 		test_responds(
 			&mut buyer,
 			StateId::BuyerRedeemMwc,
@@ -4595,6 +4629,19 @@ mod tests {
 		);
 		assert_eq!(res.time_limit.is_none(), true);
 		assert_eq!(res.action.unwrap().get_id_str(), "WaitForMwcConfirmations");
+
+		// Double processing should be fine
+		assert_eq!(
+			buyer.swap.state,
+			StateId::BuyerWaitForRedeemMwcConfirmations
+		);
+		let res = buyer
+			.process(Input::IncomeMessage(message4.clone()))
+			.unwrap();
+		assert_eq!(
+			res.next_state_id,
+			StateId::BuyerWaitForRedeemMwcConfirmations
+		);
 
 		let res = seller.process(Input::Check).unwrap();
 		assert_eq!(res.next_state_id, StateId::SellerWaitingForBuyerToRedeemMwc);

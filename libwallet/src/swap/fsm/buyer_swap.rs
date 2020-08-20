@@ -897,6 +897,12 @@ where
 					.action(Action::BuyerPublishMwcRedeemTx)
 					.time_limit(time_limit))
 			}
+			Input::IncomeMessage(message) => {
+				// Message must be ignored. Late delivery sometimes is possible
+				// Still checking the type of the message
+				let _ = message.unwrap_redeem()?;
+				Ok(StateProcessRespond::new(StateId::BuyerRedeemMwc))
+			}
 			Input::Execute { refund_address: _ } => {
 				if swap::get_cur_time() > time_limit {
 					// too late, exiting
@@ -921,11 +927,10 @@ where
 				Ok(StateProcessRespond::new(
 					StateId::BuyerWaitForRedeemMwcConfirmations,
 				))
-			}
-			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
-				"BuyerRedeemMwc get {:?}",
-				input
-			))),
+			} /*_ => Err(ErrorKind::InvalidSwapStateInput(format!(
+				  "BuyerRedeemMwc get {:?}",
+				  input
+			  ))),*/
 		}
 	}
 	fn get_prev_swap_state(&self) -> Option<StateId> {
@@ -998,6 +1003,14 @@ impl State for BuyerWaitForRedeemMwcConfirmations {
 						},
 					),
 				);
+			}
+			Input::IncomeMessage(message) => {
+				// Message must be ignored. Late delivery sometimes is possible
+				// Still checking the type of the message
+				let _ = message.unwrap_redeem()?;
+				Ok(StateProcessRespond::new(
+					StateId::BuyerWaitForRedeemMwcConfirmations,
+				))
 			}
 			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
 				"BuyerWaitForRedeemMwcConfirmations get {:?}",

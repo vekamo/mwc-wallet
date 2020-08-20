@@ -366,6 +366,12 @@ impl State for SellerWaitingForBuyerLock {
 					}
 				}
 			}
+			Input::IncomeMessage(message) => {
+				// Message must be ignored. Late delivery sometimes is possible
+				// Still checking the type of the message
+				let _ = message.unwrap_accept_offer()?;
+				Ok(StateProcessRespond::new(StateId::SellerWaitingForBuyerLock))
+			}
 			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
 				"SellerWaitingForBuyerLock get {:?}",
 				input
@@ -485,10 +491,15 @@ where
 					StateId::SellerWaitingForLockConfirmations,
 				))
 			}
-			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
-				"SellerPostingLockMwcSlate get {:?}",
-				input
-			))),
+			Input::IncomeMessage(message) => {
+				// Message must be ignored. Late delivery sometimes is possible
+				// Still checking the type of the message
+				let _ = message.unwrap_accept_offer()?;
+				Ok(StateProcessRespond::new(StateId::SellerPostingLockMwcSlate))
+			} /*_ => Err(ErrorKind::InvalidSwapStateInput(format!(
+				  "SellerPostingLockMwcSlate get {:?}",
+				  input
+			  ))),*/
 		}
 	}
 	fn get_prev_swap_state(&self) -> Option<StateId> {
@@ -635,6 +646,13 @@ impl<K: Keychain> State for SellerWaitingForLockConfirmations<K> {
 				))
 			}
 			Input::IncomeMessage(message) => {
+				// That can be late Accept offer message
+				if message.clone().unwrap_accept_offer().is_ok() {
+					return Ok(StateProcessRespond::new(
+						StateId::SellerSendingInitRedeemMessage,
+					));
+				}
+
 				// We can accept message durinf the wait. Byers can already get a confirmation and sending a message
 				if swap.adaptor_signature.is_none() {
 					let (_, init_redeem, _) = message.unwrap_init_redeem()?;
