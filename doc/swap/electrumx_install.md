@@ -14,9 +14,31 @@ export ELECTRUM_DB=<db_path>
 
 # Prerequisites
 
+Python
 You will need python 3.7+. You can probably use programs like apt to install it, but that is beyond the scope of this document. You will also need python3-pip to be installed. On debian based systems that can be done with the following command:
 
 ```# apt install python3-pip```
+
+You may need to install more supportive Python packages:
+```
+python3.7 -m pip install --upgrade pip setuptools wheel
+python3.7 -m pip install --upgrade aiohttp pylru leveldb plyvel aiorpcx ecdsa
+```
+Database
+You can choose between LevelDB or RocksDB. To install LevelDB:
+```
+sudo apt-get install libsnappy-dev
+export VER="1.20"
+wget https://github.com/google/leveldb/archive/v${VER}.tar.gz
+tar xvf v${VER}.tar.gz
+rm -f v${VER}.tar.gz
+cd leveldb-${VER}
+make (may first require doing: sudo apt-get install build-essential libssl-dev libffi-dev python-dev)
+sudo scp -r out-static/lib* out-shared/lib* "/usr/local/lib"
+cd include
+sudo scp -r leveldb /usr/local/include
+sudo ldconfig
+```
 
 # Installation
 
@@ -77,8 +99,11 @@ export COIN_NAME=BitcoinCashABC
 export DB_DIRECTORY=$ELECTRUM_DB/$COIN_NAME
 export DB_ENGINE=leveldb
 export COIN=$COIN_NAME
+export NET=mainnet
 # Address of the Node
 export DAEMON_URL=http://user:password@host:port
+export SERVICES=tcp://0.0.0.0:8000
+export CACHE_MB=300
 
 # Port thet electrum will listen
 TCP_PORT=8000
