@@ -135,11 +135,9 @@ pub struct Swap {
 	pub posted_refund: Option<i64>,
 	/// Event log for this swap trade.
 	pub journal: Vec<SwapJournalRecord>,
-	/// Secondary fee as it comes from the parameters.
-	/// Note, it is NOT persistent data, with every run it can be different.
-	/// It is done intentionally because user might chnage it to resubmit secondary transaciton
-	#[serde(skip_serializing)]
-	pub secondary_fee: Option<f32>,
+	/// Secondary fee as it comes from the parameters or default value.
+	/// Fee units might be changed from Currency to Currency
+	pub secondary_fee: f32,
 }
 
 impl Swap {
@@ -147,7 +145,7 @@ impl Swap {
 	pub fn is_seller(&self) -> bool {
 		match self.role {
 			Role::Seller(_, _) => true,
-			Role::Buyer => false,
+			Role::Buyer(_) => false,
 		}
 	}
 
@@ -171,13 +169,36 @@ impl Swap {
 		Ok((identifier, amount, commit))
 	}
 
-	pub(super) fn unwrap_seller(&self) -> Result<(String, u64), ErrorKind> {
+	/// Return Seller specific data
+	pub fn unwrap_seller(&self) -> Result<(String, u64), ErrorKind> {
 		match &self.role {
 			Role::Seller(address, change) => Ok((address.clone(), *change)),
 			_ => Err(ErrorKind::UnexpectedRole(
-				"Swap Fn unwrap_seller()".to_string(),
+				"Swap call unwrap_seller".to_string(),
 			)),
 		}
+	}
+
+	/// Return buyer specific data
+	pub fn unwrap_buyer(&self) -> Result<Option<String>, ErrorKind> {
+		match &self.role {
+			Role::Buyer(address) => Ok(address.clone()),
+			_ => Err(ErrorKind::UnexpectedRole(
+				"Swap call unwrap_buyer".to_string(),
+			)),
+		}
+	}
+
+	/// Update secondary address. Depend on role, updates redeem or refund secondary currency address
+	pub fn update_secondary_address(&mut self, secondary_address: String) {
+		match &mut self.role {
+			Role::Buyer(address) => {
+				address.replace(secondary_address);
+			}
+			Role::Seller(address, _) => {
+				*address = secondary_address;
+			}
+		};
 	}
 
 	pub(super) fn message(

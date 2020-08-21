@@ -651,35 +651,30 @@ pub fn swap_trade(
 ) -> Result<(), Error> {
 	println!("");
 	println!("    Swap ID: {}", swap.id.to_string().bold().bright_white());
-	match swap.role.clone() {
-		Role::Seller(btc_address, _) => {
-			println!(
-				"    Selling {} MWC for {} {}. {} redeem address: {}",
-				core::amount_to_hr_string(swap.primary_amount, true)
-					.bold()
-					.yellow(),
-				swap.secondary_currency
-					.amount_to_hr_string(swap.secondary_amount, true)
-					.bold()
-					.yellow(),
-				swap.secondary_currency,
-				swap.secondary_currency,
-				btc_address.bold().yellow()
-			);
-		}
-		Role::Buyer => {
-			println!(
-				"    Buying {} MWC for {} {}",
-				core::amount_to_hr_string(swap.primary_amount, true)
-					.bold()
-					.yellow(),
-				swap.secondary_currency
-					.amount_to_hr_string(swap.secondary_amount, true)
-					.bold()
-					.yellow(),
-				swap.secondary_currency,
-			);
-		}
+	if swap.is_seller() {
+		println!(
+			"    Selling {} MWC for {} {}",
+			core::amount_to_hr_string(swap.primary_amount, true)
+				.bold()
+				.yellow(),
+			swap.secondary_currency
+				.amount_to_hr_string(swap.secondary_amount, true)
+				.bold()
+				.yellow(),
+			swap.secondary_currency,
+		);
+	} else {
+		println!(
+			"    Buying {} MWC for {} {}",
+			core::amount_to_hr_string(swap.primary_amount, true)
+				.bold()
+				.yellow(),
+			swap.secondary_currency
+				.amount_to_hr_string(swap.secondary_amount, true)
+				.bold()
+				.yellow(),
+			swap.secondary_currency,
+		);
 	}
 
 	println!(
@@ -734,6 +729,35 @@ pub fn swap_trade(
 	} else {
 		println!("    {} Lock expired", swap.secondary_currency);
 	}
+
+	match &swap.role {
+		Role::Seller(address, _) => {
+			println!(
+				"    {} redeem address: {}",
+				swap.secondary_currency,
+				address.bold().yellow()
+			);
+		}
+		Role::Buyer(address) => match address {
+			Some(address) => {
+				println!(
+					"    {} refund address: {}",
+					swap.secondary_currency,
+					address.bold().yellow()
+				);
+			}
+			None => {
+				println!("    {} refund address: Not Set", swap.secondary_currency);
+			}
+		},
+	}
+	println!(
+		"    Current {} transaction fee: {} {}",
+		swap.secondary_currency,
+		swap.secondary_fee.to_string().bold().yellow(),
+		swap.secondary_currency.get_fee_units()
+	);
+
 	println!("");
 	if swap.is_seller() {
 		println!(

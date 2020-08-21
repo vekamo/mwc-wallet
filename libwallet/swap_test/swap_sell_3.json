@@ -380,5 +380,6 @@
       "time": 1567632152,
       "message": "MWC lock slate is posted"
     }
-  ]
+  ],
+  "secondary_fee": 1.4
 }

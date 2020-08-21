@@ -2394,6 +2394,8 @@ where
 		adjust_cmd: String,
 		method: Option<String>,
 		destination: Option<String>,
+		secondary_address: Option<String>, // secondary address to adjust
+		secondary_fee: Option<f32>,
 	) -> Result<(StateId, Action), Error> {
 		owner_swap::swap_adjust(
 			self.wallet_inst.clone(),
@@ -2402,6 +2404,8 @@ where
 			&adjust_cmd,
 			method,
 			destination,
+			secondary_address,
+			secondary_fee,
 		)
 	}
 
@@ -2450,7 +2454,8 @@ where
 		message_sender: F,
 		message_file_name: Option<String>,
 		buyer_refund_address: Option<String>,
-		fee_satoshi_per_byte: Option<f32>,
+		secondary_fee: Option<f32>,
+		secondary_address: Option<String>,
 	) -> Result<StateProcessRespond, Error>
 	where
 		F: FnOnce(Message, String, String) -> Result<(bool, String), crate::libwallet::Error>
@@ -2463,7 +2468,8 @@ where
 			message_sender,
 			message_file_name,
 			buyer_refund_address,
-			fee_satoshi_per_byte,
+			secondary_fee,
+			secondary_address,
 		)
 	}
 

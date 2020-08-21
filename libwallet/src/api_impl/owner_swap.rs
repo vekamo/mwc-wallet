@@ -23,7 +23,7 @@ use crate::swap::error::ErrorKind;
 use crate::swap::fsm::state::{Input, StateEtaInfo, StateId, StateProcessRespond};
 use crate::swap::message::{Message, SecondaryUpdate, Update};
 use crate::swap::swap::{Swap, SwapJournalRecord};
-use crate::swap::types::{Action, Currency, SwapTransactionsConfirmations};
+use crate::swap::types::{Action, Currency, Role, SwapTransactionsConfirmations};
 use crate::swap::{trades, BuyApi, Context, SwapApi};
 use crate::types::NodeClient;
 use crate::Error;
@@ -266,6 +266,8 @@ pub fn swap_adjust<'a, L, C, K>(
 	adjust_cmd: &str,
 	method: Option<String>,
 	destination: Option<String>,
+	secondary_address: Option<String>, // secondary address to adjust
+	secondary_fee: Option<f32>,
 ) -> Result<(StateId, Action), Error>
 where
 	L: WalletLCProvider<'a, C, K>,
@@ -308,10 +310,56 @@ where
 				)
 				.into());
 			}
-			swap.communication_method = method.unwrap();
+			let method = method.unwrap();
+
+			swap.communication_method = method;
 			swap.communication_address = destination.unwrap();
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+			return Ok((swap.state.clone(), Action::None));
+		}
+		"secondary_address" => {
+			if secondary_address.is_none() {
+				return Err(ErrorKind::Generic(
+					"Please define '--buyer_refund_address' or '--secondary_address' values"
+						.to_string(),
+				)
+				.into());
+			}
 
+			let secondary_address = secondary_address.unwrap();
+			swap.secondary_currency
+				.validate_address(&secondary_address)?;
+
+			match &mut swap.role {
+				Role::Buyer(address) => {
+					address.replace(secondary_address);
+				}
+				Role::Seller(address, _) => {
+					*address = secondary_address;
+				}
+			}
+
+			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+			return Ok((swap.state.clone(), Action::None));
+		}
+		"secondary_fee" => {
+			if secondary_fee.is_none() {
+				return Err(ErrorKind::Generic(
+					"Please define '--secondary_fee' values".to_string(),
+				)
+				.into());
+			}
+
+			let secondary_fee = secondary_fee.unwrap();
+			if secondary_fee <= 0.0 {
+				return Err(ErrorKind::Generic(
+					"Please define positive '--secondary_fee' value".to_string(),
+				)
+				.into());
+			}
+
+			swap.secondary_fee = secondary_fee;
+			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 			return Ok((swap.state.clone(), Action::None));
 		}
 		adjusted_state => {
@@ -460,6 +508,7 @@ fn swap_process_impl<'a, L, C, K, F>(
 	message_file_name: Option<String>,
 	buyer_refund_address: Option<String>,
 	secondary_fee: Option<f32>,
+	secondary_address: Option<String>,
 ) -> Result<StateProcessRespond, Error>
 where
 	L: WalletLCProvider<'a, C, K>,
@@ -467,7 +516,23 @@ where
 	K: Keychain + 'a,
 	F: FnOnce(Message, String, String) -> Result<(bool, String), Error> + 'a,
 {
-	swap.secondary_fee = secondary_fee;
+	if let Some(secondary_fee) = secondary_fee {
+		swap.secondary_fee = secondary_fee;
+	}
+
+	if swap.is_seller() {
+		if let Some(secondary_address) = secondary_address {
+			swap.secondary_currency
+				.validate_address(&secondary_address)?;
+			swap.update_secondary_address(secondary_address);
+		}
+	} else {
+		if let Some(secondary_address) = buyer_refund_address {
+			swap.secondary_currency
+				.validate_address(&secondary_address)?;
+			swap.update_secondary_address(secondary_address);
+		}
+	}
 
 	let swap_api =
 		crate::swap::api::create_instance(&swap.secondary_currency, node_client.clone())?;
@@ -491,7 +556,7 @@ where
 				swap.communication_method.clone(),
 				swap.communication_address.clone(),
 			)?;
-			let process_respond = fsm.process(Input::execute(), swap, &context, &tx_conf)?;
+			let process_respond = fsm.process(Input::Execute, swap, &context, &tx_conf)?;
 			swap.append_to_last_message(&format!(", {}", dest_str));
 			if has_ack {
 				match process_respond.action.clone().unwrap() {
@@ -566,13 +631,13 @@ where
 				)?;
 			}
 
-			process_respond = fsm.process(Input::execute(), swap, &context, &tx_conf)?;
+			process_respond = fsm.process(Input::Execute, swap, &context, &tx_conf)?;
 		}
 		Action::SellerPublishTxSecondaryRedeem(_currency) => {
-			process_respond = fsm.process(Input::execute(), swap, &context, &tx_conf)?;
+			process_respond = fsm.process(Input::Execute, swap, &context, &tx_conf)?;
 		}
 		Action::BuyerPublishMwcRedeemTx => {
-			process_respond = fsm.process(Input::execute(), swap, &context, &tx_conf)?;
+			process_respond = fsm.process(Input::Execute, swap, &context, &tx_conf)?;
 
 			wallet_lock!(wallet_inst, w);
 
@@ -594,7 +659,7 @@ where
 			}
 		}
 		Action::SellerPublishMwcRefundTx => {
-			process_respond = fsm.process(Input::execute(), swap, &context, &tx_conf)?;
+			process_respond = fsm.process(Input::Execute, swap, &context, &tx_conf)?;
 
 			wallet_lock!(wallet_inst, w);
 
@@ -615,7 +680,7 @@ where
 			}
 		}
 		Action::BuyerPublishSecondaryRefundTx(_currency) => {
-			if buyer_refund_address.is_none() {
+			if swap.unwrap_buyer()?.is_none() {
 				return Err(ErrorKind::Generic(format!(
 					"Please specify '--buyer_refund_address' {} address for your refund",
 					swap.secondary_currency
@@ -623,14 +688,7 @@ where
 				.into());
 			}
 
-			process_respond = fsm.process(
-				Input::Execute {
-					refund_address: buyer_refund_address,
-				},
-				swap,
-				&context,
-				&tx_conf,
-			)?;
+			process_respond = fsm.process(Input::Execute, swap, &context, &tx_conf)?;
 		}
 		_ => (), // Nothing to do
 	}
@@ -649,6 +707,7 @@ pub fn swap_process<'a, L, C, K, F>(
 	message_file_name: Option<String>,
 	buyer_refund_address: Option<String>,
 	secondary_fee: Option<f32>,
+	secondary_address: Option<String>,
 ) -> Result<StateProcessRespond, Error>
 where
 	L: WalletLCProvider<'a, C, K>,
@@ -681,6 +740,7 @@ where
 		message_file_name,
 		buyer_refund_address,
 		secondary_fee,
+		secondary_address,
 	) {
 		Ok(respond) => {
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;

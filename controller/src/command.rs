@@ -33,14 +33,11 @@ use grin_wallet_impls::{Address, MWCMQSAddress, Publisher};
 use grin_wallet_libwallet::api_impl::owner_swap;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::swap::message;
-use grin_wallet_libwallet::swap::types::Currency;
-use grin_wallet_libwallet::BitcoinAddress;
 use grin_wallet_libwallet::{Slate, TxLogEntry};
 use serde_json as json;
 use std::fs::File;
 use std::io;
 use std::io::{Read, Write};
-use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -1434,13 +1431,15 @@ pub struct SwapArgs {
 	/// Apisecret of the other party of the swap
 	pub apisecret: Option<String>,
 	/// Secondary currency fee. Satoshi per byte.
-	pub fee_satoshi_per_byte: Option<f32>,
+	pub secondary_fee: Option<f32>,
 	/// File name with message content, if message need to be processed with files
 	pub message_file_name: Option<String>,
 	/// Refund address for the buyer
 	pub buyer_refund_address: Option<String>,
 	/// Whether to start listener or not for swap
 	pub start_listener: bool,
+	/// Secondary address for adjust
+	pub secondary_address: Option<String>,
 }
 
 pub fn swap<L, C, K>(
@@ -1556,12 +1555,22 @@ where
 					}
 				}
 
+				let mut secondary_address = None;
+				if args.buyer_refund_address.is_some() {
+					secondary_address = args.buyer_refund_address.clone();
+				}
+				if args.secondary_address.is_some() {
+					secondary_address = args.secondary_address.clone();
+				}
+
 				let result = api.swap_adjust(
 					keychain_mask,
 					swap_id.clone(),
 					adjast_cmd,
 					args.method.clone(),
 					args.destination.clone(),
+					secondary_address,
+					args.secondary_fee,
 				);
 				match result {
 					Ok((state, _action)) => {
@@ -1772,7 +1781,8 @@ where
 					message_sender,
 					args.message_file_name,
 					args.buyer_refund_address,
-					args.fee_satoshi_per_byte,
+					args.secondary_fee,
+					args.secondary_address,
 				);
 
 				match result {
@@ -1965,16 +1975,16 @@ where
 					// We are checking them here because the swap object is known, so the second currency is known. And we can validate the data
 					if !swap.is_seller() {
 						match &args.buyer_refund_address {
-							Some(addr) => match swap.secondary_currency {
-								Currency::Btc | Currency::Bch => {
-									let _ = BitcoinAddress::from_str(&addr).map_err(|e| {
-										ErrorKind::GenericError(format!(
-											"Unable to parse secondary currency redeem address {}, {}",
+							Some(addr) => {
+								swap.secondary_currency
+									.validate_address(addr)
+									.map_err(|e| {
+										ErrorKind::ArgumentError(format!(
+											"Invalid secondary currency address {}, {}",
 											addr, e
 										))
-									})?;
-								}
-							},
+									})?
+							}
 							None => {
 								return Err(ErrorKind::GenericError(
 									"Please define buyer_refund_address for automated swap"
@@ -2003,9 +2013,10 @@ where
 
 				// NOTE - we can't process errors with '?' here. We can't exit, we must try forever or until we get a final state
 				let swap_id2 = swap_id.clone();
-				let fee_satoshi = args.fee_satoshi_per_byte.clone();
+				let fee_satoshi = args.secondary_fee.clone();
 				let file_name = args.message_file_name.clone();
 				let refund_address = args.buyer_refund_address.clone();
+				let secondary_address = args.secondary_address.clone();
 				let swap_report_prefix = if cli_mode {
 					format!("Swap Trade {}: ", swap_id)
 				} else {
@@ -2055,6 +2066,7 @@ where
 									file_name.clone(),
 									refund_address.clone(),
 									fee_satoshi.clone(),
+									secondary_address.clone(),
 								) {
 									Ok(res) => {
 										curr_state = res.next_state_id;

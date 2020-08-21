@@ -221,13 +221,13 @@ impl BuyApi {
 		);
 
 		let started = offer.start_time.clone();
-
+		let secondary_fee = offer.secondary_currency.get_default_fee(&offer.network);
 		let mut swap = Swap {
 			id,
 			idx: 0,
 			version: CURRENT_VERSION,
 			network: offer.network,
-			role: Role::Buyer,
+			role: Role::Buyer(None),
 			communication_method: offer.communication_method,
 			communication_address: offer.from_address,
 			seller_lock_first: offer.seller_lock_first,
@@ -257,7 +257,7 @@ impl BuyApi {
 			posted_redeem: None,
 			posted_refund: None,
 			journal: Vec::new(),
-			secondary_fee: None,
+			secondary_fee,
 		};
 		swap.add_journal_message("Get a Swap offer".to_string());
 

@@ -16,12 +16,14 @@ use super::bitcoin::{BtcBuyerContext, BtcData, BtcSellerContext};
 use super::ser::*;
 use super::ErrorKind;
 use crate::swap::message::Message;
+use bitcoin::Address;
 use grin_core::global::ChainTypes;
 use grin_core::{global, ser};
 use grin_keychain::Identifier;
 use grin_util::secp::key::SecretKey;
 use std::convert::TryFrom;
 use std::fmt;
+use std::str::FromStr;
 
 /// MWC Network where SWAP happens.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,10 +72,10 @@ impl PartialEq<Network> for ChainTypes {
 /// Roles of MWC swap participants
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Role {
-	/// Seller - sell MWC for BTC. Params: (<BTC redeem address>, <change amount>)
+	/// Seller - sell MWC for BTC. Params: (<Secondary redeem address>, <change amount>)
 	Seller(String, u64),
-	/// Buyer  - buy MWC for BTC
-	Buyer,
+	/// Buyer  - buy MWC for BTC. Params: (<Refund Address for Secondary>)
+	Buyer(Option<String>),
 }
 
 /// Secondary currency that swap supports
@@ -144,6 +146,48 @@ impl Currency {
 		}
 
 		Ok(amount)
+	}
+
+	/// Validate the secondary address
+	pub fn validate_address(&self, address: &String) -> Result<(), ErrorKind> {
+		match self {
+			Currency::Btc | Currency::Bch => {
+				let _ = Address::from_str(address).map_err(|e| {
+					ErrorKind::Generic(format!(
+						"Unable to parse {} address {}, {}",
+						self, address, e
+					))
+				})?;
+			}
+		}
+		Ok(())
+	}
+
+	/// Return default fee for this coin
+	pub fn get_default_fee(&self, network: &Network) -> f32 {
+		match self {
+			Currency::Btc => {
+				// Default values
+				match network {
+					Network::Floonet => 1.4 as f32,
+					Network::Mainnet => 26.0 as f32,
+				}
+			}
+			Currency::Bch => {
+				// Default values
+				match network {
+					Network::Floonet => 1.4 as f32,
+					Network::Mainnet => 24.0 as f32, // It is current average fee for BCH network, August 2020
+				}
+			}
+		}
+	}
+
+	/// Fee units for this coin
+	pub fn get_fee_units(&self) -> String {
+		match self {
+			Currency::Btc | Currency::Bch => "satoshi per byte".to_string(),
+		}
 	}
 }
 

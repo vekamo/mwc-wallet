@@ -22,7 +22,6 @@ use super::types::*;
 use super::{ErrorKind, Keychain, CURRENT_VERSION};
 use crate::swap::fsm::state::StateId;
 use crate::{ParticipantData as TxParticipant, Slate, SlateVersion, VersionedSlate};
-use bitcoin::Address;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use grin_core::libtx::{build, proof, tx_fee};
 use grin_keychain::{BlindSum, BlindingFactor};
@@ -30,7 +29,6 @@ use grin_util::secp::aggsig;
 use grin_util::secp::key::{PublicKey, SecretKey};
 use grin_util::secp::pedersen::{Commitment, RangeProof};
 use rand::thread_rng;
-use std::str::FromStr;
 
 #[cfg(test)]
 use uuid::Uuid;
@@ -88,11 +86,14 @@ impl SellApi {
 		#[cfg(not(test))]
 		let id = ls.id.clone();
 
+		let network = Network::current_network()?;
+		let secondary_fee = secondary_currency.get_default_fee(&network);
+
 		let mut swap = Swap {
 			id,
 			idx: 0,
 			version: CURRENT_VERSION,
-			network: Network::current_network()?,
+			network,
 			role: Role::Seller("".to_string(), 0), // will be updated later
 			communication_method,
 			communication_address: buyer_destination_address,
@@ -123,8 +124,9 @@ impl SellApi {
 			posted_redeem: None,
 			posted_refund: None,
 			journal: Vec::new(),
-			secondary_fee: None,
+			secondary_fee,
 		};
+
 		swap.add_journal_message("Swap offer is created".to_string());
 
 		let mwc_lock_time = swap.get_time_mwc_lock();
@@ -195,17 +197,7 @@ impl SellApi {
 		}
 		let change = sum_in - primary_amount - lock_slate.fee;
 
-		match secondary_currency {
-			Currency::Btc | Currency::Bch => {
-				let _ = Address::from_str(&secondary_redeem_address).map_err(|e| {
-					ErrorKind::Generic(format!(
-						"Unable to parse secondary currency redeem address {}, {}",
-						secondary_redeem_address, e
-					))
-				})?;
-			}
-		}
-
+		secondary_currency.validate_address(&secondary_redeem_address)?;
 		swap.role = Role::Seller(secondary_redeem_address, change);
 
 		Self::build_multisig(keychain, &mut swap, context)?;

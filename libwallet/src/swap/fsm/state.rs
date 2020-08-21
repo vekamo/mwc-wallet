@@ -244,22 +244,10 @@ pub enum Input {
 	Check,
 
 	/// Executing current action
-	Execute {
-		/// Secondary currency refund address
-		refund_address: Option<String>,
-	},
+	Execute,
 
 	/// Process Income message
 	IncomeMessage(Message),
-}
-
-impl Input {
-	///  empty execute instance, ok for most cases
-	pub fn execute() -> Self {
-		Self::Execute {
-			refund_address: None,
-		}
-	}
 }
 
 /// Respond result

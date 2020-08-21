@@ -180,7 +180,7 @@ where
 					))
 				}
 			}
-			Input::Execute { refund_address: _ } => {
+			Input::Execute => {
 				debug_assert!(self.message.is_some()); // Check expected to be called first
 				if swap.message1.is_none() {
 					swap.message1 = Some(self.message.clone().unwrap());
@@ -659,7 +659,7 @@ impl State for BuyerSendingInitRedeemMessage {
 					))
 				}
 			}
-			Input::Execute { refund_address: _ } => {
+			Input::Execute => {
 				debug_assert!(self.message.is_some()); // Check expected to be called first
 				if swap.message2.is_none() {
 					swap.message2 = Some(self.message.clone().unwrap());
@@ -903,7 +903,7 @@ where
 				let _ = message.unwrap_redeem()?;
 				Ok(StateProcessRespond::new(StateId::BuyerRedeemMwc))
 			}
-			Input::Execute { refund_address: _ } => {
+			Input::Execute => {
 				if swap::get_cur_time() > time_limit {
 					// too late, exiting
 					return Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime));
@@ -1272,12 +1272,13 @@ where
 					),
 				)
 			}
-			Input::Execute { refund_address } => {
+			Input::Execute => {
+				let refund_address = swap.unwrap_buyer()?;
 				self.swap_api.post_secondary_refund_tx(
 					&*self.keychain,
 					context,
 					swap,
-					refund_address.clone(),
+					refund_address,
 				)?;
 				swap.posted_refund = Some(swap::get_cur_time());
 				swap.add_journal_message(format!("{} refund is posted", swap.secondary_currency));

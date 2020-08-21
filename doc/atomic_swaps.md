@@ -74,7 +74,7 @@ mwc-wallet> listen -m mwcmqs
 20200804 12:25:55.310 WARN grin_wallet_controller::controller - Starting MWCMQS Listener
 20200804 12:25:56.207 WARN grin_wallet_impls::adapters::mwcmq -
 mwcmqs listener started for [xmgHFXM1ryJ1ug7kGPsjmDj8Gd7XC18cfhQ8n8uyjxL3JzAq9r73] tid=[tr3MClzoqB1ecFnH0kHBH]
-mwc-wallet> swap --autoswap --method mwcmqs --dest xmggm9xA2ryzDARaRKNEdbw9rmSHxyLTMCqNua8iSPjCQAvsyx6s --secondary_fee_per_byte 30 -i 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5
+mwc-wallet> swap --autoswap --method mwcmqs --dest xmggm9xA2ryzDARaRKNEdbw9rmSHxyLTMCqNua8iSPjCQAvsyx6s --secondary_fee 30 -i 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5
 
     Swap ID: 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5
     Selling 5.6 MWC for 0.087 BTC. BTC redeem address: n4GUrta1qhA1Zgy4DUkmDgxULtJKjDhEc6
@@ -155,7 +155,7 @@ Command 'swap' completed
 for refund transaction, so it will not stuck in the memory pool.
 
 ```
-mwc-wallet> swap --autoswap --method mwcmqs --dest xmgHFXM1ryJ1ug7kGPsjmDj8Gd7XC18cfhQ8n8uyjxL3JzAq9r73 --buyer_refund_address mjdcskZm4Kimq7yzUGLtzwiEwMdBdTa3No --secondary_fee_per_byte 30 -i 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5
+mwc-wallet> swap --autoswap --method mwcmqs --dest xmgHFXM1ryJ1ug7kGPsjmDj8Gd7XC18cfhQ8n8uyjxL3JzAq9r73 --buyer_refund_address mjdcskZm4Kimq7yzUGLtzwiEwMdBdTa3No --secondary_fee 30 -i 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5
 
     Swap ID: 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5
     Buying 5.6 MWC for 0.087 BTC

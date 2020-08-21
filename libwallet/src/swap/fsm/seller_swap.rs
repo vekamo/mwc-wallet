@@ -162,7 +162,7 @@ where
 					))
 				}
 			}
-			Input::Execute { refund_address: _ } => {
+			Input::Execute => {
 				debug_assert!(self.message.is_some()); // Check expected to be called first
 				if swap.message1.is_none() {
 					swap.message1 = Some(self.message.clone().unwrap());
@@ -470,7 +470,7 @@ where
 					.action(Action::SellerPublishMwcLockTx)
 					.time_limit(time_limit))
 			}
-			Input::Execute { refund_address: _ } => {
+			Input::Execute => {
 				if tx_conf.mwc_lock_conf.is_some() {
 					// Going to the next step... MWC lock is already published.
 					return Ok(StateProcessRespond::new(
@@ -887,7 +887,7 @@ impl State for SellerSendingInitRedeemMessage {
 					))
 				}
 			}
-			Input::Execute { refund_address: _ } => {
+			Input::Execute => {
 				debug_assert!(self.message.is_some()); // Check expected to be called first
 				if swap.message2.is_none() {
 					swap.message2 = Some(self.message.clone().unwrap());
@@ -1178,7 +1178,7 @@ where
 						.time_limit(swap.get_time_btc_lock() - swap.get_timeinterval_btc_lock()),
 				)
 			}
-			Input::Execute { refund_address: _ } => {
+			Input::Execute => {
 				self.swap_api
 					.publish_secondary_transaction(&*self.keychain, swap, context)?;
 				debug_assert!(swap.secondary_data.unwrap_btc()?.redeem_tx.is_some());
@@ -1576,7 +1576,7 @@ where
 				Ok(StateProcessRespond::new(StateId::SellerPostingRefundSlate)
 					.action(Action::SellerPublishMwcRefundTx))
 			}
-			Input::Execute { refund_address: _ } => {
+			Input::Execute => {
 				// Executing the MWC lock transaction
 				// Posting the transaction
 				debug_assert!(tx_conf.mwc_refund_conf.is_none());

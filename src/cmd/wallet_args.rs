@@ -1006,14 +1006,15 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 	let method = args.value_of("method").map(|s| String::from(s));
 	let destination = args.value_of("dest").map(|s| String::from(s));
 	let apisecret = args.value_of("apisecret").map(|s| String::from(s));
-	let secondary_fee_per_byte = match args.value_of("secondary_fee_per_byte") {
-		Some(s) => Some(parse_f32(s, "secondary_fee_per_byte")?),
+	let secondary_fee = match args.value_of("secondary_fee") {
+		Some(s) => Some(parse_f32(s, "secondary_fee")?),
 		None => None,
 	};
 	let message_file_name = args.value_of("message_file_name").map(|s| String::from(s));
 	let buyer_refund_address = args
 		.value_of("buyer_refund_address")
 		.map(|s| String::from(s));
+	let secondary_address = args.value_of("secondary_address").map(|s| String::from(s));
 	let start_listener = args.is_present("start_listener");
 
 	let subcommand = if args.is_present("list") {
@@ -1045,10 +1046,11 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		method,
 		destination,
 		apisecret,
-		fee_satoshi_per_byte: secondary_fee_per_byte,
+		secondary_fee,
 		message_file_name,
 		buyer_refund_address,
 		start_listener,
+		secondary_address,
 	})
 }
 

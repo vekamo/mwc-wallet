@@ -585,6 +585,8 @@ subcommands:
             possible_values:
               - cancel
               - destination
+              - secondary_address
+              - secondary_fee
               - SellerOfferCreated
               - SellerSendingOffer
               - SellerWaitingForAcceptanceMessage
@@ -646,17 +648,21 @@ subcommands:
             short: s
             long: apisecret
             takes_value: true
-        - secondary_fee_per_byte:
-            help: Optional secondary fee per byte. For BTC default 26 sat/byte.
-            long: secondary_fee_per_byte
+        - secondary_fee:
+            help: Optional secondary fee. For BTC, BHC is it sat/byte.
+            long: secondary_fee
             takes_value: true
         - message_file_name:
             help: Filename with swap message content. Can be used for file based messages exchange process
             long: message_file_name
             takes_value: true
         - buyer_refund_address:
-            help: BTC refund address for the Buyer
+            help: BTC refund address for the Buyer to adjust or process
             long: buyer_refund_address
+            takes_value: true
+        - secondary_address:
+            help: BTC withdrawal address to adjust
+            long: secondary_address
             takes_value: true
         - start_listener:
             help: Only needed if in CLI mode doing auto swap and the method is Tor or mwcmqs. Please specify false if listener was started in previous auto swap in the same CLI session.

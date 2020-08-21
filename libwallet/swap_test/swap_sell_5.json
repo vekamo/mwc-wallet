@@ -438,5 +438,6 @@
       "time": 1567632152,
       "message": "Buyer redeemed MWC, transaction published on the blockchain"
     }
-  ]
+  ],
+  "secondary_fee": 1.4
 }

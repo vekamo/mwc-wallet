@@ -22,8 +22,8 @@ use crate::swap::fsm::machine::StateMachine;
 use crate::swap::fsm::{buyer_swap, seller_swap};
 use crate::swap::message::SecondaryUpdate;
 use crate::swap::types::{
-	BuyerContext, Context, Currency, Network, RoleContext, SecondaryBuyerContext,
-	SecondarySellerContext, SellerContext, SwapTransactionsConfirmations,
+	BuyerContext, Context, Currency, RoleContext, SecondaryBuyerContext, SecondarySellerContext,
+	SellerContext, SwapTransactionsConfirmations,
 };
 use crate::swap::{ErrorKind, SellApi, Swap, SwapApi};
 use crate::{NodeClient, Slate};
@@ -148,7 +148,6 @@ where
 		swap: &Swap,
 		context: &Context,
 		input_script: &Script,
-		fee_satoshi_per_byte: Option<f32>,
 	) -> Result<BtcTtansaction, ErrorKind> {
 		let cosign_id = &context.unwrap_seller()?.unwrap_btc()?.cosign;
 
@@ -181,7 +180,7 @@ where
 			keychain.secp(),
 			&redeem_address,
 			&input_script,
-			fee_satoshi_per_byte.unwrap_or(self.get_default_fee_satoshi_per_byte(&swap.network)),
+			swap.secondary_fee,
 			&cosign_secret,
 			&redeem_secret,
 			&conf_outputs,
@@ -219,8 +218,7 @@ where
 			keychain.secp(),
 			refund_address,
 			input_script,
-			swap.secondary_fee
-				.unwrap_or(self.get_default_fee_satoshi_per_byte(&swap.network)),
+			swap.secondary_fee,
 			btc_lock_time,
 			&refund_key,
 			&conf_outputs,
@@ -229,7 +227,7 @@ where
 		let tx = refund_tx.tx.clone();
 		self.btc_node_client.lock().post_tx(tx)?;
 		btc_data.refund_tx = Some(refund_tx.txid);
-		btc_data.tx_fee = swap.secondary_fee;
+		btc_data.tx_fee = Some(swap.secondary_fee);
 		Ok(())
 	}
 
@@ -296,14 +294,6 @@ where
 			},
 		};
 		Ok(result)
-	}
-
-	fn get_default_fee_satoshi_per_byte(&self, network: &Network) -> f32 {
-		// Default values
-		match network {
-			Network::Floonet => 1.4 as f32,
-			Network::Mainnet => 26.0 as f32,
-		}
 	}
 }
 
@@ -463,19 +453,13 @@ where
 
 		let input_script = self.script(swap)?;
 
-		let btc_tx = self.seller_build_redeem_tx(
-			keychain,
-			swap,
-			context,
-			&input_script,
-			swap.secondary_fee,
-		)?;
+		let btc_tx = self.seller_build_redeem_tx(keychain, swap, context, &input_script)?;
 
 		self.btc_node_client.lock().post_tx(btc_tx.tx)?;
 
 		let btc_data = swap.secondary_data.unwrap_btc_mut()?;
 		btc_data.redeem_tx = Some(btc_tx.txid);
-		btc_data.tx_fee = swap.secondary_fee;
+		btc_data.tx_fee = Some(swap.secondary_fee);
 		Ok(())
 	}
 
@@ -647,7 +631,7 @@ where
 
 	/// Check if tx fee for the secondary is different from the posted
 	fn is_secondary_tx_fee_changed(&self, swap: &Swap) -> Result<bool, ErrorKind> {
-		Ok(swap.secondary_data.unwrap_btc()?.tx_fee != swap.secondary_fee)
+		Ok(swap.secondary_data.unwrap_btc()?.tx_fee != Some(swap.secondary_fee))
 	}
 
 	/// Post BTC refund transaction

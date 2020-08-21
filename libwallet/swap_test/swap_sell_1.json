@@ -338,5 +338,6 @@
       "time": 1567632152,
       "message": "Offer message was sent"
     }
-  ]
+  ],
+  "secondary_fee": 1.4
 }

@@ -3,7 +3,9 @@
   "idx": 0,
   "version": 1,
   "network": "Floonet",
-  "role": "Buyer",
+  "role": {
+    "Buyer": null
+  },
   "communication_method": "file",
   "communication_address": "Fix me",
   "seller_lock_first": false,
@@ -377,5 +379,6 @@
       "time": 1567632152,
       "message": "MWC Redeem slate is posted"
     }
-  ]
+  ],
+  "secondary_fee": 1.4
 }
