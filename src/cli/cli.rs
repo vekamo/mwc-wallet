@@ -32,7 +32,7 @@ use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
 use rustyline::{CompletionType, Config, Context, EditMode, Editor, Helper, OutputStreamType};
 use std::borrow::Cow::{self, Borrowed, Owned};
-use std::sync::{atomic::AtomicBool, Arc};
+use std::sync::Arc;
 use std::time::Duration;
 
 const COLORED_PROMPT: &'static str = "\x1b[36mmwc-wallet>\x1b[0m ";
@@ -134,7 +134,6 @@ where
 	// start the automatic updater
 	owner_api.start_updater((&keychain_mask).as_ref(), Duration::from_secs(60))?;
 	let mut wallet_opened = false;
-	let stop_thread = Arc::new(AtomicBool::new(false));
 	loop {
 		match reader.readline(PROMPT) {
 			Ok(command) => {
@@ -186,7 +185,7 @@ where
 								let wallet_inst = lc.wallet_inst()?;
 
 								let secondary_currency_node_addrs =
-									get_supported_secondary_currency_node_addrs(wallet_config)?;
+									get_supported_secondary_currency_node_addrs(wallet_config);
 								grin_wallet_libwallet::swap::trades::init_swap_trade_backend(
 									wallet_inst.get_data_file_dir(),
 									secondary_currency_node_addrs,
@@ -218,7 +217,6 @@ where
 							&args,
 							test_mode,
 							true,
-							&stop_thread,
 						) {
 							Ok(_) => {
 								cli_message!("Command '{}' completed", args.subcommand().0);

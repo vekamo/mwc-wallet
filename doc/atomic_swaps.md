@@ -42,7 +42,7 @@ mwc-wallet> open
 Password:
 Command 'open' completed
 
-mwc-wallet> swap_start --mwc_amount 5.6 --secondary_currency btc --secondary_amount 0.087  --mwc_lock_confirmations 500 --secondary_lock_confirmations 6 --message_exchange_time 60 --redeem_time 60 --secondary_address n4GUrta1qhA1Zgy4DUkmDgxULtJKjDhEc6 --who_lock_first seller
+mwc-wallet> swap_start --mwc_amount 5.6 --secondary_currency btc --secondary_amount 0.087  --mwc_confirmations 500 --secondary_confirmations 6 --message_exchange_time 60 --redeem_time 60 --secondary_address n4GUrta1qhA1Zgy4DUkmDgxULtJKjDhEc6 --who_lock_first seller
 20200804 12:19:27.863 WARN grin_wallet_controller::command - Seller Swap trade is created: 975ab0c2-27f5-45bd-99f2-2c3b01ce0fa5
 Command 'swap_start' completed
 ```

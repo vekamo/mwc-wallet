@@ -118,6 +118,7 @@ where
 
 	let outputs: Vec<&str> = outs.keys().map(AsRef::as_ref).collect();
 	let secondary_currency = Currency::try_from(params.secondary_currency.as_str())?;
+	let secondary_amount = secondary_currency.amount_from_hr_string(&params.secondary_amount)?;
 
 	let mut swap_api = crate::swap::api::create_instance(&secondary_currency, node_client)?;
 
@@ -156,8 +157,8 @@ where
 	let swap = (*swap_api).create_swap_offer(
 		&keychain,
 		&context,
-		params.mwc_amount,       // mwc amount to sell
-		params.secondary_amount, // btc amount to buy
+		params.mwc_amount, // mwc amount to sell
+		secondary_amount,  // btc amount to buy
 		secondary_currency,
 		params.secondary_redeem_address.clone(),
 		params.seller_lock_first,
@@ -810,6 +811,42 @@ where
 	})?;
 	batch.commit()?;
 	Ok(())
+}
+
+/// Create Swap record from income message
+pub fn swap_create_from_offer<'a, L, C, K>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
+	message_filename: String,
+) -> Result<String, Error>
+where
+	L: WalletLCProvider<'a, C, K>,
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
+{
+	// Updating wallet state first because we need to select outputs.
+	let mut file = File::open(message_filename.clone()).map_err(|e| {
+		ErrorKind::Generic(format!("Unable to open file {}, {}", message_filename, e))
+	})?;
+	let mut contents = String::new();
+	file.read_to_string(&mut contents).map_err(|e| {
+		ErrorKind::Generic(format!(
+			"Unable to read a message from the file {}, {}",
+			message_filename, e
+		))
+	})?;
+
+	// processing the message with a regular API.
+	// but first let's check if the message type matching expected
+	let message = Message::from_json(&contents)?;
+	if !message.is_offer() {
+		return Err(
+			ErrorKind::Generic("Expected offer message, get different one".to_string()).into(),
+		);
+	}
+
+	swap_income_message(wallet_inst, keychain_mask, &contents, None)?;
+	Ok(message.id.to_string())
 }
 
 /// Processing swap income message. Note result of that can be a new offer of modification of the current one

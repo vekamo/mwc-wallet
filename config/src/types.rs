@@ -96,10 +96,10 @@ impl Default for WalletConfig {
 			dark_background_color_scheme: Some(true),
 			keybase_notify_ttl: Some(1440),
 			wallet_data_dir: None,
-			electrumx_mainnet_bch_node_addr: Some("52.23.248.83:8000".to_string()),
-			electrumx_testnet_bch_node_addr: Some("52.23.248.83:8000".to_string()),
-			electrumx_mainnet_btc_node_addr: Some("52.23.248.83:8000".to_string()),
-			electrumx_testnet_btc_node_addr: Some("52.23.248.83:8000".to_string()),
+			electrumx_mainnet_bch_node_addr: None, // Some("52.23.248.83:8000".to_string()),   make them none because it is not Default Value. They will be overwritten by config. So this code add confusion and doesn't solve default values problem
+			electrumx_testnet_bch_node_addr: None, // Some("52.23.248.83:8000".to_string()),
+			electrumx_mainnet_btc_node_addr: None, // Some("52.23.248.83:8000".to_string()),
+			electrumx_testnet_btc_node_addr: None, // Some("52.23.248.83:8000".to_string()),
 		}
 	}
 }

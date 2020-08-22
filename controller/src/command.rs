@@ -33,7 +33,7 @@ use grin_wallet_impls::{Address, MWCMQSAddress, Publisher};
 use grin_wallet_libwallet::api_impl::owner_swap;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::swap::message;
-use grin_wallet_libwallet::{Slate, TxLogEntry};
+use grin_wallet_libwallet::{Slate, TxLogEntry, WalletInst};
 use serde_json as json;
 use std::fs::File;
 use std::io;
@@ -43,6 +43,11 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
+
+lazy_static! {
+	/// Recieve account can be specified separately and must be allpy to ALL receive operations
+	static ref SWAP_THREADS_RUN:  Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
+}
 
 /// Arguments common to all wallet commands
 #[derive(Clone)]
@@ -1289,7 +1294,7 @@ pub struct SwapStartArgs {
 	/// Secondary currency
 	pub secondary_currency: String,
 	/// BTC to recieve
-	pub secondary_amount: u64,
+	pub secondary_amount: String,
 	/// Secondary currency redeem address
 	pub secondary_redeem_address: String,
 	/// Funds locking order. true - seller lock mwc first
@@ -1443,557 +1448,153 @@ pub struct SwapArgs {
 }
 
 pub fn swap<L, C, K>(
-	owner_api: &mut Owner<L, C, K>,
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
-	config: &WalletConfig,
+	address_index: u32,
+	api_listen_addr: String,
 	mqs_config: Option<MQSConfig>,
 	tor_config: Option<TorConfig>,
-	g_args: &GlobalArgs,
+	tls_conf: Option<TLSConfig>,
 	args: SwapArgs,
 	cli_mode: bool,
-	stop_thread: &Arc<AtomicBool>,
 ) -> Result<(), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
 	C: NodeClient + 'static,
 	K: keychain::Keychain + 'static,
 {
-	let wallet_inst = owner_api.wallet_inst.clone();
 	let km = match keychain_mask.as_ref() {
 		None => None,
 		Some(&m) => Some(m.to_owned()),
 	};
 	match args.subcommand {
 		SwapSubcommand::List => {
-			controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, _m| {
-				let result = api.swap_list(keychain_mask);
-				match result {
-					Ok(list) => {
-						if list.is_empty() {
-							println!("You don't have any Swap trades");
-						} else {
-							display::swap_trades(list);
-						}
-						Ok(())
+			let result = owner_swap::swap_list(wallet_inst, keychain_mask);
+			match result {
+				Ok(list) => {
+					if list.is_empty() {
+						println!("You don't have any Swap trades");
+					} else {
+						display::swap_trades(list);
 					}
-					Err(e) => {
-						error!("Unable to List Swap trades: {}", e);
-						Err(
-							ErrorKind::LibWallet(format!("Unable to List Swap trades: {}", e))
-								.into(),
-						)
-					}
+					Ok(())
 				}
-			})?;
-			Ok(())
+				Err(e) => {
+					error!("Unable to List Swap trades: {}", e);
+					Err(ErrorKind::LibWallet(format!("Unable to List Swap trades: {}", e)).into())
+				}
+			}
 		}
 		SwapSubcommand::Delete => {
-			controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, _m| {
-				let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(
-					"Not found expected 'swap_id' argument".to_string(),
-				))?;
-				let result = api.swap_delete(keychain_mask, swap_id.clone());
-				match result {
-					Ok(_) => {
-						println!("Swap trade {} was sucessfully deleted.", swap_id);
-						Ok(())
-					}
-					Err(e) => {
-						error!("Unable to delete Swap {}: {}", swap_id, e);
-						Err(ErrorKind::LibWallet(format!(
-							"Unable to delete Swap {}: {}",
-							swap_id, e
-						))
-						.into())
-					}
+			let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(
+				"Not found expected 'swap_id' argument".to_string(),
+			))?;
+			let result = owner_swap::swap_delete(wallet_inst, keychain_mask, &swap_id);
+			match result {
+				Ok(_) => {
+					println!("Swap trade {} was sucessfully deleted.", swap_id);
+					Ok(())
 				}
-			})?;
-			Ok(())
+				Err(e) => {
+					error!("Unable to delete Swap {}: {}", swap_id, e);
+					Err(
+						ErrorKind::LibWallet(format!("Unable to delete Swap {}: {}", swap_id, e))
+							.into(),
+					)
+				}
+			}
 		}
 		SwapSubcommand::Adjust => {
-			controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, _m| {
-				let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(
-					"Not found expected 'swap_id' argument".to_string(),
+			let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(
+				"Not found expected 'swap_id' argument".to_string(),
+			))?;
+
+			let adjast_cmd = args.adjust.ok_or(ErrorKind::ArgumentError(
+				"Not found expected 'adjust' argument".to_string(),
+			))?;
+
+			// Checking parameters here. We can't do that at libwallet side
+			if let Some(method) = args.method.clone() {
+				let destination = args.destination.clone().ok_or(ErrorKind::ArgumentError(
+					"Please specify '--dest' parameter as well".to_string(),
 				))?;
-
-				let adjast_cmd = args.adjust.ok_or(ErrorKind::ArgumentError(
-					"Not found expected 'adjust' argument".to_string(),
-				))?;
-
-				// Checking parameters here. We can't do that at libwallet side
-				if let Some(method) = args.method.clone() {
-					let destination = args.destination.clone().ok_or(ErrorKind::ArgumentError(
-						"Please specify '--dest' parameter as well".to_string(),
-					))?;
-					match method.as_str() {
-						"mwcmqs" => {
-							// Validating destination address
-							let _ = MWCMQSAddress::from_str(&destination).map_err(|e| {
-								ErrorKind::ArgumentError(format!(
-									"Invalid destination address, {}",
-									e
-								))
-							})?;
-						}
-						"tor" => {
-							// Validating tor address
-							let _ = validate_tor_address(&destination).map_err(|e| {
-								ErrorKind::ArgumentError(format!(
-									"Invalid destination address, {}",
-									e
-								))
-							})?;
-						}
-						"file" => (),
-						_ => {
-							return Err(ErrorKind::ArgumentError(format!(
-								"Unknown communication method value '{}'",
-								method
-							))
-							.into());
-						}
-					}
-				}
-
-				let mut secondary_address = None;
-				if args.buyer_refund_address.is_some() {
-					secondary_address = args.buyer_refund_address.clone();
-				}
-				if args.secondary_address.is_some() {
-					secondary_address = args.secondary_address.clone();
-				}
-
-				let result = api.swap_adjust(
-					keychain_mask,
-					swap_id.clone(),
-					adjast_cmd,
-					args.method.clone(),
-					args.destination.clone(),
-					secondary_address,
-					args.secondary_fee,
-				);
-				match result {
-					Ok((state, _action)) => {
-						println!(
-							"Swap trade {} was successfully adjusted. New state: {}",
-							swap_id, state
-						);
-						Ok(())
-					}
-					Err(e) => {
-						error!("Unable to adjust the Swap {}: {}", swap_id, e);
-						Err(ErrorKind::LibWallet(format!(
-							"Unable to adjust Swap {}: {}",
-							swap_id, e
-						))
-						.into())
-					}
-				}
-			})?;
-			Ok(())
-		}
-		SwapSubcommand::Check => {
-			controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, _m| {
-				let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(
-					"Not found expected 'swap_id' argument".to_string(),
-				))?;
-				let result = api.swap_get(keychain_mask, swap_id.clone());
-				match result {
-					Ok(swap) => {
-						let conf_status =
-							api.get_swap_tx_tstatus(keychain_mask, swap_id.clone())?;
-						let (_status, action, time_limit, roadmap, journal_records) =
-							api.update_swap_status_action(keychain_mask, swap_id.clone())?;
-
-						display::swap_trade(
-							&swap,
-							&action,
-							&time_limit,
-							&conf_status,
-							&roadmap,
-							&journal_records,
-							true,
-						)?;
-						Ok(())
-					}
-					Err(e) => {
-						error!("Unable to retrieve Swap {}: {}", swap_id, e);
-						Err(ErrorKind::LibWallet(format!(
-							"Unable to retrieve Swap {}: {}",
-							swap_id, e
-						))
-						.into())
-					}
-				}
-			})?;
-			Ok(())
-		}
-		SwapSubcommand::Process => {
-			controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, _m| {
-				let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(
-					"Not found expected 'swap_id' argument".to_string(),
-				))?;
-
-				if args.method.is_some() || args.destination.is_some() {
-					return Err( ErrorKind::ArgumentError(
-						"swap --process doesn't accept 'method' or 'dest' parameters, instead it is using parameters associated with this swap trade.".to_string()).into());
-				}
-
-				// Creating message delivery transport as a closure
-				let apisecret = args.apisecret.clone();
-				let config2 = config.clone();
-				let g_args2 = g_args.clone();
-				let swap_id2 = swap_id.clone();
-				let message_sender = move |swap_message: message::Message,
-				                           method: String,
-				                           dest: String|
-				      -> Result<(bool, String), crate::libwallet::Error> {
-					let destination_str = format!("{} {}", method, dest);
-					let from_address;
-
-					// Starting the listener first. For this case we know that they are not started yet
-					// And there will be a single call only.
-					match method.as_str() {
-						"mwcmqs" => {
-							if grin_wallet_impls::adapters::get_mwcmqs_brocker().is_none() {
-								let _ = controller::init_start_mwcmqs_listener(
-									config2.clone(),
-									wallet_inst.clone(),
-									mqs_config.expect("No MQS config found!").clone(),
-									Arc::new(Mutex::new(km)),
-									false,
-									//None,
-								)
-								.map_err(|e| {
-									crate::libwallet::ErrorKind::SwapError(format!(
-										"Unable to start mwcmqs listener, {}",
-										e
-									))
-								})?;
-								thread::sleep(Duration::from_millis(2000));
-							}
-							from_address = grin_wallet_impls::adapters::get_mwcmqs_brocker()
-								.ok_or(crate::libwallet::ErrorKind::SwapError(
-									"Unable to start mwcmqs listener".to_string(),
-								))?
-								.0
-								.get_publisher_address()
-								.map_err(|e| {
-									crate::libwallet::ErrorKind::SwapError(format!(
-										"Unable to get publisher address {}",
-										e
-									))
-								})?
-								.get_full_name();
-						}
-						"tor" => {
-							if !controller::is_foreign_api_running() {
-								let tor_config = tor_config.clone().ok_or(
-									crate::libwallet::ErrorKind::GenericError(
-										"Tor configuration is not defined".to_string(),
-									),
-								)?;
-								let _api_thread = thread::Builder::new()
-									.name("wallet-http-listener".to_string())
-									.spawn(move || {
-										let res = controller::foreign_listener(
-											wallet_inst,
-											Arc::new(Mutex::new(km)),
-											&config2.api_listen_addr(),
-											g_args2.tls_conf.clone(),
-											tor_config.use_tor_listener,
-											config2.grinbox_address_index(),
-										);
-										if let Err(e) = res {
-											error!("Error starting http listener: {}", e);
-										}
-									});
-								thread::sleep(Duration::from_millis(2000));
-							}
-							from_address = controller::get_current_tor_address().ok_or(
-								crate::libwallet::ErrorKind::GenericError(
-									"Tor is not running".to_string(),
-								),
-							)?;
-						}
-						"file" => {
-							// File, let's process it here
-							let msg_str = swap_message.to_json()?;
-							let mut file = File::create(dest.clone())?;
-							file.write_all(msg_str.as_bytes()).map_err(|e| {
-								crate::libwallet::ErrorKind::SwapError(format!(
-									"Unable to store message data to the destination file, {}",
-									e
-								))
-							})?;
-							println!("Message is written into the file {}", dest);
-							return Ok((true, destination_str)); // ack if true, because file is concidered as delivered
-						}
-						_ => {
-							error!("Please specify a method (mwcmqs, tor, or file) for transporting swap messages to the other party with whom you're doing the swap!");
-							return Err(crate::libwallet::Error::from(
-								crate::libwallet::ErrorKind::SwapError(
-									"Expected 'method' argument is not found".to_string(),
-								),
-							));
-						}
-					}
-
-					// File is processed, the online send will be handled here
-					let sender = create_swap_message_sender(
-						method.as_str(),
-						dest.as_str(),
-						&apisecret,
-						tor_config,
-					)
-					.map_err(|e| {
-						crate::libwallet::ErrorKind::SwapError(format!(
-							"Unable to create message sender, {}",
-							e
-						))
-					})?;
-
-					let mut swap_message = swap_message;
-					if let message::Update::Offer(offer_update) = &mut swap_message.inner {
-						offer_update.from_address = from_address;
-					}
-
-					let ack = sender
-						.send_swap_message(&swap_message)
-						.map_err(|e| {
-							ErrorKind::LibWallet(format!(
-								"Failure in sending swap message {} by {}: {}",
-								swap_id2, method, e
-							))
-						})
-						.map_err(|e| {
-							crate::libwallet::ErrorKind::SwapError(format!(
-								"Unable to deliver the message, {}",
-								e
-							))
-						})?;
-					Ok((ack, destination_str))
-				};
-
-				let result = api.swap_process(
-					keychain_mask,
-					&swap_id,
-					message_sender,
-					args.message_file_name,
-					args.buyer_refund_address,
-					args.secondary_fee,
-					args.secondary_address,
-				);
-
-				match result {
-					Ok(_) => Ok(()),
-					Err(e) => {
-						error!("Unable to process Swap {}: {}", swap_id, e);
-						Err(ErrorKind::LibWallet(format!(
-							"Unable to process Swap {}: {}",
-							swap_id, e
-						))
-						.into())
-					}
-				}
-			})?;
-			Ok(())
-		}
-		SwapSubcommand::Autoswap => {
-			controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, _m| {
-				let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(
-					"Not found expected 'swap_id' argument".to_string(),
-				))?;
-
-				if args.method.is_some() || args.destination.is_some() {
-					return Err( ErrorKind::ArgumentError(
-						"swap --autoswap doesn't accept 'method' or 'dest' parameters, instead it is using parameters associated with this swap trade.".to_string()).into());
-				}
-
-				let swap = api.swap_get(keychain_mask, swap_id.clone())?;
-
-				let config2 = config.clone();
-				let g_args2 = g_args.clone();
-				let wallet_inst2 = wallet_inst.clone();
-				let km2 = km.clone();
-				stop_thread.swap(false, Ordering::Relaxed);
-
-				if args.start_listener {
-					match swap.communication_method.as_str() {
-						"mwcmqs" => {
-							if grin_wallet_impls::adapters::get_mwcmqs_brocker().is_some() {
-								return Err(ErrorKind::GenericError("mwcmqs listener is already running, there is no need to specify '--start_listener' parameter".to_string()).into());
-							}
-
-							// Startting MQS
-							let _ = controller::init_start_mwcmqs_listener(
-								config2.clone(),
-								wallet_inst.clone(),
-								mqs_config.expect("No MQS config found!").clone(),
-								Arc::new(Mutex::new(km)),
-								false,
-								//None,
-							)
-							.map_err(|e| {
-								ErrorKind::LibWallet(format!(
-									"Unable to start mwcmqs listener, {}",
-									e
-								))
-							})?;
-							thread::sleep(Duration::from_millis(2000));
-						}
-						"tor" => {
-							// Checking is foreign API is running. It dont't important if it is tor or http.
-							if controller::is_foreign_api_running() {
-								return Err(ErrorKind::GenericError("tor or http listener is already running, there is no need to specify '--start_listener' parameter".to_string()).into());
-							}
-
-							// Starting tor
-							let tor_config = tor_config.clone().ok_or(ErrorKind::GenericError(
-								"Tor configuration is not defined".to_string(),
-							))?;
-							let _api_thread = thread::Builder::new()
-								.name("wallet-http-listener".to_string())
-								.spawn(move || {
-									let res = controller::foreign_listener(
-										wallet_inst,
-										Arc::new(Mutex::new(km)),
-										&config2.api_listen_addr(),
-										g_args2.tls_conf.clone(),
-										tor_config.use_tor_listener,
-										config2.grinbox_address_index(),
-									);
-									if let Err(e) = res {
-										error!("Error starting http listener: {}", e);
-									}
-								});
-							thread::sleep(Duration::from_millis(2000));
-						}
-						_ => {
-							return Err(ErrorKind::ArgumentError(format!(
-								"Auto Swap doesn't support communication method {}",
-								swap.communication_method
-							))
-							.into());
-						}
-					}
-				}
-
-				// Checking if we are ready to send messages
-				let from_address;
-				match swap.communication_method.as_str() {
+				match method.as_str() {
 					"mwcmqs" => {
 						// Validating destination address
-						let _ =
-							MWCMQSAddress::from_str(&swap.communication_address).map_err(|e| {
-								ErrorKind::ArgumentError(format!(
-									"Invalid destination address, {}",
-									e
-								))
-							})?;
-
-						if grin_wallet_impls::adapters::get_mwcmqs_brocker().is_none() {
-							return Err(ErrorKind::GenericError("mqcmqs listener is not running. Please start it with 'listen' command or '--start_listener' argument".to_string()).into());
-						}
-						from_address = grin_wallet_impls::adapters::get_mwcmqs_brocker()
-							.ok_or(ErrorKind::GenericError(
-								"Unable to start mwcmqs listener".to_string(),
-							))?
-							.0
-							.get_publisher_address()
-							.map_err(|e| {
-								ErrorKind::GenericError(format!(
-									"Unable to get publisher address {}",
-									e
-								))
-							})?
-							.get_full_name();
+						let _ = MWCMQSAddress::from_str(&destination).map_err(|e| {
+							ErrorKind::ArgumentError(format!("Invalid destination address, {}", e))
+						})?;
 					}
 					"tor" => {
 						// Validating tor address
-						let _ = validate_tor_address(&swap.communication_address).map_err(|e| {
+						let _ = validate_tor_address(&destination).map_err(|e| {
 							ErrorKind::ArgumentError(format!("Invalid destination address, {}", e))
 						})?;
-
-						if !controller::is_foreign_api_running() {
-							return Err(ErrorKind::GenericError("tor listener is not running. Please start it with 'listen' command or '--start_listener' argument".to_string()).into());
-						}
-						from_address = controller::get_current_tor_address()
-							.ok_or(ErrorKind::GenericError("Tor is not running".to_string()))?;
 					}
+					"file" => (),
 					_ => {
 						return Err(ErrorKind::ArgumentError(format!(
-							"Auto Swap doesn't support communication method {}",
-							swap.communication_method
+							"Unknown communication method value '{}'",
+							method
 						))
 						.into());
 					}
 				}
+			}
 
-				// Creating message delivery transport as a closure
-				let apisecret = args.apisecret.clone();
-				let swap_id2 = swap_id.clone();
-				let message_sender = move |swap_message: message::Message,
-				                           method: String,
-				                           destination: String|
-				      -> Result<(bool, String), crate::libwallet::Error> {
-					// File is processed, the online send will be handled here
-					let sender = create_swap_message_sender(
-						method.as_str(),
-						destination.as_str(),
-						&apisecret,
-						tor_config,
+			let mut secondary_address = None;
+			if args.buyer_refund_address.is_some() {
+				secondary_address = args.buyer_refund_address.clone();
+			}
+			if args.secondary_address.is_some() {
+				secondary_address = args.secondary_address.clone();
+			}
+
+			let result = owner_swap::swap_adjust(
+				wallet_inst,
+				keychain_mask,
+				&swap_id,
+				&adjast_cmd,
+				args.method.clone(),
+				args.destination.clone(),
+				secondary_address,
+				args.secondary_fee,
+			);
+			match result {
+				Ok((state, _action)) => {
+					println!(
+						"Swap trade {} was successfully adjusted. New state: {}",
+						swap_id, state
+					);
+					Ok(())
+				}
+				Err(e) => {
+					error!("Unable to adjust the Swap {}: {}", swap_id, e);
+					Err(
+						ErrorKind::LibWallet(format!("Unable to adjust Swap {}: {}", swap_id, e))
+							.into(),
 					)
-					.map_err(|e| {
-						crate::libwallet::ErrorKind::SwapError(format!(
-							"Unable to create message sender, {}",
-							e
-						))
-					})?;
-
-					let mut swap_message = swap_message;
-					if let message::Update::Offer(offer_update) = &mut swap_message.inner {
-						offer_update.from_address = from_address;
-					}
-
-					let ack = sender.send_swap_message(&swap_message).map_err(|e| {
-						crate::libwallet::ErrorKind::SwapError(format!(
-							"Unable to deliver the message {} by {}: {}",
-							swap_id2, method, e
-						))
-					})?;
-					Ok((ack, format!("{} {}", method, destination)))
-				};
-
-				// Calling mostly for params and environment validation. Also it is a nice chance to print the status of the deal that will be started
-				let (mut prev_state, mut prev_action, mut prev_journal_len) = {
-					let conf_status = api.get_swap_tx_tstatus(keychain_mask, swap_id.clone())?;
-					let (state, action, time_limit, roadmap, journal_records) =
-						api.update_swap_status_action(keychain_mask, swap_id.clone())?;
-
-					// Autoswap has to be sure that ALL parameters are defined. There are multiple steps and potentioly all of them can be used.
-					// We are checking them here because the swap object is known, so the second currency is known. And we can validate the data
-					if !swap.is_seller() {
-						match &args.buyer_refund_address {
-							Some(addr) => {
-								swap.secondary_currency
-									.validate_address(addr)
-									.map_err(|e| {
-										ErrorKind::ArgumentError(format!(
-											"Invalid secondary currency address {}, {}",
-											addr, e
-										))
-									})?
-							}
-							None => {
-								return Err(ErrorKind::GenericError(
-									"Please define buyer_refund_address for automated swap"
-										.to_string(),
-								)
-								.into())
-							}
-						}
-					}
+				}
+			}
+		}
+		SwapSubcommand::Check => {
+			let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(
+				"Not found expected 'swap_id' argument".to_string(),
+			))?;
+			let result = owner_swap::swap_get(wallet_inst.clone(), keychain_mask, &swap_id);
+			match result {
+				Ok(swap) => {
+					let conf_status = owner_swap::get_swap_tx_tstatus(
+						wallet_inst.clone(),
+						keychain_mask,
+						&swap_id,
+					)?;
+					let (_status, action, time_limit, roadmap, journal_records) =
+						owner_swap::update_swap_status_action(
+							wallet_inst.clone(),
+							keychain_mask,
+							&swap_id,
+						)?;
 
 					display::swap_trade(
 						&swap,
@@ -2004,157 +1605,529 @@ where
 						&journal_records,
 						true,
 					)?;
-					(state, action, journal_records.len())
-				};
+					Ok(())
+				}
+				Err(e) => {
+					error!("Unable to retrieve Swap {}: {}", swap_id, e);
+					Err(
+						ErrorKind::LibWallet(format!("Unable to retrieve Swap {}: {}", swap_id, e))
+							.into(),
+					)
+				}
+			}
+		}
+		SwapSubcommand::Process => {
+			let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(
+				"Not found expected 'swap_id' argument".to_string(),
+			))?;
 
-				println!(
-					"Swap started in auto mode.... Status will be displayed as swap progresses."
-				);
+			if args.method.is_some() || args.destination.is_some() {
+				return Err(ErrorKind::ArgumentError(
+					"swap --process doesn't accept 'method' or 'dest' parameters, instead it is using parameters associated with this swap trade.".to_string()).into());
+			}
 
-				// NOTE - we can't process errors with '?' here. We can't exit, we must try forever or until we get a final state
-				let swap_id2 = swap_id.clone();
-				let fee_satoshi = args.secondary_fee.clone();
-				let file_name = args.message_file_name.clone();
-				let refund_address = args.buyer_refund_address.clone();
-				let secondary_address = args.secondary_address.clone();
-				let swap_report_prefix = if cli_mode {
-					format!("Swap Trade {}: ", swap_id)
-				} else {
-					"".to_string()
-				};
-				let stop_thread_clone = stop_thread.clone();
+			// Creating message delivery transport as a closure
+			let apisecret = args.apisecret.clone();
+			let swap_id2 = swap_id.clone();
+			let wallet_inst2 = wallet_inst.clone();
+			let message_sender = move |swap_message: message::Message,
+			                           method: String,
+			                           dest: String|
+			      -> Result<(bool, String), crate::libwallet::Error> {
+				let destination_str = format!("{} {}", method, dest);
+				let from_address;
 
-				debug!("Starting autoswap thread for swap id {}", swap_id);
-				let api_thread = thread::Builder::new()
-					.name("wallet-auto-swap".to_string())
-					.spawn(move || {
-						loop {
-							// we can't exit by error from the loop.
-							let (
-								mut curr_state,
-								mut curr_action,
-								_time_limit,
-								_roadmap,
-								mut journal_records,
-							) = match owner_swap::update_swap_status_action(
-								wallet_inst2.clone(),
-								km2.as_ref(),
-								&swap_id,
-							) {
-								Ok(res) => res,
-								Err(e) => {
-									error!("Error during Swap {}: {}", swap_id, e);
-									thread::sleep(Duration::from_millis(10000));
-									continue;
-								}
-							};
-
-							// In case of final state - we are exiting.
-							if curr_state.is_final_state() {
-								println!("{}Swap trade is finished", swap_report_prefix);
-								break;
-							}
-
-							// If actin require execution - it must be executed
-							let mut was_executed = false;
-							if curr_action.can_execute() {
-								match owner_swap::swap_process(
-									wallet_inst2.clone(),
-									km2.as_ref(),
-									swap_id2.as_str(),
-									message_sender.clone(),
-									file_name.clone(),
-									refund_address.clone(),
-									fee_satoshi.clone(),
-									secondary_address.clone(),
-								) {
-									Ok(res) => {
-										curr_state = res.next_state_id;
-										if let Some(a) = res.action {
-											curr_action = a;
-										}
-										journal_records = res.journal;
-									}
-									Err(e) => error!("Error during Swap {}: {}", swap_id, e),
-								}
-								// We can execute in the row. Internal guarantees that we will never do retry to the same action unless it is an error
-								// The sleep here for possible error
-								was_executed = true;
-								debug!(
-									"Action {} for swap id {} was excecuted",
-									curr_action, swap_id
-								);
-							}
-
-							if prev_journal_len < journal_records.len() {
-								for i in prev_journal_len..journal_records.len() {
-									println!(
-										"{}{}",
-										swap_report_prefix, journal_records[i].message
-									);
-								}
-								prev_journal_len = journal_records.len();
-							}
-
-							let curr_action_str = if curr_action.is_none() {
-								"".to_string()
-							} else {
-								curr_action.to_string()
-							};
-
-							if curr_state != prev_state {
-								if curr_action_str.len() > 0 {
-									println!("{}{}", swap_report_prefix, curr_action_str);
-								} else {
-									println!(
-										"{}{}. {}",
-										swap_report_prefix, curr_state, curr_action_str
-									);
-								}
-								prev_state = curr_state;
-								prev_action = curr_action;
-							} else if curr_action.to_string() != prev_action.to_string() {
-								if curr_action_str.len() > 0 {
-									println!("{}{}", swap_report_prefix, curr_action);
-								}
-								prev_action = curr_action;
-							}
-
-							let seconds_to_sleep = if was_executed {
-								10
-							} else {
-								60
-							};
-
-							let mut exited = false;
-							for _i in 0..seconds_to_sleep {
-								// check if the thread is asked to stop
-								if stop_thread_clone.load(Ordering::Relaxed) {
-									println!("Auto swap for trade {} is stopped. You can continue with the swap manually by entering individual commands.", swap_id2);
-									exited = true;
-									break;
-								};
-								thread::sleep(Duration::from_millis(1000));
-							}
-							if exited {
-								break;
-							}
+				// Starting the listener first. For this case we know that they are not started yet
+				// And there will be a single call only.
+				match method.as_str() {
+					"mwcmqs" => {
+						if grin_wallet_impls::adapters::get_mwcmqs_brocker().is_none() {
+							let _ = controller::start_mwcmqs_listener(
+								wallet_inst2,
+								mqs_config.expect("No MQS config found!").clone(),
+								address_index,
+								false,
+								Arc::new(Mutex::new(km)),
+								true,
+							)
+							.map_err(|e| {
+								crate::libwallet::ErrorKind::SwapError(format!(
+									"Unable to start mwcmqs listener, {}",
+									e
+								))
+							})?;
+							thread::sleep(Duration::from_millis(2000));
 						}
-					});
+						from_address = grin_wallet_impls::adapters::get_mwcmqs_brocker()
+							.ok_or(crate::libwallet::ErrorKind::SwapError(
+								"Unable to start mwcmqs listener".to_string(),
+							))?
+							.0
+							.get_publisher_address()
+							.map_err(|e| {
+								crate::libwallet::ErrorKind::SwapError(format!(
+									"Unable to get publisher address {}",
+									e
+								))
+							})?
+							.get_full_name();
+					}
+					"tor" => {
+						if !controller::is_foreign_api_running() {
+							let tor_config = tor_config.clone().ok_or(
+								crate::libwallet::ErrorKind::GenericError(
+									"Tor configuration is not defined".to_string(),
+								),
+							)?;
+							let _api_thread = thread::Builder::new()
+								.name("wallet-http-listener".to_string())
+								.spawn(move || {
+									let res = controller::foreign_listener(
+										wallet_inst2,
+										Arc::new(Mutex::new(km)),
+										&api_listen_addr,
+										tls_conf,
+										tor_config.use_tor_listener,
+										address_index,
+									);
+									if let Err(e) = res {
+										error!("Error starting http listener: {}", e);
+									}
+								});
+							thread::sleep(Duration::from_millis(2000));
+						}
+						from_address = controller::get_current_tor_address().ok_or(
+							crate::libwallet::ErrorKind::GenericError(
+								"Tor is not running".to_string(),
+							),
+						)?;
+					}
+					"file" => {
+						// File, let's process it here
+						let msg_str = swap_message.to_json()?;
+						let mut file = File::create(dest.clone())?;
+						file.write_all(msg_str.as_bytes()).map_err(|e| {
+							crate::libwallet::ErrorKind::SwapError(format!(
+								"Unable to store message data to the destination file, {}",
+								e
+							))
+						})?;
+						println!("Message is written into the file {}", dest);
+						return Ok((true, destination_str)); // ack if true, because file is concidered as delivered
+					}
+					_ => {
+						error!("Please specify a method (mwcmqs, tor, or file) for transporting swap messages to the other party with whom you're doing the swap!");
+						return Err(crate::libwallet::Error::from(
+							crate::libwallet::ErrorKind::SwapError(
+								"Expected 'method' argument is not found".to_string(),
+							),
+						));
+					}
+				}
 
-				if let Ok(t) = api_thread {
-					if !cli_mode {
-						let r = t.join();
-						if let Err(_) = r {
-							error!("Error doing auto swap.");
-							return Err(
-								ErrorKind::LibWallet(format!("Error doing auto swap")).into()
-							);
+				// File is processed, the online send will be handled here
+				let sender = create_swap_message_sender(
+					method.as_str(),
+					dest.as_str(),
+					&apisecret,
+					tor_config,
+				)
+				.map_err(|e| {
+					crate::libwallet::ErrorKind::SwapError(format!(
+						"Unable to create message sender, {}",
+						e
+					))
+				})?;
+
+				let mut swap_message = swap_message;
+				if let message::Update::Offer(offer_update) = &mut swap_message.inner {
+					offer_update.from_address = from_address;
+				}
+
+				let ack = sender
+					.send_swap_message(&swap_message)
+					.map_err(|e| {
+						ErrorKind::LibWallet(format!(
+							"Failure in sending swap message {} by {}: {}",
+							swap_id2, method, e
+						))
+					})
+					.map_err(|e| {
+						crate::libwallet::ErrorKind::SwapError(format!(
+							"Unable to deliver the message, {}",
+							e
+						))
+					})?;
+				Ok((ack, destination_str))
+			};
+
+			let result = owner_swap::swap_process(
+				wallet_inst,
+				keychain_mask,
+				&swap_id,
+				message_sender,
+				args.message_file_name,
+				args.buyer_refund_address,
+				args.secondary_fee,
+				args.secondary_address,
+			);
+
+			match result {
+				Ok(_) => Ok(()),
+				Err(e) => {
+					error!("Unable to process Swap {}: {}", swap_id, e);
+					Err(
+						ErrorKind::LibWallet(format!("Unable to process Swap {}: {}", swap_id, e))
+							.into(),
+					)
+				}
+			}
+		}
+		SwapSubcommand::Autoswap => {
+			let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(
+				"Not found expected 'swap_id' argument".to_string(),
+			))?;
+
+			if args.method.is_some() || args.destination.is_some() {
+				return Err(ErrorKind::ArgumentError(
+					"swap --autoswap doesn't accept 'method' or 'dest' parameters, instead it is using parameters associated with this swap trade.".to_string()).into());
+			}
+
+			let swap = owner_swap::swap_get(wallet_inst.clone(), keychain_mask, &swap_id)?;
+
+			let wallet_inst2 = wallet_inst.clone();
+			let km2 = km.clone();
+
+			SWAP_THREADS_RUN.swap(false, Ordering::Relaxed);
+
+			if args.start_listener {
+				match swap.communication_method.as_str() {
+					"mwcmqs" => {
+						if grin_wallet_impls::adapters::get_mwcmqs_brocker().is_some() {
+							return Err(ErrorKind::GenericError("mwcmqs listener is already running, there is no need to specify '--start_listener' parameter".to_string()).into());
+						}
+
+						// Startting MQS
+						let _ = controller::start_mwcmqs_listener(
+							wallet_inst,
+							mqs_config.expect("No MQS config found!").clone(),
+							address_index,
+							false,
+							Arc::new(Mutex::new(km)),
+							true,
+						)
+						.map_err(|e| {
+							ErrorKind::LibWallet(format!("Unable to start mwcmqs listener, {}", e))
+						})?;
+						thread::sleep(Duration::from_millis(2000));
+					}
+					"tor" => {
+						// Checking is foreign API is running. It dont't important if it is tor or http.
+						if controller::is_foreign_api_running() {
+							return Err(ErrorKind::GenericError("tor or http listener is already running, there is no need to specify '--start_listener' parameter".to_string()).into());
+						}
+
+						// Starting tor
+						let tor_config = tor_config.clone().ok_or(ErrorKind::GenericError(
+							"Tor configuration is not defined".to_string(),
+						))?;
+						let _api_thread = thread::Builder::new()
+							.name("wallet-http-listener".to_string())
+							.spawn(move || {
+								let res = controller::foreign_listener(
+									wallet_inst,
+									Arc::new(Mutex::new(km)),
+									&api_listen_addr,
+									tls_conf,
+									tor_config.use_tor_listener,
+									address_index,
+								);
+								if let Err(e) = res {
+									error!("Error starting http listener: {}", e);
+								}
+							});
+						thread::sleep(Duration::from_millis(2000));
+					}
+					_ => {
+						return Err(ErrorKind::ArgumentError(format!(
+							"Auto Swap doesn't support communication method {}",
+							swap.communication_method
+						))
+						.into());
+					}
+				}
+			}
+
+			// Checking if we are ready to send messages
+			let from_address;
+			match swap.communication_method.as_str() {
+				"mwcmqs" => {
+					// Validating destination address
+					let _ = MWCMQSAddress::from_str(&swap.communication_address).map_err(|e| {
+						ErrorKind::ArgumentError(format!("Invalid destination address, {}", e))
+					})?;
+
+					if grin_wallet_impls::adapters::get_mwcmqs_brocker().is_none() {
+						return Err(ErrorKind::GenericError("mqcmqs listener is not running. Please start it with 'listen' command or '--start_listener' argument".to_string()).into());
+					}
+					from_address = grin_wallet_impls::adapters::get_mwcmqs_brocker()
+						.ok_or(ErrorKind::GenericError(
+							"Unable to start mwcmqs listener".to_string(),
+						))?
+						.0
+						.get_publisher_address()
+						.map_err(|e| {
+							ErrorKind::GenericError(format!(
+								"Unable to get publisher address {}",
+								e
+							))
+						})?
+						.get_full_name();
+				}
+				"tor" => {
+					// Validating tor address
+					let _ = validate_tor_address(&swap.communication_address).map_err(|e| {
+						ErrorKind::ArgumentError(format!("Invalid destination address, {}", e))
+					})?;
+
+					if !controller::is_foreign_api_running() {
+						return Err(ErrorKind::GenericError("tor listener is not running. Please start it with 'listen' command or '--start_listener' argument".to_string()).into());
+					}
+					from_address = controller::get_current_tor_address()
+						.ok_or(ErrorKind::GenericError("Tor is not running".to_string()))?;
+				}
+				_ => {
+					return Err(ErrorKind::ArgumentError(format!(
+						"Auto Swap doesn't support communication method {}",
+						swap.communication_method
+					))
+					.into());
+				}
+			}
+
+			// Creating message delivery transport as a closure
+			let apisecret = args.apisecret.clone();
+			let swap_id2 = swap_id.clone();
+			let message_sender = move |swap_message: message::Message,
+			                           method: String,
+			                           destination: String|
+			      -> Result<(bool, String), crate::libwallet::Error> {
+				// File is processed, the online send will be handled here
+				let sender = create_swap_message_sender(
+					method.as_str(),
+					destination.as_str(),
+					&apisecret,
+					tor_config,
+				)
+				.map_err(|e| {
+					crate::libwallet::ErrorKind::SwapError(format!(
+						"Unable to create message sender, {}",
+						e
+					))
+				})?;
+
+				let mut swap_message = swap_message;
+				if let message::Update::Offer(offer_update) = &mut swap_message.inner {
+					offer_update.from_address = from_address;
+				}
+
+				let ack = sender.send_swap_message(&swap_message).map_err(|e| {
+					crate::libwallet::ErrorKind::SwapError(format!(
+						"Unable to deliver the message {} by {}: {}",
+						swap_id2, method, e
+					))
+				})?;
+				Ok((ack, format!("{} {}", method, destination)))
+			};
+
+			// Calling mostly for params and environment validation. Also it is a nice chance to print the status of the deal that will be started
+			let (mut prev_state, mut prev_action, mut prev_journal_len) = {
+				let conf_status =
+					owner_swap::get_swap_tx_tstatus(wallet_inst2.clone(), keychain_mask, &swap_id)?;
+				let (state, action, time_limit, roadmap, journal_records) =
+					owner_swap::update_swap_status_action(
+						wallet_inst2.clone(),
+						keychain_mask,
+						&swap_id,
+					)?;
+
+				// Autoswap has to be sure that ALL parameters are defined. There are multiple steps and potentioly all of them can be used.
+				// We are checking them here because the swap object is known, so the second currency is known. And we can validate the data
+				if !swap.is_seller() {
+					match &args.buyer_refund_address {
+						Some(addr) => {
+							swap.secondary_currency
+								.validate_address(addr)
+								.map_err(|e| {
+									ErrorKind::ArgumentError(format!(
+										"Invalid secondary currency address {}, {}",
+										addr, e
+									))
+								})?
+						}
+						None => {
+							return Err(ErrorKind::GenericError(
+								"Please define buyer_refund_address for automated swap".to_string(),
+							)
+							.into())
 						}
 					}
 				}
-				Ok(())
-			})?;
+
+				display::swap_trade(
+					&swap,
+					&action,
+					&time_limit,
+					&conf_status,
+					&roadmap,
+					&journal_records,
+					true,
+				)?;
+				(state, action, journal_records.len())
+			};
+
+			println!("Swap started in auto mode.... Status will be displayed as swap progresses.");
+
+			// NOTE - we can't process errors with '?' here. We can't exit, we must try forever or until we get a final state
+			let swap_id2 = swap_id.clone();
+			let fee_satoshi = args.secondary_fee.clone();
+			let file_name = args.message_file_name.clone();
+			let refund_address = args.buyer_refund_address.clone();
+			let secondary_address = args.secondary_address.clone();
+			let swap_report_prefix = if cli_mode {
+				format!("Swap Trade {}: ", swap_id)
+			} else {
+				"".to_string()
+			};
+			let stop_thread_clone = SWAP_THREADS_RUN.clone();
+
+			debug!("Starting autoswap thread for swap id {}", swap_id);
+			let api_thread = thread::Builder::new()
+				.name("wallet-auto-swap".to_string())
+				.spawn(move || {
+					loop {
+						// we can't exit by error from the loop.
+						let (
+							mut curr_state,
+							mut curr_action,
+							_time_limit,
+							_roadmap,
+							mut journal_records,
+						) = match owner_swap::update_swap_status_action(
+							wallet_inst2.clone(),
+							km2.as_ref(),
+							&swap_id,
+						) {
+							Ok(res) => res,
+							Err(e) => {
+								error!("Error during Swap {}: {}", swap_id, e);
+								thread::sleep(Duration::from_millis(10000));
+								continue;
+							}
+						};
+
+						// In case of final state - we are exiting.
+						if curr_state.is_final_state() {
+							println!("{}Swap trade is finished", swap_report_prefix);
+							break;
+						}
+
+						// If actin require execution - it must be executed
+						let mut was_executed = false;
+						if curr_action.can_execute() {
+							match owner_swap::swap_process(
+								wallet_inst2.clone(),
+								km2.as_ref(),
+								swap_id2.as_str(),
+								message_sender.clone(),
+								file_name.clone(),
+								refund_address.clone(),
+								fee_satoshi.clone(),
+								secondary_address.clone(),
+							) {
+								Ok(res) => {
+									curr_state = res.next_state_id;
+									if let Some(a) = res.action {
+										curr_action = a;
+									}
+									journal_records = res.journal;
+								}
+								Err(e) => error!("Error during Swap {}: {}", swap_id, e),
+							}
+							// We can execute in the row. Internal guarantees that we will never do retry to the same action unless it is an error
+							// The sleep here for possible error
+							was_executed = true;
+							debug!(
+								"Action {} for swap id {} was excecuted",
+								curr_action, swap_id
+							);
+						}
+
+						if prev_journal_len < journal_records.len() {
+							for i in prev_journal_len..journal_records.len() {
+								println!(
+									"{}{}",
+									swap_report_prefix, journal_records[i].message
+								);
+							}
+							prev_journal_len = journal_records.len();
+						}
+
+						let curr_action_str = if curr_action.is_none() {
+							"".to_string()
+						} else {
+							curr_action.to_string()
+						};
+
+						if curr_state != prev_state {
+							if curr_action_str.len() > 0 {
+								println!("{}{}", swap_report_prefix, curr_action_str);
+							} else {
+								println!(
+									"{}{}. {}",
+									swap_report_prefix, curr_state, curr_action_str
+								);
+							}
+							prev_state = curr_state;
+							prev_action = curr_action;
+						} else if curr_action.to_string() != prev_action.to_string() {
+							if curr_action_str.len() > 0 {
+								println!("{}{}", swap_report_prefix, curr_action);
+							}
+							prev_action = curr_action;
+						}
+
+						let seconds_to_sleep = if was_executed {
+							10
+						} else {
+							60
+						};
+
+						let mut exited = false;
+						for _i in 0..seconds_to_sleep {
+							// check if the thread is asked to stop
+							if stop_thread_clone.load(Ordering::Relaxed) {
+								println!("Auto swap for trade {} is stopped. You can continue with the swap manually by entering individual commands.", swap_id2);
+								exited = true;
+								break;
+							};
+							thread::sleep(Duration::from_millis(1000));
+						}
+						if exited {
+							break;
+						}
+					}
+				});
+
+			if let Ok(t) = api_thread {
+				if !cli_mode {
+					let r = t.join();
+					if let Err(_) = r {
+						error!("Error doing auto swap.");
+						return Err(ErrorKind::LibWallet(format!("Error doing auto swap")).into());
+					}
+				}
+			}
 			Ok(())
 		}
 		SwapSubcommand::StopAllAutoSwap => {
@@ -2171,35 +2144,32 @@ where
 
 			if answer.trim().to_lowercase().starts_with("y") {
 				println!("Stopping.....");
-				stop_thread.swap(true, Ordering::Relaxed);
+				SWAP_THREADS_RUN.swap(true, Ordering::Relaxed);
 			}
 			Ok(())
 		}
 		SwapSubcommand::Dump => {
-			controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, _m| {
-				let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(
-					"Not found expected 'swap_id' argument".to_string(),
-				))?;
-				let result = api.swap_dump(keychain_mask, swap_id.clone());
-				match result {
-					Ok(dump_str) => {
-						println!("{}", dump_str);
-						Ok(())
-					}
-					Err(e) => {
-						error!(
-							"Unable to dump the content of the swap file {}.swap: {}",
-							swap_id, e
-						);
-						Err(ErrorKind::LibWallet(format!(
-							"Unable to dump the content of the swap file {}.swap: {}",
-							swap_id, e
-						))
-						.into())
-					}
+			let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(
+				"Not found expected 'swap_id' argument".to_string(),
+			))?;
+			let result = owner_swap::swap_dump(wallet_inst, keychain_mask, &swap_id);
+			match result {
+				Ok(dump_str) => {
+					println!("{}", dump_str);
+					Ok(())
 				}
-			})?;
-			Ok(())
+				Err(e) => {
+					error!(
+						"Unable to dump the content of the swap file {}.swap: {}",
+						swap_id, e
+					);
+					Err(ErrorKind::LibWallet(format!(
+						"Unable to dump the content of the swap file {}.swap: {}",
+						swap_id, e
+					))
+					.into())
+				}
+			}
 		}
 	}
 }

@@ -32,7 +32,6 @@ use grin_wallet_impls::{DefaultLCProvider, DefaultWalletImpl};
 use grin_wallet_impls::{PathToSlate, SlateGetter as _};
 use grin_wallet_libwallet::proof::proofaddress;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
-use grin_wallet_libwallet::swap::types::Currency;
 use grin_wallet_libwallet::Slate;
 use grin_wallet_libwallet::{IssueInvoiceTxArgs, NodeClient, WalletInst, WalletLCProvider};
 use grin_wallet_util::grin_core as core;
@@ -44,7 +43,7 @@ use linefeed::{Interface, ReadResult};
 use rpassword;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{atomic::AtomicBool, Arc};
+use std::sync::Arc;
 
 // define what to do on argument error
 macro_rules! arg_parse {
@@ -950,15 +949,6 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<command::SwapStartArgs
 	}
 
 	let btc_amount = parse_required(args, "secondary_amount")?;
-	let btc_amount = Currency::Btc.amount_from_hr_string(btc_amount);
-	let btc_amount = match btc_amount {
-		Ok(a) => a,
-		Err(e) => {
-			let msg = format!("Unable to parse BTC amount, {}", e);
-			return Err(ParseError::ArgumentError(msg));
-		}
-	};
-
 	let btc_address = parse_required(args, "secondary_address")?;
 
 	let who_lock_first = parse_required(args, "who_lock_first")?.to_lowercase();
@@ -987,7 +977,7 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<command::SwapStartArgs
 	Ok(command::SwapStartArgs {
 		mwc_amount,
 		secondary_currency: secondary_currency.to_string(),
-		secondary_amount: btc_amount,
+		secondary_amount: btc_amount.to_string(),
 		secondary_redeem_address: btc_address.to_string(),
 		seller_lock_first: who_lock_first == "seller",
 		minimum_confirmations: Some(min_c),
@@ -1056,51 +1046,15 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 
 pub fn get_supported_secondary_currency_node_addrs(
 	wallet_config: &WalletConfig,
-) -> Result<HashMap<String, String>, Error> {
-	let wallet_config = wallet_config.clone();
-	let mut node_addrs = HashMap::new();
-	match wallet_config.electrumx_mainnet_bch_node_addr {
-		None => {}
-		Some(bch_mainnet_node_addr) => {
-			node_addrs.insert(
-				"electrumx_mainnet_bch_node_addr".to_string(),
-				bch_mainnet_node_addr,
-			);
-		}
-	}
-
-	match wallet_config.electrumx_testnet_bch_node_addr {
-		None => {}
-		Some(bch_testnet_node_addr) => {
-			node_addrs.insert(
-				"electrumx_testnet_bch_node_addr".to_string(),
-				bch_testnet_node_addr,
-			);
-		}
-	}
-
-	match wallet_config.electrumx_mainnet_btc_node_addr {
-		None => {}
-		Some(btc_mainnet_node_addr) => {
-			node_addrs.insert(
-				"electrumx_mainnet_btc_node_addr".to_string(),
-				btc_mainnet_node_addr,
-			);
-		}
-	}
-
-	match wallet_config.electrumx_testnet_btc_node_addr {
-		None => {}
-		Some(btc_testnet_node_addr) => {
-			node_addrs.insert(
-				"electrumx_testnet_btc_node_addr".to_string(),
-				btc_testnet_node_addr,
-			);
-		}
-	}
-
-	Ok(node_addrs)
+) -> HashMap<String, String> {
+	grin_wallet_libwallet::swap::defaults::get_swap_support_servers(
+		&wallet_config.electrumx_mainnet_bch_node_addr,
+		&wallet_config.electrumx_testnet_bch_node_addr,
+		&wallet_config.electrumx_mainnet_btc_node_addr,
+		&wallet_config.electrumx_testnet_btc_node_addr,
+	)
 }
+
 pub fn wallet_command<C, F>(
 	wallet_args: &ArgMatches,
 	mut wallet_config: WalletConfig,
@@ -1227,7 +1181,7 @@ where
 			let wallet_inst = lc.wallet_inst()?;
 
 			let secondary_currency_node_addrs =
-				get_supported_secondary_currency_node_addrs(&wallet_config)?;
+				get_supported_secondary_currency_node_addrs(&wallet_config);
 
 			grin_wallet_libwallet::swap::trades::init_swap_trade_backend(
 				wallet_inst.get_data_file_dir(),
@@ -1254,7 +1208,6 @@ where
 		),
 		_ => {
 			let mut owner_api = Owner::new(wallet, None, Some(tor_config.clone()));
-			let stop_thread = Arc::new(AtomicBool::new(false));
 			parse_and_execute(
 				&mut owner_api,
 				keychain_mask,
@@ -1265,7 +1218,6 @@ where
 				&wallet_args,
 				test_mode,
 				false,
-				&stop_thread,
 			)
 		}
 	};
@@ -1287,7 +1239,6 @@ pub fn parse_and_execute<L, C, K>(
 	wallet_args: &ArgMatches,
 	test_mode: bool,
 	cli_mode: bool,
-	stop_thread: &Arc<AtomicBool>,
 ) -> Result<(), Error>
 where
 	DefaultWalletImpl<'static, C>: WalletInst<'static, L, C, K>,
@@ -1477,15 +1428,15 @@ where
 		("swap", Some(args)) => {
 			let a = arg_parse!(parse_swap_args(&args));
 			command::swap(
-				owner_api,
+				owner_api.wallet_inst.clone(),
 				km,
-				&wallet_config,
+				wallet_config.grinbox_address_index(),
+				wallet_config.api_listen_addr(),
 				Some(mqs_config.clone()),
 				Some(tor_config.clone()),
-				&global_wallet_args.clone(),
+				global_wallet_args.tls_conf.clone(),
 				a,
 				cli_mode,
-				stop_thread,
 			)
 		}
 		(cmd, _) => {

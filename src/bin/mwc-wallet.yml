@@ -492,12 +492,12 @@ subcommands:
               - btc
             default_value: bch
         - secondary_amount:
-            help: BTC amount excluding fees
+            help: Secondary currency amount excluding fees
             short: b
             long: secondary_amount
             takes_value: true
         - secondary_address:
-            help: BTC withdrawal address
+            help: Secondary currency withdrawal address
             short: a
             long: secondary_address
             takes_value: true
@@ -512,12 +512,12 @@ subcommands:
             default_value: seller
         - mwc_confirmations:
             help: Number of confirmations required for MWC coins
-            long: mwc_lock_confirmations
+            long: mwc_confirmations
             takes_value: true
             default_value: "60"
         - secondary_confirmations:
-            help: Number of confirmations required for BTC
-            long: secondary_lock_confirmations
+            help: Number of confirmations required for Secondary Currency
+            long: secondary_confirmations
             takes_value: true
             default_value: "3"
         - message_exchange_time:
@@ -540,12 +540,12 @@ subcommands:
                - mwcmqs
             takes_value: true
         - dest:
-            help: destination to send swap file to (i.e. onion address or file location)
+            help: destination to send swap message to (i.e. onion address or file location)
             short: d
             long: dest
             takes_value: true
   - swap:
-      about: Trade MWC with another currency (BTC) via atomic swap
+      about: Trade MWC with another currency via atomic swap
       args:
         - list:
             help: List SWAP trades
@@ -625,7 +625,7 @@ subcommands:
             long: stop_auto_swap
             takes_value: false
         - swap_id:
-            help: Id of swap trade. Required for some commands
+            help: Swap trade Id. Required for commands that are specific for single trade
             short: i
             long: swap_id
             takes_value: true
@@ -649,7 +649,7 @@ subcommands:
             long: apisecret
             takes_value: true
         - secondary_fee:
-            help: Optional secondary fee. For BTC, BHC is it sat/byte.
+            help: Fee for Secondary Currency transactions. See fee units with 'swap --check' command
             long: secondary_fee
             takes_value: true
         - message_file_name:
@@ -657,11 +657,11 @@ subcommands:
             long: message_file_name
             takes_value: true
         - buyer_refund_address:
-            help: BTC refund address for the Buyer to adjust or process
+            help: Secondary Currency refund address for the Buyer
             long: buyer_refund_address
             takes_value: true
         - secondary_address:
-            help: BTC withdrawal address to adjust
+            help: Secondary currency withdrawal address to adjust
             long: secondary_address
             takes_value: true
         - start_listener:

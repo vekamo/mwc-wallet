@@ -326,7 +326,7 @@ pub struct SwapStartArgs {
 	/// Secondary currency
 	pub secondary_currency: String,
 	/// BTC to recieve
-	pub secondary_amount: u64,
+	pub secondary_amount: String,
 	/// Secondary currency redeem address
 	pub secondary_redeem_address: String,
 	/// Locking order (True, seller does locking first)

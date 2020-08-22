@@ -39,6 +39,9 @@ pub mod swap;
 /// Swap trade sessions catalog
 pub mod trades;
 
+/// Default values for Swap related data
+pub mod defaults;
+
 /// Serialization adapters
 pub mod ser;
 

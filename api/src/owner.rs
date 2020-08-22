@@ -39,8 +39,6 @@ use crate::util::{from_hex, static_secp_instance, Mutex, ZeroingString};
 use grin_wallet_util::grin_util::secp::key::PublicKey;
 use grin_wallet_util::OnionV3Address;
 use std::convert::TryFrom;
-use std::fs::File;
-use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Arc;
@@ -2334,30 +2332,11 @@ where
 		keychain_mask: Option<&SecretKey>,
 		message_filename: String,
 	) -> Result<String, Error> {
-		// Updating wallet state first because we need to select outputs.
-		let mut file = File::open(message_filename.clone()).map_err(|e| {
-			ErrorKind::SwapError(format!("Unable to open file {}, {}", message_filename, e))
-		})?;
-		let mut contents = String::new();
-		file.read_to_string(&mut contents).map_err(|e| {
-			ErrorKind::SwapError(format!(
-				"Unable to read a message from the file {}, {}",
-				message_filename, e
-			))
-		})?;
-
-		// processing the message with a regular API.
-		// but first let's check if the message type matching expected
-		let message = Message::from_json(&contents)?;
-		if !message.is_offer() {
-			return Err(ErrorKind::SwapError(
-				"Expected offer message, get different one".to_string(),
-			)
-			.into());
-		}
-
-		owner_swap::swap_income_message(self.wallet_inst.clone(), keychain_mask, &contents, None)?;
-		Ok(message.id.to_string())
+		owner_swap::swap_create_from_offer(
+			self.wallet_inst.clone(),
+			keychain_mask,
+			message_filename,
+		)
 	}
 
 	/// List all available swap operations. SwapId & Status
