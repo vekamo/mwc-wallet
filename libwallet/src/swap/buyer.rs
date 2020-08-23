@@ -224,7 +224,6 @@ impl BuyApi {
 		let secondary_fee = offer.secondary_currency.get_default_fee(&offer.network);
 		let mut swap = Swap {
 			id,
-			idx: 0,
 			version: CURRENT_VERSION,
 			network: offer.network,
 			role: Role::Buyer(None),

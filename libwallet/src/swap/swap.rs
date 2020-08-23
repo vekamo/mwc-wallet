@@ -53,8 +53,6 @@ pub struct SwapJournalRecord {
 pub struct Swap {
 	/// Swap session uuid
 	pub id: Uuid,
-	/// ? - it is allways 0
-	pub idx: u32,
 	/// Swap engine version. Both party are expected to have the same version
 	pub version: u8,
 	/// Network for the swap session (mainnet/floonet)
@@ -199,6 +197,14 @@ impl Swap {
 				*address = secondary_address;
 			}
 		};
+	}
+
+	/// Get secondary address. Depend on role, returns redeem or refund secondary currency address
+	pub fn get_secondary_address(&self) -> String {
+		match &self.role {
+			Role::Buyer(address) => address.clone().unwrap_or(String::new()),
+			Role::Seller(address, _) => address.clone(),
+		}
 	}
 
 	pub(super) fn message(

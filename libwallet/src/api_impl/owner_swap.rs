@@ -31,6 +31,7 @@ use crate::{
 	wallet_lock, OutputData, OutputStatus, Slate, SwapStartArgs, TxLogEntry, TxLogEntryType,
 	WalletBackend, WalletInst, WalletLCProvider,
 };
+use grin_core::core;
 use grin_keychain::ExtKeychainPath;
 use grin_util::to_hex;
 use std::collections::HashMap;
@@ -192,7 +193,8 @@ where
 pub fn swap_list<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
-) -> Result<Vec<(String, String)>, Error>
+	do_check: bool,
+) -> Result<Vec<(String, String, StateId, Option<Action>, Option<i64>, i64)>, Error>
 where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
@@ -202,16 +204,55 @@ where
 	wallet_lock!(wallet_inst, w);
 
 	let swap_id = trades::list_swap_trades()?;
-	let mut result: Vec<(String, String)> = Vec::new();
+	let mut result: Vec<(String, String, StateId, Option<Action>, Option<i64>, i64)> = Vec::new();
 
+	let node_client = w.w2n_client().clone();
 	let keychain = w.keychain(keychain_mask)?;
 	let skey = get_swap_storage_key(&keychain)?;
 
 	for sw_id in &swap_id {
 		let swap_lock = trades::get_swap_lock(sw_id);
 		let _l = swap_lock.lock();
-		let (_, swap) = trades::get_swap_trade(sw_id.as_str(), &skey, &*swap_lock)?;
-		result.push((sw_id.clone(), swap.state.to_string()));
+		let (context, mut swap) = trades::get_swap_trade(sw_id.as_str(), &skey, &*swap_lock)?;
+		let trade_start_time = swap.started.timestamp();
+		let info = if swap.is_seller() {
+			format!(
+				"Sell {} MWC",
+				core::amount_to_hr_string(swap.primary_amount, true)
+			)
+		} else {
+			format!(
+				"Buy {} MWC",
+				core::amount_to_hr_string(swap.primary_amount, true)
+			)
+		};
+
+		if do_check && !swap.state.is_final_state() {
+			let (state, action, expiration, _state_eta) = update_swap_status_action_impl(
+				&mut swap,
+				&context,
+				node_client.clone(),
+				&keychain,
+			)?;
+			result.push((
+				info,
+				sw_id.clone(),
+				state,
+				Some(action),
+				expiration,
+				trade_start_time,
+			));
+		} else {
+			result.push((
+				info,
+				sw_id.clone(),
+				swap.state.clone(),
+				None,
+				None,
+				trade_start_time,
+			));
+		}
+		trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 	}
 
 	Ok(result)
@@ -407,15 +448,15 @@ fn update_swap_status_action_impl<'a, C, K>(
 	swap: &mut Swap,
 	context: &Context,
 	node_client: C,
-	keychain: K,
+	keychain: &K,
 ) -> Result<(StateId, Action, Option<i64>, Vec<StateEtaInfo>), Error>
 where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
 	let swap_api = crate::swap::api::create_instance(&swap.secondary_currency, node_client)?;
-	let mut fsm = swap_api.get_fsm(&keychain, swap);
-	let tx_conf = swap_api.request_tx_confirmations(&keychain, swap)?;
+	let mut fsm = swap_api.get_fsm(keychain, swap);
+	let tx_conf = swap_api.request_tx_confirmations(keychain, swap)?;
 	let resp = fsm.process(Input::Check, swap, &context, &tx_conf)?;
 	let eta = fsm.get_swap_roadmap(swap)?;
 
@@ -458,7 +499,7 @@ where
 
 	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey, &*swap_lock)?;
 
-	match update_swap_status_action_impl(&mut swap, &context, node_client, keychain) {
+	match update_swap_status_action_impl(&mut swap, &context, node_client, &keychain) {
 		Ok((next_state_id, action, time_limit, eta)) => {
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 			Ok((next_state_id, action, time_limit, eta, swap.journal))

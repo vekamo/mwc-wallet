@@ -296,6 +296,7 @@ impl StateProcessRespond {
 }
 
 /// ETA or roadmap info the the state.
+#[derive(Serialize, Deserialize)]
 pub struct StateEtaInfo {
 	/// True if this is current active state
 	pub active: bool,

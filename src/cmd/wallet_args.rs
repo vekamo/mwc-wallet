@@ -1008,7 +1008,11 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 	let start_listener = args.is_present("start_listener");
 
 	let subcommand = if args.is_present("list") {
-		command::SwapSubcommand::List
+		if args.is_present("check") {
+			command::SwapSubcommand::ListAndCheck
+		} else {
+			command::SwapSubcommand::List
+		}
 	} else if args.is_present("remove") {
 		command::SwapSubcommand::Delete
 	} else if args.is_present("check") {
@@ -1041,6 +1045,7 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		buyer_refund_address,
 		start_listener,
 		secondary_address,
+		json_format: false,
 	})
 }
 

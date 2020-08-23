@@ -91,7 +91,6 @@ impl SellApi {
 
 		let mut swap = Swap {
 			id,
-			idx: 0,
 			version: CURRENT_VERSION,
 			network,
 			role: Role::Seller("".to_string(), 0), // will be updated later

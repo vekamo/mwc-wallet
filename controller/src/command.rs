@@ -28,13 +28,16 @@ use crate::libwallet::{
 use crate::util::secp::key::SecretKey;
 use crate::util::{Mutex, ZeroingString};
 use crate::{controller, display};
+use chrono::Utc;
 use grin_wallet_impls::adapters::{create_swap_message_sender, validate_tor_address};
 use grin_wallet_impls::{Address, MWCMQSAddress, Publisher};
 use grin_wallet_libwallet::api_impl::owner_swap;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::swap::message;
+use grin_wallet_libwallet::swap::types::Action;
 use grin_wallet_libwallet::{Slate, TxLogEntry, WalletInst};
 use serde_json as json;
+use serde_json::json;
 use std::fs::File;
 use std::io;
 use std::io::{Read, Write};
@@ -1410,8 +1413,10 @@ where
 }
 
 // Swap operation
+#[derive(PartialEq)]
 pub enum SwapSubcommand {
 	List,
+	ListAndCheck,
 	Delete,
 	Check,
 	Process,
@@ -1445,6 +1450,8 @@ pub struct SwapArgs {
 	pub start_listener: bool,
 	/// Secondary address for adjust
 	pub secondary_address: Option<String>,
+	/// Print output in Json format. Note, it is not for all cases.
+	pub json_format: bool,
 }
 
 pub fn swap<L, C, K>(
@@ -1468,14 +1475,39 @@ where
 		Some(&m) => Some(m.to_owned()),
 	};
 	match args.subcommand {
-		SwapSubcommand::List => {
-			let result = owner_swap::swap_list(wallet_inst, keychain_mask);
+		SwapSubcommand::List | SwapSubcommand::ListAndCheck => {
+			let result = owner_swap::swap_list(
+				wallet_inst,
+				keychain_mask,
+				args.subcommand == SwapSubcommand::ListAndCheck,
+			);
 			match result {
 				Ok(list) => {
-					if list.is_empty() {
-						println!("You don't have any Swap trades");
+					if args.json_format {
+						let mut res = Vec::new();
+
+						for (info, swap_id, state, action, expiration, start_time) in list {
+							let item = json!({
+								"info" : info,
+								"swap_id": swap_id,
+								"state" : state.to_string(),
+								"action" : action.unwrap_or(Action::None).to_string(),
+								"expiration" : expiration.unwrap_or(0).to_string(),
+								"start_time" : start_time.to_string(),
+							});
+							res.push(item);
+						}
+						println!("JSON: {}", serde_json::value::Value::Array(res).to_string());
 					} else {
-						display::swap_trades(list);
+						if list.is_empty() {
+							println!("You don't have any Swap trades");
+						} else {
+							display::swap_trades(
+								list.iter()
+									.map(|v| (v.1.clone(), v.2.to_string()))
+									.collect(),
+							);
+						}
 					}
 					Ok(())
 				}
@@ -1596,15 +1628,52 @@ where
 							&swap_id,
 						)?;
 
-					display::swap_trade(
-						&swap,
-						&action,
-						&time_limit,
-						&conf_status,
-						&roadmap,
-						&journal_records,
-						true,
-					)?;
+					let mwc_lock_time = if conf_status.mwc_tip > swap.lock_slate.lock_height {
+						Utc::now().timestamp() as u64
+							+ (conf_status.mwc_tip - swap.lock_slate.lock_height) * 60
+					} else {
+						0
+					};
+
+					// RoadMap
+
+					if args.json_format {
+						let item = json!({
+							"swapId" : swap.id.to_string(),
+							"isSeller" : swap.is_seller(),
+							"mwcAmount": core::amount_to_hr_string(swap.primary_amount, true),
+							"secondaryAmount" : swap.secondary_currency.amount_to_hr_string(swap.secondary_amount, true),
+							"secondaryAddress" : swap.get_secondary_address(),
+							"secondaryFee" : swap.secondary_fee.to_string(),
+							"secondaryFeeUnits" : swap.secondary_currency.get_fee_units(),
+							"mwcConfirmations" : swap.mwc_confirmations,
+							"secondaryConfirmations" : swap.secondary_confirmations,
+							"messageExchangeTimeLimit" : swap.message_exchange_time_sec,
+							"redeemTimeLimit" : swap.redeem_time_sec,
+							"sellerLockingFirst" : swap.seller_lock_first,
+							"mwcLockHeight" : swap.lock_slate.lock_height,
+							"mwcLockTime" : mwc_lock_time.to_string(),
+							"secondaryLockTime" : swap.get_time_btc_lock().to_string(),
+							"communicationMethod" : swap.communication_method,
+							"communicationAddress" : swap.communication_address,
+
+							"currentAction": action.to_string(),
+							"roadmap" : roadmap,
+							"journal_records" : journal_records,
+						});
+
+						println!("JSON: {}", item.to_string());
+					} else {
+						display::swap_trade(
+							&swap,
+							&action,
+							&time_limit,
+							&conf_status,
+							&roadmap,
+							&journal_records,
+							true,
+						)?;
+					}
 					Ok(())
 				}
 				Err(e) => {

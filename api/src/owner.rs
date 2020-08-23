@@ -2343,8 +2343,9 @@ where
 	pub fn swap_list(
 		&self,
 		keychain_mask: Option<&SecretKey>,
-	) -> Result<Vec<(String, String)>, Error> {
-		owner_swap::swap_list(self.wallet_inst.clone(), keychain_mask)
+		do_check: bool,
+	) -> Result<Vec<(String, String, StateId, Option<Action>, Option<i64>, i64)>, Error> {
+		owner_swap::swap_list(self.wallet_inst.clone(), keychain_mask, do_check)
 	}
 
 	/// Delete swap trade
