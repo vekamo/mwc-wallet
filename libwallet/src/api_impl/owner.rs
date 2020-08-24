@@ -34,7 +34,7 @@ use crate::{
 };
 use crate::{Error, ErrorKind};
 
-use crate::proof::tx_proof::pop_proof_for_slate;
+use crate::proof::tx_proof::{pop_proof_for_slate, TxProof};
 use std::cmp;
 use std::fs::File;
 use std::io::Write;
@@ -321,6 +321,48 @@ where
 		sender_address: proof.sender_address,
 		sender_sig: s_sig,
 	})
+}
+///get stored tx proof file.
+pub fn get_stored_tx_proof<'a, L, C, K>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
+	id: Option<u32>,
+) -> Result<TxProof, Error>
+where
+	L: WalletLCProvider<'a, C, K>,
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
+{
+	if id.is_none() {
+		return Err(
+			ErrorKind::PaymentProofRetrieval("Transaction ID must be specified".into()).into(),
+		);
+	}
+	let tx_id = id.unwrap();
+	wallet_lock!(wallet_inst, w);
+	let parent_key_id = w.parent_key_id();
+	let txs: Vec<TxLogEntry> = updater::retrieve_txs(
+		&mut **w,
+		None,
+		Some(tx_id),
+		None,
+		Some(&parent_key_id),
+		false,
+		None,
+		None,
+	)
+	.map_err(|e| ErrorKind::StoredTransactionError(format!("{}", e)))?;
+	if txs.len() != 1 {
+		return Err(ErrorKind::GenericError(format!(
+			"Unable to find tx, {}",
+			tx_id
+		)))?;
+	}
+	let uuid = txs[0].tx_slate_id.ok_or_else(|| {
+		ErrorKind::GenericError(format!("Unable to find slateId for txId, {}", tx_id))
+	})?;
+	let proof = TxProof::get_stored_tx_proof(w.get_data_file_dir(), &uuid.to_string())
+		.map_err(|e| ErrorKind::TransactionHasNoProof(format!("{}", e)))?;
+	return Ok(proof);
 }
 
 /// Initiate tx as sender

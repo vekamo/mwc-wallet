@@ -1388,13 +1388,9 @@ where
 			let a = arg_parse!(parse_cancel_args(&args));
 			command::cancel(owner_api, km, a)
 		}
-		("export_proof", Some(_args)) => {
-			return Err(ErrorKind::ArgumentError(
-				"Command export_proof is not implemented yet".to_string(),
-			)
-			.into());
-			//let a = arg_parse!(parse_export_proof_args(&args));
-			//command::proof_export(owner_api, km, a)
+		("export_proof", Some(args)) => {
+			let a = arg_parse!(parse_export_proof_args(&args));
+			command::proof_export(owner_api, km, a)
 		}
 		("verify_proof", Some(args)) => {
 			let a = arg_parse!(parse_verify_proof_args(&args));

@@ -32,21 +32,19 @@ use grin_wallet_impls::{Address, MWCMQSAddress, Publisher};
 use grin_wallet_libwallet::api_impl::owner_swap;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::proof::tx_proof::TxProof;
-use grin_wallet_libwallet::swap::message::Message;
-use grin_wallet_libwallet::swap::types::Currency;
-use grin_wallet_libwallet::BitcoinAddress;
-use grin_wallet_libwallet::{Slate, TxLogEntry};
+use grin_wallet_libwallet::swap::message;
+use grin_wallet_libwallet::swap::types::Action;
+use grin_wallet_libwallet::{Slate, TxLogEntry, WalletInst};
 use serde_json as json;
 use serde_json::json;
 use std::fs::File;
 use std::io;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
-use std::{env, thread};
 use uuid::Uuid;
 
 lazy_static! {
@@ -1161,7 +1159,7 @@ where
 	K: keychain::Keychain + 'static,
 {
 	controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, m| {
-		let result = api.retrieve_payment_proof(m, true, args.id, args.tx_slate_id);
+		let result = api.get_stored_tx_proof(m, args.id);
 		match result {
 			Ok(p) => {
 				// actually export proof
@@ -1216,62 +1214,15 @@ where
 	C: NodeClient + 'static,
 	K: keychain::Keychain + 'static,
 {
-	//	controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, m| {
-	//		let mut proof_f = match File::open(&args.input_file) {
-	//			Ok(p) => p,
-	//			Err(e) => {
-	//				let msg = format!(
-	//					"Unable to open payment proof file at {}: {}",
-	//					args.input_file, e
-	//				);
-	//				error!("{}", msg);
-	//				return Err(ErrorKind::LibWallet(msg).into());
-	//			}
-	//		};
-	//		let mut proof = String::new();
-	//		proof_f
-	//			.read_to_string(&mut proof)
-	//			.map_err(|e| ErrorKind::LibWallet(format!("Unable to read proof data, {}", e)))?;
-	//		// read
-	//		let proof: PaymentProof = match json::from_str(&proof) {
-	//			Ok(p) => p,
-	//			Err(e) => {
-	//				let msg = format!("{}", e);
-	//				error!("Unable to parse payment proof file: {}", e);
-	//				return Err(ErrorKind::LibWallet(msg).into());
-	//			}
-	//		};
-	//		let result = api.verify_payment_proof(m, &proof);
-	//		match result {
-	//			Ok((iam_sender, iam_recipient)) => {
-	//				println!("Payment proof's signatures are valid.");
-	//				if iam_sender {
-	//					println!("The proof's sender address belongs to this wallet.");
-	//				}
-	//				if iam_recipient {
-	//					println!("The proof's recipient address belongs to this wallet.");
-	//				}
-	//				if !iam_recipient && !iam_sender {
-	//					println!(
-	//						"Neither the proof's sender nor recipient address belongs to this wallet."
-	//					);
-	//				}
-	//				Ok(())
-	//			}
-	//			Err(e) => {
-	//				error!("Proof not valid: {}", e);
-	//				Err(ErrorKind::LibWallet(format!("Proof not valid: {}", e)).into())
-	//			}
-	//		}
-	//	})?;
-	//	Ok(())
-
 	//read the file.
-
 	let input = &args.input_file;
-	let home_dir = std::env::current_exe()
-		.unwrap()
-		.map_err(|e| ErrorKind::LibWallet(format!("Unable to get home dir, {}", e)))?;
+	let home_dir = std::env::current_exe() //  dirs::home_dir()
+		.map(|p| {
+			let mut p = p.clone();
+			p.pop();
+			p.to_str().unwrap().to_string()
+		})
+		.unwrap_or("~".to_string());
 	let path = Path::new(&input.replace("~", &home_dir)).to_path_buf();
 	if !path.exists() {
 		let msg = format!("Unable to open payment proof file at {}", args.input_file);

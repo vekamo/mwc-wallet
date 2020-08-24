@@ -25,6 +25,7 @@ use crate::impls::create_sender;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::api_impl::owner_updater::{start_updater_log_thread, StatusMessage};
 use crate::libwallet::api_impl::{owner, owner_swap, owner_updater};
+use crate::libwallet::proof::tx_proof::TxProof;
 use crate::libwallet::swap::fsm::state::{StateEtaInfo, StateId, StateProcessRespond};
 use crate::libwallet::swap::types::{Action, SwapTransactionsConfirmations};
 use crate::libwallet::swap::{message::Message, swap::Swap, swap::SwapJournalRecord};
@@ -2257,6 +2258,14 @@ where
 			tx_id,
 			tx_slate_id,
 		)
+	}
+
+	pub fn get_stored_tx_proof(
+		&self,
+		_keychain_mask: Option<&SecretKey>,
+		tx_id: Option<u32>,
+	) -> Result<TxProof, Error> {
+		owner::get_stored_tx_proof(self.wallet_inst.clone(), tx_id)
 	}
 
 	/// Verifies a [PaymentProof](../grin_wallet_libwallet/api_impl/types/struct.PaymentProof.html)
