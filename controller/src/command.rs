@@ -36,7 +36,6 @@ use grin_wallet_libwallet::swap::message;
 use grin_wallet_libwallet::swap::types::Action;
 use grin_wallet_libwallet::{Slate, TxLogEntry, WalletInst};
 use serde_json as json;
-use serde_json::json;
 use std::fs::File;
 use std::io;
 use std::io::{Read, Write};
@@ -1441,6 +1440,25 @@ pub struct SwapArgs {
 	pub json_format: bool,
 }
 
+// For Json we can't use int 64, we have to convert all of them to Strings
+#[derive(Serialize, Deserialize)]
+pub struct StateEtaInfoString {
+	/// True if this is current active state
+	pub active: bool,
+	/// Name of the state to show for user
+	pub name: String,
+	/// Starting time
+	pub end_time: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SwapJournalRecordString {
+	/// Unix timestamp, when event happens
+	pub time: String,
+	/// Description with what happens at that time.
+	pub message: String,
+}
+
 pub fn swap<L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
@@ -1474,7 +1492,7 @@ where
 						let mut res = Vec::new();
 
 						for (info, swap_id, state, action, expiration, start_time) in list {
-							let item = json!({
+							let item = json::json!({
 								"info" : info,
 								"swap_id": swap_id,
 								"state" : state.to_string(),
@@ -1615,20 +1633,37 @@ where
 							&swap_id,
 						)?;
 
-					let mwc_lock_time = if conf_status.mwc_tip > swap.lock_slate.lock_height {
+					let mwc_lock_time = if conf_status.mwc_tip < swap.refund_slate.lock_height {
 						Utc::now().timestamp() as u64
-							+ (conf_status.mwc_tip - swap.lock_slate.lock_height) * 60
+							+ (swap.refund_slate.lock_height - conf_status.mwc_tip) * 60
 					} else {
 						0
 					};
 
 					// RoadMap
+					let road_map_to_print: Vec<StateEtaInfoString> = roadmap
+						.iter()
+						.map(|r| StateEtaInfoString {
+							active: r.active,
+							name: r.name.clone(),
+							end_time: r.end_time.map(|r| r.to_string()),
+						})
+						.collect();
+
+					let journal_records_to_print: Vec<SwapJournalRecordString> = journal_records
+						.iter()
+						.map(|j| SwapJournalRecordString {
+							time: j.time.to_string(),
+							message: j.message.to_string(),
+						})
+						.collect();
 
 					if args.json_format {
-						let item = json!({
+						let item = json::json!({
 							"swapId" : swap.id.to_string(),
 							"isSeller" : swap.is_seller(),
 							"mwcAmount": core::amount_to_hr_string(swap.primary_amount, true),
+							"secondaryCurrency" : swap.secondary_currency.to_string(),
 							"secondaryAmount" : swap.secondary_currency.amount_to_hr_string(swap.secondary_amount, true),
 							"secondaryAddress" : swap.get_secondary_address(),
 							"secondaryFee" : swap.secondary_fee.to_string(),
@@ -1638,15 +1673,15 @@ where
 							"messageExchangeTimeLimit" : swap.message_exchange_time_sec,
 							"redeemTimeLimit" : swap.redeem_time_sec,
 							"sellerLockingFirst" : swap.seller_lock_first,
-							"mwcLockHeight" : swap.lock_slate.lock_height,
+							"mwcLockHeight" : swap.refund_slate.lock_height,
 							"mwcLockTime" : mwc_lock_time.to_string(),
 							"secondaryLockTime" : swap.get_time_btc_lock().to_string(),
 							"communicationMethod" : swap.communication_method,
 							"communicationAddress" : swap.communication_address,
 
 							"currentAction": action.to_string(),
-							"roadmap" : roadmap,
-							"journal_records" : journal_records,
+							"roadmap" : road_map_to_print,
+							"journal_records" : journal_records_to_print,
 						});
 
 						println!("JSON: {}", item.to_string());
