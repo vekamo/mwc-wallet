@@ -1491,14 +1491,16 @@ where
 					if args.json_format {
 						let mut res = Vec::new();
 
-						for (info, swap_id, state, action, expiration, start_time) in list {
+						for swap_info in list {
 							let item = json::json!({
-								"info" : info,
-								"swap_id": swap_id,
-								"state" : state.to_string(),
-								"action" : action.unwrap_or(Action::None).to_string(),
-								"expiration" : expiration.unwrap_or(0).to_string(),
-								"start_time" : start_time.to_string(),
+								"is_seller" : swap_info.is_seller,
+								"secondary_address" : swap_info.secondary_address,
+								"info" : swap_info.info,
+								"swap_id": swap_info.swap_id,
+								"state" : swap_info.state.to_string(),
+								"action" : swap_info.action.unwrap_or(Action::None).to_string(),
+								"expiration" : swap_info.expiration.unwrap_or(0).to_string(),
+								"start_time" : swap_info.trade_start_time.to_string(),
 							});
 							res.push(item);
 						}
@@ -1509,7 +1511,7 @@ where
 						} else {
 							display::swap_trades(
 								list.iter()
-									.map(|v| (v.1.clone(), v.2.to_string()))
+									.map(|v| (v.swap_id.clone(), v.state.to_string()))
 									.collect(),
 							);
 						}
@@ -1875,6 +1877,10 @@ where
 			}
 		}
 		SwapSubcommand::Autoswap => {
+			// Note !!!
+			// For auto swap --json_format is a trigger for a one shot action.
+			let one_shot = args.json_format;
+
 			let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(
 				"Not found expected 'swap_id' argument".to_string(),
 			))?;
@@ -1889,7 +1895,9 @@ where
 			let wallet_inst2 = wallet_inst.clone();
 			let km2 = km.clone();
 
-			SWAP_THREADS_RUN.swap(false, Ordering::Relaxed);
+			if !one_shot {
+				SWAP_THREADS_RUN.swap(false, Ordering::Relaxed);
+			}
 
 			if args.start_listener {
 				match swap.communication_method.as_str() {
@@ -2057,27 +2065,36 @@ where
 								})?
 						}
 						None => {
-							return Err(ErrorKind::GenericError(
-								"Please define buyer_refund_address for automated swap".to_string(),
-							)
-							.into())
+							if swap.get_secondary_address().is_empty() {
+								return Err(ErrorKind::GenericError(
+									"Please define buyer_refund_address for automated swap"
+										.to_string(),
+								)
+								.into());
+							}
 						}
 					}
 				}
 
-				display::swap_trade(
-					&swap,
-					&action,
-					&time_limit,
-					&conf_status,
-					&roadmap,
-					&journal_records,
-					true,
-				)?;
+				if !args.json_format {
+					display::swap_trade(
+						&swap,
+						&action,
+						&time_limit,
+						&conf_status,
+						&roadmap,
+						&journal_records,
+						true,
+					)?;
+				}
 				(state, action, journal_records.len())
 			};
 
-			println!("Swap started in auto mode.... Status will be displayed as swap progresses.");
+			if !one_shot {
+				println!(
+					"Swap started in auto mode.... Status will be displayed as swap progresses."
+				);
+			}
 
 			// NOTE - we can't process errors with '?' here. We can't exit, we must try forever or until we get a final state
 			let swap_id2 = swap_id.clone();
@@ -2091,6 +2108,7 @@ where
 				"".to_string()
 			};
 			let stop_thread_clone = SWAP_THREADS_RUN.clone();
+			let json_format_clone = args.json_format.clone();
 
 			debug!("Starting autoswap thread for swap id {}", swap_id);
 			let api_thread = thread::Builder::new()
@@ -2102,30 +2120,24 @@ where
 							mut curr_state,
 							mut curr_action,
 							_time_limit,
-							_roadmap,
+							roadmap,
 							mut journal_records,
 						) = match owner_swap::update_swap_status_action(
 							wallet_inst2.clone(),
 							km2.as_ref(),
-							&swap_id,
+							&swap_id2,
 						) {
 							Ok(res) => res,
 							Err(e) => {
-								error!("Error during Swap {}: {}", swap_id, e);
+								error!("Error during Swap {}: {}", swap_id2, e);
 								thread::sleep(Duration::from_millis(10000));
 								continue;
 							}
 						};
 
-						// In case of final state - we are exiting.
-						if curr_state.is_final_state() {
-							println!("{}Swap trade is finished", swap_report_prefix);
-							break;
-						}
-
 						// If actin require execution - it must be executed
 						let mut was_executed = false;
-						if curr_action.can_execute() {
+						if !curr_state.is_final_state() && curr_action.can_execute() {
 							match owner_swap::swap_process(
 								wallet_inst2.clone(),
 								km2.as_ref(),
@@ -2143,49 +2155,88 @@ where
 									}
 									journal_records = res.journal;
 								}
-								Err(e) => error!("Error during Swap {}: {}", swap_id, e),
+								Err(e) => error!("Error during Swap {}: {}", swap_id2, e),
 							}
 							// We can execute in the row. Internal guarantees that we will never do retry to the same action unless it is an error
 							// The sleep here for possible error
 							was_executed = true;
 							debug!(
 								"Action {} for swap id {} was excecuted",
-								curr_action, swap_id
+								curr_action, swap_id2
 							);
 						}
 
-						if prev_journal_len < journal_records.len() {
-							for i in prev_journal_len..journal_records.len() {
-								println!(
-									"{}{}",
-									swap_report_prefix, journal_records[i].message
-								);
+						if !json_format_clone {
+							if prev_journal_len < journal_records.len() {
+								for i in prev_journal_len..journal_records.len() {
+									println!(
+										"{}{}",
+										swap_report_prefix, journal_records[i].message
+									);
+								}
+								prev_journal_len = journal_records.len();
 							}
-							prev_journal_len = journal_records.len();
+
+							let curr_action_str = if curr_action.is_none() {
+								"".to_string()
+							} else {
+								curr_action.to_string()
+							};
+
+							if curr_state != prev_state {
+								if curr_action_str.len() > 0 {
+									println!("{}{}", swap_report_prefix, curr_action_str);
+								} else {
+									println!(
+										"{}{}. {}",
+										swap_report_prefix, curr_state, curr_action_str
+									);
+								}
+								prev_state = curr_state.clone();
+								prev_action = curr_action.clone();
+							} else if curr_action.to_string() != prev_action.to_string() {
+								if curr_action_str.len() > 0 {
+									println!("{}{}", swap_report_prefix, curr_action);
+								}
+								prev_action = curr_action.clone();
+							}
 						}
 
-						let curr_action_str = if curr_action.is_none() {
-							"".to_string()
-						} else {
-							curr_action.to_string()
-						};
+						// In case of Json printing, executing one step and exiting.
+						if json_format_clone {
+							let road_map_to_print: Vec<StateEtaInfoString> = roadmap
+								.iter()
+								.map(|r| StateEtaInfoString {
+									active: r.active,
+									name: r.name.clone(),
+									end_time: r.end_time.map(|r| r.to_string()),
+								})
+								.collect();
 
-						if curr_state != prev_state {
-							if curr_action_str.len() > 0 {
-								println!("{}{}", swap_report_prefix, curr_action_str);
-							} else {
-								println!(
-									"{}{}. {}",
-									swap_report_prefix, curr_state, curr_action_str
-								);
-							}
-							prev_state = curr_state;
-							prev_action = curr_action;
-						} else if curr_action.to_string() != prev_action.to_string() {
-							if curr_action_str.len() > 0 {
-								println!("{}{}", swap_report_prefix, curr_action);
-							}
-							prev_action = curr_action;
+							let journal_records_to_print: Vec<SwapJournalRecordString> = journal_records
+								.iter()
+								.map(|j| SwapJournalRecordString {
+									time: j.time.to_string(),
+									message: j.message.to_string(),
+								})
+								.collect();
+
+							let item = json::json!({
+									"swap_id" : swap_id2.clone(),
+									"autowsap_done" : curr_state.is_final_state(),
+									"currentAction": curr_action.to_string(),
+									"currentState" : curr_state.to_string(),
+									"roadmap" : road_map_to_print,
+									"journal_records" : journal_records_to_print,
+								});
+							println!("JSON: {}", item.to_string());
+							break;
+						}
+
+						// In case of final state - we are exiting.
+						if curr_state.is_final_state() {
+							println!("{}Swap trade is finished", swap_report_prefix);
+							break;
 						}
 
 						let seconds_to_sleep = if was_executed {
@@ -2211,11 +2262,15 @@ where
 				});
 
 			if let Ok(t) = api_thread {
-				if !cli_mode {
+				if !cli_mode || one_shot {
 					let r = t.join();
 					if let Err(_) = r {
-						error!("Error doing auto swap.");
-						return Err(ErrorKind::LibWallet(format!("Error doing auto swap")).into());
+						error!("Error during running autoswap thread for {}", swap_id);
+						return Err(ErrorKind::LibWallet(format!(
+							"Error during running autoswap thread for {}",
+							swap_id
+						))
+						.into());
 					}
 				}
 			}

@@ -189,12 +189,32 @@ where
 	Ok(swap_id)
 }
 
+/// Respond from swap_list API. Respond is very specific, that is why it has special structure
+pub struct SwapListInfo {
+	/// Swap id
+	pub swap_id: String,
+	/// flag if trade is seller
+	pub is_seller: bool,
+	/// Info for the trade description
+	pub info: String,
+	/// current state
+	pub state: StateId,
+	/// current action
+	pub action: Option<Action>,
+	/// expiration time for action
+	pub expiration: Option<i64>,
+	/// when this trade was created
+	pub trade_start_time: i64,
+	/// Secondary address. Caller need to know if ti is set
+	pub secondary_address: String,
+}
+
 /// List Swap trades. Returns SwapId + Status
 pub fn swap_list<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	do_check: bool,
-) -> Result<Vec<(String, String, StateId, Option<Action>, Option<i64>, i64)>, Error>
+) -> Result<Vec<SwapListInfo>, Error>
 where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
@@ -204,7 +224,7 @@ where
 	wallet_lock!(wallet_inst, w);
 
 	let swap_id = trades::list_swap_trades()?;
-	let mut result: Vec<(String, String, StateId, Option<Action>, Option<i64>, i64)> = Vec::new();
+	let mut result: Vec<SwapListInfo> = Vec::new();
 
 	let node_client = w.w2n_client().clone();
 	let keychain = w.keychain(keychain_mask)?;
@@ -217,13 +237,19 @@ where
 		let trade_start_time = swap.started.timestamp();
 		let info = if swap.is_seller() {
 			format!(
-				"Sell {} MWC",
-				core::amount_to_hr_string(swap.primary_amount, true)
+				"Sell {} MWC for {} {}",
+				core::amount_to_hr_string(swap.primary_amount, true),
+				swap.secondary_currency
+					.amount_to_hr_string(swap.secondary_amount, true),
+				swap.secondary_currency,
 			)
 		} else {
 			format!(
-				"Buy {} MWC",
-				core::amount_to_hr_string(swap.primary_amount, true)
+				"Buy {} MWC for {} {}",
+				core::amount_to_hr_string(swap.primary_amount, true),
+				swap.secondary_currency
+					.amount_to_hr_string(swap.secondary_amount, true),
+				swap.secondary_currency,
 			)
 		};
 
@@ -234,23 +260,27 @@ where
 				node_client.clone(),
 				&keychain,
 			)?;
-			result.push((
+			result.push(SwapListInfo {
+				swap_id: sw_id.clone(),
+				is_seller: swap.is_seller(),
 				info,
-				sw_id.clone(),
 				state,
-				Some(action),
+				action: Some(action),
 				expiration,
 				trade_start_time,
-			));
+				secondary_address: swap.get_secondary_address(),
+			});
 		} else {
-			result.push((
+			result.push(SwapListInfo {
+				swap_id: sw_id.clone(),
+				is_seller: swap.is_seller(),
 				info,
-				sw_id.clone(),
-				swap.state.clone(),
-				None,
-				None,
+				state: swap.state.clone(),
+				action: None,
+				expiration: None,
 				trade_start_time,
-			));
+				secondary_address: swap.get_secondary_address(),
+			});
 		}
 		trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 	}

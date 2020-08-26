@@ -977,7 +977,7 @@ impl State for BuyerWaitForRedeemMwcConfirmations {
 				// TODO   Check if need to do a retry.
 
 				let conf = tx_conf.mwc_redeem_conf.unwrap_or(0);
-				if conf >= swap.secondary_confirmations {
+				if conf >= swap.mwc_confirmations {
 					// We are done
 					swap.add_journal_message(
 						"Redeem transacton get enough confirnation. The Swap trade is finished"
