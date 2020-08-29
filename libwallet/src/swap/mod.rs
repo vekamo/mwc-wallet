@@ -4741,7 +4741,7 @@ mod tests {
 		}
 
 		// Bith party waiting for confirmations
-		nc.mine_blocks(MWC_CONFIRMATION / 2 - 14);
+		nc.mine_blocks(MWC_CONFIRMATION / 2);
 		btc_nc.mine_blocks(BTC_CONFIRMATION / 2);
 		test_responds(
 			&mut buyer,

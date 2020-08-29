@@ -101,6 +101,8 @@ where
 	let slate_message = &slate.participant_data[0].message;
 	let mut address_for_logging = address.clone();
 
+	check_ttl(w, &slate, refresh_from_node)?;
+
 	if address.is_none() {
 		// that means it's not mqs so need to print it
 		if slate_message.is_some() {
