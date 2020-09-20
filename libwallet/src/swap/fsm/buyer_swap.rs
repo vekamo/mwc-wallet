@@ -418,7 +418,9 @@ where
 				// Posted more then expected. We are not going forward. Deal is broken, probably it is a mistake. We are cancelling the trade because of that.
 				if chain_amount > swap.secondary_amount {
 					swap.add_journal_message(
-						JOURNAL_CANCELLED_BYER_LOCK_TOO_MUCH_FUNDS.to_string(),
+						format!("{}. Expected {} {}, but get {} {}", JOURNAL_CANCELLED_BYER_LOCK_TOO_MUCH_FUNDS,
+							swap.secondary_currency.amount_to_hr_string(swap.secondary_amount, true), swap.secondary_currency,
+							swap.secondary_currency.amount_to_hr_string(chain_amount, true), swap.secondary_currency)
 					);
 					return Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime));
 				}
@@ -521,7 +523,9 @@ where
 				if tx_conf.secondary_lock_amount > swap.secondary_amount {
 					// Posted too much, bayer probably will cancel the deal, let's be in sync
 					swap.add_journal_message(
-						JOURNAL_CANCELLED_BYER_LOCK_TOO_MUCH_FUNDS.to_string(),
+						format!("{}. Expected {} {}, but get {} {}", JOURNAL_CANCELLED_BYER_LOCK_TOO_MUCH_FUNDS,
+								swap.secondary_currency.amount_to_hr_string(swap.secondary_amount, true), swap.secondary_currency,
+								swap.secondary_currency.amount_to_hr_string(tx_conf.secondary_lock_amount, true), swap.secondary_currency)
 					);
 					return Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForRefundHeight,
