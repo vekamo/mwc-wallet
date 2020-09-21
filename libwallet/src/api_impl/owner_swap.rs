@@ -735,7 +735,7 @@ where
 
 			wallet_lock!(wallet_inst, w);
 
-			let kernel = &swap.redeem_slate.tx.body.kernels[0].excess;
+			let kernel = &swap.refund_slate.tx.body.kernels[0].excess;
 			if w.tx_log_iter()
 				.filter(|tx| tx.kernel_excess.filter(|c| c == kernel).is_some())
 				.count() == 0
