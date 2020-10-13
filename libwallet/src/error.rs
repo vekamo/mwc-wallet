@@ -309,6 +309,13 @@ pub enum ErrorKind {
 	)]
 	TxProofVerifyDestination(String, String),
 
+	/// Expected sender address doesn't match expected value
+	#[fail(
+		display = "Tx Proof unable to verify sender address. Expected {}, found {}",
+		_0, _1
+	)]
+	TxProofVerifySender(String, String),
+
 	/// Not found Tx Proof file
 	#[fail(display = "transaction doesn't have a proof, file {} not found", _0)]
 	TransactionHasNoProof(String),
