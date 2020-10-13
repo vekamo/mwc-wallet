@@ -70,7 +70,6 @@ where
 	middleware: Option<ForeignCheckMiddleware>,
 	/// Stored keychain mask (in case the stored wallet seed is tokenized)
 	keychain_mask: Option<SecretKey>,
-	address_index: Arc<Mutex<u32>>,
 }
 
 impl<'a, L, C, K> Foreign<'a, L, C, K>
@@ -169,13 +168,7 @@ where
 			doctest_mode: false,
 			middleware,
 			keychain_mask,
-			address_index: Arc::new(Mutex::new(0)),
 		}
-	}
-
-	pub fn set_address_index(&self, index: u32) {
-		let mut lock = self.address_index.lock();
-		*lock = index;
 	}
 
 	/// Return the version capabilities of the running ForeignApi Node
@@ -399,7 +392,6 @@ where
 			)?;
 		}
 
-		let lock = self.address_index.lock();
 		foreign::receive_tx(
 			&mut **w,
 			(&self.keychain_mask).as_ref(),
@@ -411,7 +403,6 @@ where
 			message,
 			self.doctest_mode,
 			true,
-			*lock,
 		)
 	}
 

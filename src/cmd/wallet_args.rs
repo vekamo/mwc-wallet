@@ -1427,7 +1427,6 @@ where
 			command::swap(
 				owner_api.wallet_inst.clone(),
 				km,
-				wallet_config.grinbox_address_index(),
 				wallet_config.api_listen_addr(),
 				Some(mqs_config.clone()),
 				Some(tor_config.clone()),

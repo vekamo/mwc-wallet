@@ -16,7 +16,7 @@
 //! invocations) as needed.
 use crate::api::{self, ApiServer, BasicAuthMiddleware, ResponseFuture, Router, TLSConfig};
 use crate::libwallet::{
-	address, NodeClient, NodeVersionInfo, Slate, WalletInst, WalletLCProvider,
+	NodeClient, NodeVersionInfo, Slate, WalletInst, WalletLCProvider,
 	GRIN_BLOCK_HEADER_VERSION,
 };
 use crate::util::secp::key::SecretKey;
@@ -47,7 +47,7 @@ use crate::impls::tor::process as tor_process;
 use crate::keychain::Keychain;
 use easy_jsonrpc_mw::{Handler, MaybeReply};
 use grin_wallet_libwallet::proof::crypto;
-use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
+use grin_wallet_libwallet::proof::proofaddress;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -109,7 +109,6 @@ fn check_middleware(
 pub fn get_tor_address<L, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
 	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
-	address_index: u32,
 ) -> Result<String, Error>
 	where
 		L: WalletLCProvider<'static, C, K> + 'static,
@@ -122,8 +121,7 @@ pub fn get_tor_address<L, C, K>(
 	let lc = w_lock.lc_provider()?;
 	let w_inst = lc.wallet_inst()?;
 	let k = w_inst.keychain((&mask).as_ref())?;
-	let parent_key_id = w_inst.parent_key_id();
-	let sec_key = address::address_from_derivation_path(&k, &parent_key_id, address_index).map_err(|e| {
+	let sec_key = proofaddress::payment_proof_address_secret(&k).map_err(|e| {
 		ErrorKind::TorConfig(format!("Unable to build key for onion address, {}", e))
 	})?;
 	let onion_addr = OnionV3Address::from_private(&sec_key.0).map_err(|e| ErrorKind::GenericError(format!("Unable to build Onion address, {}", e)))?;
@@ -136,7 +134,6 @@ pub fn init_tor_listener<L, C, K>(
 	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
 	addr: &str,
 	tor_base: Option<&str>,
-	address_index:u32,
 ) -> Result<tor_process::TorProcess, Error>
 	where
 		L: WalletLCProvider<'static, C, K> + 'static,
@@ -150,14 +147,13 @@ pub fn init_tor_listener<L, C, K>(
 	let lc = w_lock.lc_provider()?;
 	let w_inst = lc.wallet_inst()?;
 	let k = w_inst.keychain((&mask).as_ref())?;
-	let parent_key_id = w_inst.parent_key_id();
 	let tor_dir = if tor_base.is_some() {
 		format!("{}/tor/listener", tor_base.unwrap())
 	} else {
 		format!("{}/tor/listener", lc.get_top_level_directory()?)
 	};
 
-	let sec_key = address::address_from_derivation_path(&k, &parent_key_id, address_index).map_err(|e| {
+	let sec_key = proofaddress::payment_proof_address_secret(&k ).map_err(|e| {
 		ErrorKind::TorConfig(format!("Unable to build key for onion address, {}", e))
 	})?;
 	let onion_address = OnionV3Address::from_private(&sec_key.0)
@@ -243,8 +239,7 @@ pub fn foreign_single_use<'a, L, F, C, K>(
 
 fn controller_derive_address_key<'a, L, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
-	keychain_mask: Option<&SecretKey>,
-	index: u32,
+	keychain_mask: Option<&SecretKey>
 ) -> Result<SecretKey, Error>
 	where
 		L: WalletLCProvider<'a, C, K>,
@@ -252,9 +247,8 @@ fn controller_derive_address_key<'a, L, C, K>(
 		K: Keychain + 'a,
 {
 	wallet_lock!(wallet, w);
-	let parent_key_id = w.parent_key_id();
 	let k = w.keychain(keychain_mask)?;
-	let sec_addr_key = address::address_from_derivation_path(&k, &parent_key_id, index)?;
+	let sec_addr_key = proofaddress::payment_proof_address_secret(&k)?;
 	Ok(sec_addr_key)
 }
 
@@ -582,7 +576,6 @@ impl<L, C, K> SubscriptionHandler for Controller<L, C, K>
 }
 
 pub fn init_start_mwcmqs_listener<L, C, K>(
-	config: WalletConfig,
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	mqs_config: MQSConfig,
 	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
@@ -599,7 +592,6 @@ pub fn init_start_mwcmqs_listener<L, C, K>(
 	start_mwcmqs_listener(
 		wallet,
 		mqs_config,
-		config.grinbox_address_index(),
 		wait_for_thread,
 		keychain_mask,
 		true,
@@ -611,7 +603,6 @@ pub fn init_start_mwcmqs_listener<L, C, K>(
 pub fn start_mwcmqs_listener<L, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	mqs_config: MQSConfig,
-	address_index: u32,
 	wait_for_thread: bool,
 	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
 	print_to_log: bool,
@@ -631,7 +622,7 @@ pub fn start_mwcmqs_listener<L, C, K>(
 		"starting mwcmqs listener for {}:{}...",
 		mqs_config.mwcmqs_domain, mqs_config.mwcmqs_port
 	);
-	info!("the addres index is {}... ", address_index);
+	info!("the addres index is {}... ", proofaddress::get_address_index() );
 
 	let mwcmqs_domain = mqs_config.mwcmqs_domain;
 	let mwcmqs_port = mqs_config.mwcmqs_port;
@@ -639,12 +630,11 @@ pub fn start_mwcmqs_listener<L, C, K>(
 	let mwcmqs_secret_key = controller_derive_address_key(
 		wallet.clone(),
 		keychain_mask.lock().as_ref(),
-		address_index,
 	)?;
 	let mwc_pub_key = crypto::public_key_from_secret_key(&mwcmqs_secret_key)?;
 
 	let mwcmqs_address = MWCMQSAddress::new(
-		ProvableAddress::from_pub_key(&mwc_pub_key),
+		proofaddress::ProvableAddress::from_pub_key(&mwc_pub_key),
 		Some(mwcmqs_domain.clone()),
 		Some(mwcmqs_port),
 	);
@@ -787,7 +777,6 @@ pub fn owner_listener<L, C, K>(
 	api_secret: Option<String>,
 	tls_config: Option<TLSConfig>,
 	owner_api_include_foreign: Option<bool>,
-	address_index: u32,
 	tor_config: Option<TorConfig>,
 ) -> Result<(), Error>
 	where
@@ -844,7 +833,7 @@ pub fn owner_listener<L, C, K>(
 	// If so configured, add the foreign API to the same port
 	if running_foreign {
 		warn!("Starting HTTP Foreign API on Owner server at {}.", addr);
-		let foreign_api_handler_v2 = ForeignAPIHandlerV2::new(wallet, keychain_mask, address_index);
+		let foreign_api_handler_v2 = ForeignAPIHandlerV2::new(wallet, keychain_mask);
 		router
 			.add_route("/v2/foreign", Arc::new(foreign_api_handler_v2))
 			.map_err(|e| {
@@ -885,7 +874,6 @@ pub fn foreign_listener<L, C, K>(
 	addr: &str,
 	tls_config: Option<TLSConfig>,
 	use_tor: bool,
-	address_index: u32,
 ) -> Result<(), Error>
 	where
 		L: WalletLCProvider<'static, C, K> + 'static,
@@ -904,7 +892,7 @@ pub fn foreign_listener<L, C, K>(
 	}
 	// need to keep in scope while the main listener is running
 	let _tor_process = match use_tor {
-		true => match init_tor_listener(wallet.clone(), keychain_mask.clone(), addr, None, address_index) {
+		true => match init_tor_listener(wallet.clone(), keychain_mask.clone(), addr, None) {
 			Ok(tp) => Some(tp),
 			Err(e) => {
 				warn!("Unable to start TOR listener; Check that TOR executable is installed and on your path");
@@ -916,7 +904,7 @@ pub fn foreign_listener<L, C, K>(
 		false => None,
 	};
 
-	let api_handler_v2 = ForeignAPIHandlerV2::new(wallet, keychain_mask, address_index);
+	let api_handler_v2 = ForeignAPIHandlerV2::new(wallet, keychain_mask);
 	let mut router = Router::new();
 
 	router
@@ -982,7 +970,7 @@ impl<L, C, K> OwnerAPIHandlerV2<L, C, K>
 	}
 }
 
-	async fn handle_post_request(
+async fn handle_post_request(
 	req: Request<Body>,
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
 	tor_config: Option<TorConfig>,
@@ -1423,8 +1411,6 @@ pub struct ForeignAPIHandlerV2<L, C, K>
 	pub wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
 	/// Keychain mask
 	pub keychain_mask: Arc<Mutex<Option<SecretKey>>>,
-	///address index
-	pub address_index: u32,
 }
 
 impl<L, C, K> ForeignAPIHandlerV2<L, C, K>
@@ -1437,12 +1423,10 @@ impl<L, C, K> ForeignAPIHandlerV2<L, C, K>
 	pub fn new(
 		wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
 		keychain_mask: Arc<Mutex<Option<SecretKey>>>,
-		address_index: u32,
 	) -> ForeignAPIHandlerV2<L, C, K> {
 		ForeignAPIHandlerV2 {
 			wallet,
 			keychain_mask,
-			address_index,
 		}
 	}
 
@@ -1461,14 +1445,12 @@ impl<L, C, K> ForeignAPIHandlerV2<L, C, K>
 	}
 }
 
-	async fn handle_post_request(
+async fn handle_post_request(
 	req: Request<Body>,
 	mask: Option<SecretKey>,
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
-	address_index: u32,
 ) -> Result<Response<Body>, Error> {
 	let api = Foreign::new(wallet, mask, Some(check_middleware));
-	api.set_address_index(address_index);
 
 	//Here is a wrapper to call future from that.
 	// Issue that we can't call future form future
@@ -1490,10 +1472,9 @@ impl<L, C, K> api::Handler for ForeignAPIHandlerV2<L, C, K>
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
 		let mask = self.keychain_mask.lock().clone();
 		let wallet = self.wallet.clone();
-		let index = self.address_index.clone();
 
 		Box::pin(async move {
-			match Self::handle_post_request(req, mask, wallet, index).await {
+			match Self::handle_post_request(req, mask, wallet).await {
 				Ok(v) => Ok(v),
 				Err(e) => {
 					error!("Request Error: {:?}", e);

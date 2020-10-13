@@ -1961,8 +1961,7 @@ pub trait OwnerRpcS {
 		"jsonrpc": "2.0",
 		"method": "get_public_proof_address",
 		"params": {
-			"token": "d202964900000000d302964900000000d402964900000000d502964900000000",
-			"derivation_index": 0
+			"token": "d202964900000000d302964900000000d402964900000000d502964900000000"
 		},
 		"id": 1
 	}
@@ -1985,11 +1984,7 @@ pub trait OwnerRpcS {
 	```
 	*/
 
-	fn get_public_proof_address(
-		&self,
-		token: Token,
-		derivation_index: u32,
-	) -> Result<ProvableAddress, ErrorKind>;
+	fn get_public_proof_address(&self, token: Token) -> Result<ProvableAddress, ErrorKind>;
 
 	/**
 	Networked version of [Owner::proof_address_from_onion_v3](struct.Owner.html#method.proof_address_from_onion_v3).
@@ -2533,17 +2528,9 @@ where
 		Owner::get_updater_messages(self, count as usize).map_err(|e| e.kind())
 	}
 
-	fn get_public_proof_address(
-		&self,
-		token: Token,
-		derivation_index: u32,
-	) -> Result<ProvableAddress, ErrorKind> {
-		let address = Owner::get_public_proof_address(
-			self,
-			(&token.keychain_mask).as_ref(),
-			derivation_index,
-		)
-		.map_err(|e| e.kind())?;
+	fn get_public_proof_address(&self, token: Token) -> Result<ProvableAddress, ErrorKind> {
+		let address = Owner::get_public_proof_address(self, (&token.keychain_mask).as_ref())
+			.map_err(|e| e.kind())?;
 		let public_proof_address = ProvableAddress::from_pub_key(&address);
 		println!("public_proof address {}", public_proof_address.public_key);
 		Ok(public_proof_address)

@@ -2135,7 +2135,7 @@ where
 	/// // Set up as above
 	/// # let api_owner = Owner::new(wallet.clone(), None, None);
 	///
-	/// let res = api_owner.get_public_proof_address(None, 0);
+	/// let res = api_owner.get_public_proof_address(None);
 	///
 	/// if let Ok(_) = res {
 	///   // ...
@@ -2146,9 +2146,8 @@ where
 	pub fn get_public_proof_address(
 		&self,
 		keychain_mask: Option<&SecretKey>,
-		derivation_index: u32,
 	) -> Result<PublicKey, Error> {
-		owner::get_public_proof_address(self.wallet_inst.clone(), keychain_mask, derivation_index)
+		owner::get_public_proof_address(self.wallet_inst.clone(), keychain_mask)
 	}
 
 	/// Helper function to convert an Onion v3 address to a payment proof address (essentially

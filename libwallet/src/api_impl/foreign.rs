@@ -19,10 +19,11 @@ use crate::grin_keychain::Keychain;
 use crate::grin_util::secp::key::SecretKey;
 use crate::grin_util::Mutex;
 use crate::internal::{tx, updater};
+use crate::proof::proofaddress;
 use crate::proof::proofaddress::ProvableAddress;
 use crate::slate_versions::SlateVersion;
 use crate::{
-	address, BlockFees, CbData, Error, ErrorKind, NodeClient, Slate, TxLogEntryType, VersionInfo,
+	BlockFees, CbData, Error, ErrorKind, NodeClient, Slate, TxLogEntryType, VersionInfo,
 	WalletBackend, WalletInst, WalletLCProvider,
 };
 use grin_core::core::amount_to_hr_string;
@@ -90,7 +91,6 @@ pub fn receive_tx<'a, T: ?Sized, C, K>(
 	message: Option<String>,
 	use_test_rng: bool,
 	refresh_from_node: bool,
-	address_index: u32,
 ) -> Result<Slate, Error>
 where
 	T: WalletBackend<'a, C, K>,
@@ -210,8 +210,7 @@ where
 			.eq(&p.receiver_address.public_key)
 		{
 			debug!("file proof, replace the receiver address with its address");
-			let sec_key =
-				address::address_from_derivation_path(&keychain, &parent_key_id, address_index)?;
+			let sec_key = proofaddress::payment_proof_address_secret(&keychain)?;
 			let onion_address = OnionV3Address::from_private(&sec_key.0)?;
 			let dalek_pubkey = onion_address.to_ov3_str();
 			p.receiver_address = ProvableAddress::from_str(&dalek_pubkey)?;
@@ -221,7 +220,7 @@ where
 			&excess,
 			p.sender_address.clone(),
 			p.receiver_address.clone(),
-			address::address_from_derivation_path(&keychain, &parent_key_id, address_index)?,
+			proofaddress::payment_proof_address_secret(&keychain)?,
 		)?;
 
 		p.receiver_signature = Some(sig);

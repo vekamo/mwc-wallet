@@ -132,10 +132,6 @@ impl WalletConfig {
 			.clone()
 			.unwrap_or(GRIN_WALLET_DIR.to_string())
 	}
-
-	pub fn grinbox_address_index(&self) -> u32 {
-		self.grinbox_address_index.unwrap_or(0)
-	}
 }
 
 /// Error type wrapping config errors.

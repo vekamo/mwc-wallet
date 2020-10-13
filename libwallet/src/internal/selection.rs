@@ -187,10 +187,11 @@ where
 					.into());
 				}
 			};
-			let sender_a = proofaddress::payment_proof_address(
+			// MQS type because public key is requred
+			let sender_a = proofaddress::payment_proof_address_from_index(
 				&keychain,
-				&parent_key_id,
 				sender_address_path,
+				proofaddress::ProofAddressType::MQS,
 			)?;
 			t.payment_proof = Some(StoredProofInfo {
 				receiver_address: p.receiver_address.clone(),

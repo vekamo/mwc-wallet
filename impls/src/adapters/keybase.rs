@@ -59,6 +59,11 @@ pub fn get_keybase_brocker() -> Option<(KeybasePublisher, KeybaseSubscriber)> {
 	KEYBASE_BROKER.read().clone()
 }
 
+/// Reset Broker (listener is stopped)
+pub fn reset_keybase_brocker() {
+	KEYBASE_BROKER.write().take();
+}
+
 pub struct KeybaseChannel {
 	des_address: String,
 }
@@ -277,6 +282,7 @@ impl Subscriber for KeybaseSubscriber {
 			}
 			std::thread::sleep(SLEEP_DURATION);
 		};
+		reset_keybase_brocker();
 		match result {
 			Err(e) => self.handler.lock().on_close(CloseReason::Abnormal(e)),
 			_ => self.handler.lock().on_close(CloseReason::Normal),

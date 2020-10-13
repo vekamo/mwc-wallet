@@ -165,7 +165,6 @@ where
 						&config.api_listen_addr(),
 						g_args.tls_conf.clone(),
 						tor_config.use_tor_listener,
-						config.grinbox_address_index(),
 					);
 					if let Err(e) = res {
 						error!("Error starting http listener: {}", e);
@@ -197,7 +196,6 @@ where
 		"mwcmqs" => {
 			let wallet_inst = owner_api.wallet_inst.clone();
 			let _ = controller::init_start_mwcmqs_listener(
-				config.clone(),
 				wallet_inst,
 				mqs_config.clone(),
 				keychain_mask,
@@ -237,7 +235,6 @@ where
 	// Starting MQS first
 	if config.owner_api_include_mqs_listener.unwrap_or(false) {
 		let _ = controller::init_start_mwcmqs_listener(
-			config.clone(),
 			owner_api.wallet_inst.clone(),
 			mqs_config.clone(),
 			km.clone(),
@@ -264,7 +261,6 @@ where
 		g_args.api_secret.clone(),
 		g_args.tls_conf.clone(),
 		config.owner_api_include_foreign.clone(),
-		config.grinbox_address_index().clone(),
 		Some(tor_config.clone()),
 	)
 	.map_err(|e| ErrorKind::LibWallet(format!("Unable to start Listener, {}", e)))?;
@@ -447,7 +443,6 @@ where
 					};
 					//start the listener finalize tx
 					let _ = controller::init_start_mwcmqs_listener(
-						config.clone(),
 						wallet_inst.clone(),
 						mqs_config_unwrapped,
 						Arc::new(Mutex::new(km)),
@@ -1127,7 +1122,7 @@ where
 {
 	controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, m| {
 		// Just address at derivation index 0 for now
-		let pub_key = api.get_public_proof_address(m, 0)?;
+		let pub_key = api.get_public_proof_address(m)?;
 		let addr = ProvableAddress::from_pub_key(&pub_key);
 
 		println!();
@@ -1462,7 +1457,6 @@ pub struct SwapJournalRecordString {
 pub fn swap<L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
-	address_index: u32,
 	api_listen_addr: String,
 	mqs_config: Option<MQSConfig>,
 	tor_config: Option<TorConfig>,
@@ -1738,7 +1732,6 @@ where
 							let _ = controller::start_mwcmqs_listener(
 								wallet_inst2,
 								mqs_config.expect("No MQS config found!").clone(),
-								address_index,
 								false,
 								Arc::new(Mutex::new(km)),
 								true,
@@ -1781,7 +1774,6 @@ where
 										&api_listen_addr,
 										tls_conf,
 										tor_config.use_tor_listener,
-										address_index,
 									);
 									if let Err(e) = res {
 										error!("Error starting http listener: {}", e);
@@ -1910,7 +1902,6 @@ where
 						let _ = controller::start_mwcmqs_listener(
 							wallet_inst,
 							mqs_config.expect("No MQS config found!").clone(),
-							address_index,
 							false,
 							Arc::new(Mutex::new(km)),
 							true,
@@ -1939,7 +1930,6 @@ where
 									&api_listen_addr,
 									tls_conf,
 									tor_config.use_tor_listener,
-									address_index,
 								);
 								if let Err(e) = res {
 									error!("Error starting http listener: {}", e);

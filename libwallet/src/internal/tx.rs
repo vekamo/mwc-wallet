@@ -27,12 +27,12 @@ use crate::internal::{selection, updater};
 use crate::proof::crypto;
 use crate::proof::crypto::Hex;
 use crate::proof::proofaddress;
-use crate::proof::proofaddress::ProvableAddress;
+use crate::proof::proofaddress::{get_address_index, ProvableAddress};
 use crate::proof::tx_proof::{push_proof_for_slate, TxProof};
 use crate::signature::Signature as otherSignature;
 use crate::slate::Slate;
 use crate::types::{Context, NodeClient, StoredProofInfo, TxLogEntryType, WalletBackend};
-use crate::{address, Error, ErrorKind};
+use crate::{Error, ErrorKind};
 use ed25519_dalek::Keypair as DalekKeypair;
 use ed25519_dalek::PublicKey as DalekPublicKey;
 use ed25519_dalek::SecretKey as DalekSecretKey;
@@ -414,16 +414,19 @@ where
 	if let Some(ref p) = slate.payment_proof {
 		let derivation_index = match context.payment_proof_derivation_index {
 			Some(i) => i,
-			None => 0,
+			None => get_address_index(),
 		};
 		let keychain = wallet.keychain(keychain_mask)?;
-		let parent_key_id = wallet.parent_key_id();
 		let excess = slate.calc_excess(&keychain)?;
 		//sender address.
 		let sender_address_secret_key =
-			address::address_from_derivation_path(&keychain, &parent_key_id, derivation_index)?;
-		let sender_a =
-			proofaddress::payment_proof_address(&keychain, &parent_key_id, derivation_index)?;
+			proofaddress::payment_proof_address_secret_from_index(&keychain, derivation_index)?;
+		// MQS because normal public key is needed
+		let sender_a = proofaddress::payment_proof_address_from_index(
+			&keychain,
+			derivation_index,
+			proofaddress::ProofAddressType::MQS,
+		)?;
 
 		let sig = create_payment_proof_signature(
 			slate.amount,
@@ -560,7 +563,6 @@ pub fn create_payment_proof_signature(
 pub fn verify_slate_payment_proof<'a, T: ?Sized, C, K>(
 	wallet: &mut T,
 	keychain_mask: Option<&SecretKey>,
-	parent_key_id: &Identifier,
 	context: &Context,
 	slate: &Slate,
 ) -> Result<(), Error>
@@ -616,7 +618,12 @@ where
 				.into());
 			}
 		};
-		let orig_sender_a = proofaddress::payment_proof_address(&keychain, &parent_key_id, index)?;
+		// Normal public key is needed
+		let orig_sender_a = proofaddress::payment_proof_address_from_index(
+			&keychain,
+			index,
+			proofaddress::ProofAddressType::MQS,
+		)?;
 
 		if p.sender_address.public_key != orig_sender_a.public_key {
 			return Err(ErrorKind::PaymentProof(
@@ -704,7 +711,7 @@ where
 		////add an extra step of generating and save proof.
 		//generate the sender secret key
 		let sender_address_secret_key =
-			address::address_from_derivation_path(&keychain, &parent_key_id, index)?;
+			proofaddress::payment_proof_address_secret_from_index(&keychain, index)?;
 		let mut onion_address_str = None;
 		if p.receiver_address.public_key.len() == 56 {
 			//this should be a tor sending

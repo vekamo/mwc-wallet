@@ -1690,7 +1690,7 @@ pub fn run_doctest_owner(
 	}
 
 	let proof_address_pubkey =
-		api_impl::owner::get_public_proof_address(wallet2.clone(), (&mask2).as_ref(), 0).unwrap();
+		api_impl::owner::get_public_proof_address(wallet2.clone(), (&mask2).as_ref()).unwrap();
 	//println!("owner_rpc Wallet 2 proof_address is ============: {}", proof_address);
 	let public_proof_address = ProvableAddress::from_pub_key(&proof_address_pubkey);
 	println!("public_proof address {}", public_proof_address.public_key);
@@ -1738,7 +1738,6 @@ pub fn run_doctest_owner(
 				None,
 				true,
 				false,
-				0,
 			)
 			.unwrap();
 			w2.close().unwrap();
