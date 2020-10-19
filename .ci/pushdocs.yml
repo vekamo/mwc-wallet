@@ -17,4 +17,4 @@ steps:
        -H "Accept: application/vnd.github.mister-fantastic-preview+json" \
        -H "Authorization: Basic $(ghpages_auth_header)"
   displayName: 'Create and Push Docs'
-  condition: and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'))
+  condition: succeeded()
