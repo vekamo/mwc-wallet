@@ -200,6 +200,29 @@ where
 		Ok(foreign::check_version())
 	}
 
+	/// Return the tor proof address
+	/// # Arguments
+	/// None
+	/// # Returns
+	/// * [`String`]
+	/// # Example
+	/// Set up as in [`new`](struct.Foreign.html#method.new) method above.
+	/// ```
+	/// # grin_wallet_api::doctest_helper_setup_doc_env_foreign!(wallet, wallet_config);
+	///
+	/// let mut api_foreign = Foreign::new(wallet.clone(), None, None);
+	///
+	/// let tor_proof_address = api_foreign.get_proof_address();
+	/// // check and proceed accordingly
+	/// ```
+
+	pub fn get_proof_address(&self) -> Result<String, Error> {
+		let mut w_lock = self.wallet_inst.lock();
+		let w = w_lock.lc_provider()?.wallet_inst()?;
+
+		foreign::get_proof_address(&mut **w, (&self.keychain_mask).as_ref())
+	}
+
 	/// Builds a new unconfirmed coinbase output in the wallet, generally for inclusion in a
 	/// potential new block's coinbase output during mining.
 	///

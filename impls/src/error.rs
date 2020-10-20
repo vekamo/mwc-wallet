@@ -150,6 +150,9 @@ pub enum ErrorKind {
 
 	#[fail(display = "Error in getting swap nodes info, {}", _0)]
 	SwapNodesObtainError(String),
+
+	#[fail(display = "proof address mismatch {}, {}!", _0, _1)]
+	ProofAddressMismatch(String, String),
 }
 
 impl Fail for Error {

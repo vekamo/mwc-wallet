@@ -20,6 +20,7 @@ use crate::grin_util::secp::key::SecretKey;
 use crate::grin_util::Mutex;
 use crate::internal::{tx, updater};
 use crate::proof::proofaddress;
+use crate::proof::proofaddress::ProofAddressType;
 use crate::proof::proofaddress::ProvableAddress;
 use crate::slate_versions::SlateVersion;
 use crate::{
@@ -43,6 +44,27 @@ lazy_static! {
 /// get current receive account name
 pub fn get_receive_account() -> Option<String> {
 	RECV_ACCOUNT.read().unwrap().clone()
+}
+
+/// get tor proof address
+pub fn get_proof_address<'a, T: ?Sized, C, K>(
+	w: &mut T,
+	keychain_mask: Option<&SecretKey>,
+) -> Result<String, Error>
+where
+	T: WalletBackend<'a, C, K>,
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
+{
+	let keychain = w.keychain(keychain_mask)?;
+	let provable_address = proofaddress::payment_proof_address(&keychain, ProofAddressType::Onion)
+		.map_err(|e| {
+			ErrorKind::PaymentProofAddress(format!(
+				"Error occurred in getting payment proof address, {}",
+				e
+			))
+		})?;
+	Ok(provable_address.public_key)
 }
 
 ///
