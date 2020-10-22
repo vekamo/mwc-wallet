@@ -147,21 +147,37 @@ pub fn get_swap_trade(
 	if !path.exists() {
 		return Err(ErrorKind::TradeNotFound(swap_id.to_string()));
 	}
+
+	read_swap_data_from_file(path.as_path(), dec_key)
+}
+
+fn read_swap_content(path: &Path, dec_key: &SecretKey) -> Result<String, ErrorKind> {
 	let mut swap_deal_f = File::open(path.clone()).map_err(|e| {
-		ErrorKind::TradeIoError(
-			swap_id.to_string(),
-			format!("Unable to open file {}, {}", path.to_str().unwrap(), e),
-		)
+		ErrorKind::IO(format!(
+			"Unable to open file {}, {}",
+			path.to_str().unwrap(),
+			e
+		))
 	})?;
 	let mut content = String::new();
 	swap_deal_f.read_to_string(&mut content).map_err(|e| {
-		ErrorKind::TradeIoError(
-			swap_id.to_string(),
-			format!("Unable to read data from {}, {}", path.to_str().unwrap(), e),
-		)
+		ErrorKind::IO(format!(
+			"Unable to read data from {}, {}",
+			path.to_str().unwrap(),
+			e
+		))
 	})?;
 	let enc_swap_content: EncryptedSwap = serde_json::from_str(&content)?;
 	let dec_swap_content = enc_swap_content.decrypt(&dec_key)?;
+
+	Ok(dec_swap_content)
+}
+
+fn read_swap_data_from_file(
+	path: &Path,
+	dec_key: &SecretKey,
+) -> Result<(Context, Swap), ErrorKind> {
+	let dec_swap_content = read_swap_content(path, dec_key)?;
 
 	let mut split = dec_swap_content.split("<#>");
 
@@ -169,23 +185,25 @@ pub fn get_swap_trade(
 	let swap_str = split.next();
 
 	if context_str.is_none() || swap_str.is_none() {
-		return Err(ErrorKind::TradeIoError(
-			swap_id.to_string(),
-			"Not found all packages".to_string(),
-		));
+		return Err(ErrorKind::IO(format!(
+			"Not found all packages at the swap trade file {}",
+			path.to_str().unwrap()
+		)));
 	}
 
 	let context: Context = serde_json::from_str(context_str.unwrap()).map_err(|e| {
-		ErrorKind::TradeIoError(
-			swap_id.to_string(),
-			format!("Unable to parce Swap data from Json, {}", e),
-		)
+		ErrorKind::IO(format!(
+			"Unable to parce Swap data from file {}, {}",
+			path.to_str().unwrap(),
+			e
+		))
 	})?;
 	let swap: Swap = serde_json::from_str(swap_str.unwrap()).map_err(|e| {
-		ErrorKind::TradeIoError(
-			swap_id.to_string(),
-			format!("Unable to parce Swap data from Json, {}", e),
-		)
+		ErrorKind::IO(format!(
+			"Unable to parce Swap data from file {}, {}",
+			path.to_str().unwrap(),
+			e
+		))
 	})?;
 
 	Ok((context, swap))
@@ -304,23 +322,55 @@ pub fn dump_swap_trade(
 	if !path.exists() {
 		return Err(ErrorKind::TradeNotFound(swap_id.to_string()));
 	}
-	let mut swap_deal_f = File::open(path.clone()).map_err(|e| {
-		ErrorKind::TradeIoError(
-			swap_id.to_string(),
-			format!("Unable to open file {}, {}", path.to_str().unwrap(), e),
-		)
-	})?;
-	let mut content = String::new();
-	swap_deal_f.read_to_string(&mut content).map_err(|e| {
-		ErrorKind::TradeIoError(
-			swap_id.to_string(),
-			format!("Unable to read data from {}, {}", path.to_str().unwrap(), e),
-		)
-	})?;
-	let enc_swap_content: EncryptedSwap = serde_json::from_str(&content)?;
-	let dec_swap_content = enc_swap_content.decrypt(&dec_key)?;
 
-	Ok(dec_swap_content)
+	read_swap_content(path.as_path(), dec_key)
+}
+
+/// Export encrypted trade data into the file
+pub fn export_trade(swap_id: &str, export_file_name: &str) -> Result<(), ErrorKind> {
+	let path = TRADE_DEALS_PATH
+		.read()
+		.clone()
+		.unwrap()
+		.join(format!("{}.swap", swap_id));
+
+	if !path.exists() {
+		return Err(ErrorKind::TradeNotFound(swap_id.to_string()));
+	}
+
+	fs::copy(path, export_file_name).map_err(|e| {
+		ErrorKind::IO(format!(
+			"Unable to export trade data into the file {}, {}",
+			export_file_name, e
+		))
+	})?;
+
+	Ok(())
+}
+
+/// Import the trade data
+/// return: swap Id
+pub fn import_trade(
+	trade_file_name: &str,
+	dec_key: &SecretKey,
+	lock: &Mutex<()>,
+) -> Result<String, ErrorKind> {
+	if lock.try_lock().is_some() {
+		return Err(ErrorKind::Generic(format!(
+			"import_trade processing unlocked instance"
+		)));
+	}
+
+	let src_path = Path::new(trade_file_name);
+	if !src_path.exists() {
+		return Err(ErrorKind::IO(format!("Not found file {}", trade_file_name)));
+	}
+
+	let (context, swap) = read_swap_data_from_file(src_path, dec_key)?;
+
+	store_swap_trade(&context, &swap, dec_key, lock)?;
+
+	Ok(format!("{}", swap.id))
 }
 
 /// Encrypt and decrypt swap files

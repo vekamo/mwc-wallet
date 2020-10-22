@@ -33,6 +33,7 @@ use grin_wallet_libwallet::api_impl::owner_swap;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::proof::tx_proof::TxProof;
 use grin_wallet_libwallet::swap::message;
+use grin_wallet_libwallet::swap::trades;
 use grin_wallet_libwallet::swap::types::Action;
 use grin_wallet_libwallet::{Slate, TxLogEntry, WalletInst};
 use serde_json as json;
@@ -1404,6 +1405,8 @@ pub enum SwapSubcommand {
 	Autoswap,
 	Adjust,
 	Dump,
+	TradeExport,
+	TradeImport,
 	StopAllAutoSwap,
 }
 
@@ -1489,7 +1492,9 @@ where
 							let item = json::json!({
 								"is_seller" : swap_info.is_seller,
 								"secondary_address" : swap_info.secondary_address,
-								"info" : swap_info.info,
+								"mwc_amount" : swap_info.mwc_amount,
+								"secondary_amount" : swap_info.secondary_amount,
+								"secondary_currency" : swap_info.secondary_currency,
 								"swap_id": swap_info.swap_id,
 								"state" : swap_info.state.to_string(),
 								"action" : swap_info.action.unwrap_or(Action::None).to_string(),
@@ -2306,6 +2311,37 @@ where
 					.into())
 				}
 			}
+		}
+		SwapSubcommand::TradeExport => {
+			let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(
+				"Not found expected 'swap_id' argument".to_string(),
+			))?;
+
+			let file_name = args.destination.ok_or(ErrorKind::ArgumentError(
+				"Not found expected file name for the exported data".to_string(),
+			))?;
+
+			trades::export_trade(swap_id.as_str(), file_name.as_str())
+				.map_err(|e| ErrorKind::LibWallet(format!("Unable to export trade data, {}", e)))?;
+
+			println!("Swap trade is exported to {}", file_name);
+			Ok(())
+		}
+		SwapSubcommand::TradeImport => {
+			let trade_file_name = args.destination.ok_or(ErrorKind::ArgumentError(
+				"Not found expected file name for the exported data".to_string(),
+			))?;
+
+			let swap_id = owner_swap::swap_import_trade(
+				wallet_inst,
+				keychain_mask,
+				trade_file_name.as_str(),
+			)?;
+			println!(
+				"Swap trade {} is restored from the file {}",
+				swap_id, trade_file_name
+			);
+			Ok(())
 		}
 	}
 }

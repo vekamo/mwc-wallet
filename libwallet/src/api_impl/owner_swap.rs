@@ -195,8 +195,12 @@ pub struct SwapListInfo {
 	pub swap_id: String,
 	/// flag if trade is seller
 	pub is_seller: bool,
-	/// Info for the trade description
-	pub info: String,
+	/// MWC amount that was traded
+	pub mwc_amount: String,
+	/// Secondary currency amount that was traded
+	pub secondary_amount: String,
+	/// Secondary currency.
+	pub secondary_currency: String,
 	/// current state
 	pub state: StateId,
 	/// current action
@@ -235,23 +239,6 @@ where
 		let _l = swap_lock.lock();
 		let (context, mut swap) = trades::get_swap_trade(sw_id.as_str(), &skey, &*swap_lock)?;
 		let trade_start_time = swap.started.timestamp();
-		let info = if swap.is_seller() {
-			format!(
-				"Sell {} MWC for {} {}",
-				core::amount_to_hr_string(swap.primary_amount, true),
-				swap.secondary_currency
-					.amount_to_hr_string(swap.secondary_amount, true),
-				swap.secondary_currency,
-			)
-		} else {
-			format!(
-				"Buy {} MWC for {} {}",
-				core::amount_to_hr_string(swap.primary_amount, true),
-				swap.secondary_currency
-					.amount_to_hr_string(swap.secondary_amount, true),
-				swap.secondary_currency,
-			)
-		};
 
 		if do_check && !swap.state.is_final_state() {
 			let (state, action, expiration, _state_eta) = update_swap_status_action_impl(
@@ -263,7 +250,11 @@ where
 			result.push(SwapListInfo {
 				swap_id: sw_id.clone(),
 				is_seller: swap.is_seller(),
-				info,
+				mwc_amount: core::amount_to_hr_string(swap.primary_amount, true),
+				secondary_amount: swap
+					.secondary_currency
+					.amount_to_hr_string(swap.secondary_amount, true),
+				secondary_currency: swap.secondary_currency.to_string(),
 				state,
 				action: Some(action),
 				expiration,
@@ -274,7 +265,11 @@ where
 			result.push(SwapListInfo {
 				swap_id: sw_id.clone(),
 				is_seller: swap.is_seller(),
-				info,
+				mwc_amount: core::amount_to_hr_string(swap.primary_amount, true),
+				secondary_amount: swap
+					.secondary_currency
+					.amount_to_hr_string(swap.secondary_amount, true),
+				secondary_currency: swap.secondary_currency.to_string(),
 				state: swap.state.clone(),
 				action: None,
 				expiration: None,
@@ -472,6 +467,26 @@ where
 	let _l = swap_lock.lock();
 	let dump_res = trades::dump_swap_trade(swap_id, &skey, &*swap_lock)?;
 	Ok(dump_res)
+}
+
+/// Import swap trade from the file
+/// Return: trade SwapId
+pub fn swap_import_trade<'a, L, C, K>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
+	trade_file_name: &str,
+) -> Result<String, Error>
+where
+	L: WalletLCProvider<'a, C, K>,
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
+{
+	wallet_lock!(wallet_inst, w);
+	let keychain = w.keychain(keychain_mask)?;
+	let skey = get_swap_storage_key(&keychain)?;
+	let swap_lock = trades::get_swap_lock(&"export".to_string());
+	let _l = swap_lock.lock();
+	Ok(trades::import_trade(trade_file_name, &skey, &*swap_lock)?)
 }
 
 fn update_swap_status_action_impl<'a, C, K>(

@@ -577,6 +577,14 @@ subcommands:
             short: u
             long: dump
             takes_value: false
+        - trade_export:
+            help: Export the trade data into the file for the backup
+            long: trade_export
+            takes_value: true
+        - trade_import:
+            help: Import (restore) the trade data from the backup file
+            long: trade_import
+            takes_value: true
         - adjust:
             help: Modify the swap trade workflow. You can use this to cancel a swap. For all other values, please only proceed if you know what you are doing!
             short: j
