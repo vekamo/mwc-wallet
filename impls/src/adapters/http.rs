@@ -459,20 +459,31 @@ impl SlateSender for HttpDataSender {
 			error!("{}", report);
 			return Err(ErrorKind::ClientCallback(report).into());
 		}
+		if res["result"]["Err"] != json!(null) {
+			let report = format!("Posting transaction slate: Error: {}", res["result"]["Err"]);
+			error!("{}", report);
+			return Err(ErrorKind::ClientCallback(report).into());
+		}
+
+		let slate_value = res["result"]["Ok"].clone();
+		trace!("slate_value: {}", slate_value);
+		if slate_value.is_null() {
+			let report = format!("Unable to parse receiver wallet response {}", res_str);
+			error!("{}", report);
+			return Err(ErrorKind::ClientCallback(report).into());
+		}
 
 		if res["result"]["Ok"]["version_info"]["version"] == json!(3)
 			&& res["result"]["Ok"]["ttl_cutoff_height"] == json!(null)
 		{
 			res["result"]["Ok"]["ttl_cutoff_height"] = json!(u64::MAX);
 		}
-		let slate_value = res["result"]["Ok"].clone();
-		trace!("slate_value: {}", slate_value);
 		let slate =
 			Slate::deserialize_upgrade(&serde_json::to_string(&slate_value).map_err(|e| {
 				ErrorKind::GenericError(format!("Unable to build slate from values, {}", e))
 			})?)
 			.map_err(|e| {
-				ErrorKind::GenericError(format!("Unable to build slate from json, {}", e))
+				ErrorKind::GenericError(format!("Unable to build slate from response {}, {}", res_str, e))
 			})?;
 
 		// //compare the listening wallet proof address retrieved earlier to the returned slate. If they don't match, return error
