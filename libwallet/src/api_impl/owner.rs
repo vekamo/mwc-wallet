@@ -368,8 +368,7 @@ pub fn init_send_tx<'a, T: ?Sized, C, K>(
 	keychain_mask: Option<&SecretKey>,
 	args: InitTxArgs,
 	use_test_rng: bool,
-	outputs: Option<Vec<&str>>, // outputs to include into the transaction
-	routputs: usize,            // Number of resulting outputs. Normally it is 1
+	routputs: usize, // Number of resulting outputs. Normally it is 1
 ) -> Result<Slate, Error>
 where
 	T: WalletBackend<'a, C, K>,
@@ -408,7 +407,7 @@ where
 			args.num_change_outputs as usize,
 			args.selection_strategy_is_use_all,
 			&parent_key_id,
-			&outputs,
+			&args.outputs,
 			routputs,
 			args.exclude_change_outputs.unwrap_or(false),
 			args.minimum_confirmations_change_outputs,
@@ -431,7 +430,7 @@ where
 		message,
 		true,
 		use_test_rng,
-		outputs,
+		&args.outputs,
 		routputs,
 		args.exclude_change_outputs.unwrap_or(false),
 		args.minimum_confirmations_change_outputs,
@@ -631,7 +630,7 @@ where
 		message,
 		false,
 		use_test_rng,
-		None,
+		&None,
 		1,
 		args.exclude_change_outputs.unwrap_or(false),
 		args.minimum_confirmations_change_outputs,

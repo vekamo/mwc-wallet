@@ -414,6 +414,7 @@ pub trait OwnerRpc: Sync + Send {
 						"target_slate_version": 3,
 						"payment_proof_recipient_address": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2",
 						"ttl_blocks": 3,
+						"outputs": null,
 						"send_args": null
 					}
 				},
@@ -1437,7 +1438,7 @@ where
 	}
 
 	fn init_send_tx(&self, args: InitTxArgs) -> Result<VersionedSlate, ErrorKind> {
-		let slate = Owner::init_send_tx(self, None, args, None, 1).map_err(|e| e.kind())?;
+		let slate = Owner::init_send_tx(self, None, args, 1).map_err(|e| e.kind())?;
 		let version = slate.lowest_version();
 		Ok(VersionedSlate::into_version(slate, version))
 	}
@@ -1720,8 +1721,7 @@ pub fn run_doctest_owner(
 			..Default::default()
 		};
 		let mut slate =
-			api_impl::owner::init_send_tx(&mut **w, (&mask1).as_ref(), args, true, None, 1)
-				.unwrap();
+			api_impl::owner::init_send_tx(&mut **w, (&mask1).as_ref(), args, true, 1).unwrap();
 		println!("INITIAL SLATE");
 		println!("{}", serde_json::to_string_pretty(&slate).unwrap());
 		{

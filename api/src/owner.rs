@@ -668,7 +668,6 @@ where
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
 	/// 	args,
-	/// 	None,
 	/// 	1,
 	/// );
 	///
@@ -684,8 +683,7 @@ where
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		args: InitTxArgs,
-		outputs: Option<Vec<&str>>, // outputs to include into the transaction
-		routputs: usize,            // Number of resulting outputs. Normally it is 1
+		routputs: usize, // Number of resulting outputs. Normally it is 1
 	) -> Result<Slate, Error> {
 		let address = args.address.clone();
 
@@ -715,14 +713,7 @@ where
 		let mut slate = {
 			let mut w_lock = self.wallet_inst.lock();
 			let w = w_lock.lc_provider()?.wallet_inst()?;
-			owner::init_send_tx(
-				&mut **w,
-				keychain_mask,
-				args,
-				self.doctest_mode,
-				outputs,
-				routputs,
-			)?
+			owner::init_send_tx(&mut **w, keychain_mask, args, self.doctest_mode, routputs)?
 		};
 
 		match send_args {
@@ -968,7 +959,6 @@ where
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
 	/// 	args,
-	/// 	None,
 	/// 	1,
 	/// );
 	///
@@ -1037,7 +1027,6 @@ where
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
 	/// 	args,
-	/// 	None,
 	/// 	1,
 	/// );
 	///
@@ -1101,7 +1090,6 @@ where
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
 	/// 	args,
-	/// 	None,
 	/// 	1,
 	/// );
 	///
@@ -1175,7 +1163,6 @@ where
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
 	/// 	args,
-	/// 	None,
 	/// 	1,
 	/// );
 	///
@@ -1300,7 +1287,6 @@ where
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
 	/// 	args,
-	/// 	None,
 	/// 	1,
 	/// );
 	///

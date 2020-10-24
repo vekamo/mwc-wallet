@@ -2238,7 +2238,7 @@ where
 	}
 
 	fn init_send_tx(&self, token: Token, args: InitTxArgs) -> Result<VersionedSlate, ErrorKind> {
-		let slate = Owner::init_send_tx(self, (&token.keychain_mask).as_ref(), args, None, 1)
+		let slate = Owner::init_send_tx(self, (&token.keychain_mask).as_ref(), args, 1)
 			.map_err(|e| e.kind())?;
 		let version = slate.lowest_version();
 		Ok(VersionedSlate::into_version(slate, version))

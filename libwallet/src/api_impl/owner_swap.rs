@@ -117,7 +117,7 @@ where
 		println!("WARNING. This swap will need to reserve {} MWC. If you don't have enough funds, please cancel it.", swap_reserved_amount_str);
 	}
 
-	let outputs: Vec<&str> = outs.keys().map(AsRef::as_ref).collect();
+	let outputs: Vec<String> = outs.keys().map(|k| k.clone()).collect();
 	let secondary_currency = Currency::try_from(params.secondary_currency.as_str())?;
 	let secondary_amount = secondary_currency.amount_from_hr_string(&params.secondary_amount)?;
 

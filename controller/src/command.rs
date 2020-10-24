@@ -332,7 +332,8 @@ pub struct SendArgs {
 	pub ttl_blocks: Option<u64>,
 	pub exclude_change_outputs: bool,
 	pub minimum_confirmations_change_outputs: u64,
-	pub address: Option<String>, //this is only for file proof.
+	pub address: Option<String>,      //this is only for file proof.
+	pub outputs: Option<Vec<String>>, // Outputs to use. If None, all outputs can be used
 }
 
 pub fn send<L, C, K>(
@@ -365,9 +366,10 @@ where
 					exclude_change_outputs: Some(args.exclude_change_outputs),
 					minimum_confirmations_change_outputs: args.minimum_confirmations_change_outputs,
 					address: args.address.clone(),
+					outputs: args.outputs.clone(),
 					..Default::default()
 				};
-				let slate = api.init_send_tx(m, init_args, None, 1)?;
+				let slate = api.init_send_tx(m, init_args, 1)?;
 				strategies.push((strategy, slate.amount, slate.fee));
 			}
 			display::estimate(args.amount, strategies, dark_scheme);
@@ -387,9 +389,10 @@ where
 				send_args: None,
 				exclude_change_outputs: Some(args.exclude_change_outputs),
 				minimum_confirmations_change_outputs: args.minimum_confirmations_change_outputs,
+				outputs: args.outputs.clone(),
 				..Default::default()
 			};
-			let result = api.init_send_tx(m, init_args, None, 1);
+			let result = api.init_send_tx(m, init_args, 1);
 			let mut slate = match result {
 				Ok(s) => {
 					info!(
@@ -413,6 +416,7 @@ where
 			//if it is mwcmqs, start listner first.
 			match args.method.as_str() {
 				"keybase" => {
+					// Warning!!!! keybase don't checking if it is already running because we are going to retire it.
 					let km = match keychain_mask.as_ref() {
 						None => None,
 						Some(&m) => Some(m.to_owned()),
@@ -427,30 +431,32 @@ where
 					thread::sleep(Duration::from_millis(2000));
 				}
 				"mwcmqs" => {
-					//check to see if mqs_config is there, if not, return error
-					let mqs_config_unwrapped;
-					match mqs_config {
-						Some(s) => {
-							mqs_config_unwrapped = s;
+					if grin_wallet_impls::adapters::get_mwcmqs_brocker().is_none() {
+						//check to see if mqs_config is there, if not, return error
+						let mqs_config_unwrapped;
+						match mqs_config {
+							Some(s) => {
+								mqs_config_unwrapped = s;
+							}
+							None => {
+								return Err(ErrorKind::MQSConfig(format!("NO MQS config!")).into());
+							}
 						}
-						None => {
-							return Err(ErrorKind::MQSConfig(format!("NO MQS config!")).into());
-						}
-					}
 
-					let km = match keychain_mask.as_ref() {
-						None => None,
-						Some(&m) => Some(m.to_owned()),
-					};
-					//start the listener finalize tx
-					let _ = controller::init_start_mwcmqs_listener(
-						wallet_inst.clone(),
-						mqs_config_unwrapped,
-						Arc::new(Mutex::new(km)),
-						false,
-						//None,
-					)?;
-					thread::sleep(Duration::from_millis(2000));
+						let km = match keychain_mask.as_ref() {
+							None => None,
+							Some(&m) => Some(m.to_owned()),
+						};
+						//start the listener finalize tx
+						let _ = controller::init_start_mwcmqs_listener(
+							wallet_inst.clone(),
+							mqs_config_unwrapped,
+							Arc::new(Mutex::new(km)),
+							false,
+							//None,
+						)?;
+						thread::sleep(Duration::from_millis(2000));
+					}
 				}
 				_ => {}
 			}
@@ -716,7 +722,7 @@ where
 					estimate_only: Some(true),
 					..Default::default()
 				};
-				let slate = api.init_send_tx(m, init_args, None, 1)?;
+				let slate = api.init_send_tx(m, init_args, 1)?;
 				strategies.push((strategy, slate.amount, slate.fee));
 			}
 			display::estimate(slate.amount, strategies, dark_scheme);

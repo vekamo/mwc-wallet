@@ -389,6 +389,7 @@ impl<L, C, K> Controller<L, C, K>
 					/// Sender arguments. If present, the underlying function will also attempt to send the
 					/// transaction to a destination and optionally finalize the result
 					send_args: None,
+					outputs: None,
 				};
 
 				*slate = owner_api.process_invoice_tx((&mask).as_ref(), slate, params)?;

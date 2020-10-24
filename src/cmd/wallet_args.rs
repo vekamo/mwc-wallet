@@ -556,6 +556,17 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 	)?;
 	let exclude_change_outputs = args.is_present("exclude_change_outputs");
 
+	let outputs = match args.is_present("outputs") {
+		true => Some(
+			args.value_of("outputs")
+				.unwrap()
+				.split(",")
+				.map(|s| s.to_string())
+				.collect::<Vec<String>>(),
+		),
+		false => None,
+	};
+
 	if minimum_confirmations_change_outputs_is_present && !exclude_change_outputs {
 		Err(ArgumentError("minimum_confirmations_change_outputs may only be specified if exclude_change_outputs is set".to_string()))
 	} else {
@@ -577,6 +588,7 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 			exclude_change_outputs: exclude_change_outputs,
 			minimum_confirmations_change_outputs: minimum_confirmations_change_outputs,
 			address: address,
+			outputs,
 		})
 	}
 }

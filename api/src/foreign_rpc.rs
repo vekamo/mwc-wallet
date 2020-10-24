@@ -823,8 +823,8 @@ pub fn run_doctest_foreign(
 			selection_strategy_is_use_all: true,
 			..Default::default()
 		};
-		let slate = api_impl::owner::init_send_tx(&mut **w, (&mask1).as_ref(), args, true, None, 1)
-			.unwrap();
+		let slate =
+			api_impl::owner::init_send_tx(&mut **w, (&mask1).as_ref(), args, true, 1).unwrap();
 		println!("INIT SLATE");
 		// Spit out slate for input to finalize_tx
 		println!("{}", serde_json::to_string_pretty(&slate).unwrap());

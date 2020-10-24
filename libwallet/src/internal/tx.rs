@@ -104,8 +104,8 @@ pub fn estimate_send_tx<'a, T: ?Sized, C, K>(
 	num_change_outputs: usize,
 	selection_strategy_is_use_all: bool,
 	parent_key_id: &Identifier,
-	outputs: &Option<Vec<&str>>, // outputs to include into the transaction
-	routputs: usize,             // Number of resulting outputs. Normally it is 1
+	outputs: &Option<Vec<String>>, // outputs to include into the transaction
+	routputs: usize,               // Number of resulting outputs. Normally it is 1
 	exclude_change_outputs: bool,
 	change_output_minimum_confirmations: u64,
 ) -> Result<
@@ -163,8 +163,8 @@ pub fn add_inputs_to_slate<'a, T: ?Sized, C, K>(
 	message: Option<String>,
 	is_initator: bool,
 	use_test_rng: bool,
-	outputs: Option<Vec<&str>>, // outputs to include into the transaction
-	routputs: usize,            // Number of resulting outputs. Normally it is 1
+	outputs: &Option<Vec<String>>, // outputs to include into the transaction
+	routputs: usize,               // Number of resulting outputs. Normally it is 1
 	exclude_change_outputs: bool,
 	change_output_minimum_confirmations: u64,
 ) -> Result<Context, Error>
@@ -191,7 +191,7 @@ where
 		selection_strategy_is_use_all,
 		parent_key_id.clone(),
 		use_test_rng,
-		&outputs, // outputs to include into the transaction
+		outputs,  // outputs to include into the transaction
 		routputs, // Number of resulting outputs. Normally it is 1
 		exclude_change_outputs,
 		change_output_minimum_confirmations,
