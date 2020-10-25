@@ -121,7 +121,13 @@ where
 	let secondary_currency = Currency::try_from(params.secondary_currency.as_str())?;
 	let secondary_amount = secondary_currency.amount_from_hr_string(&params.secondary_amount)?;
 
-	let mut swap_api = crate::swap::api::create_instance(&secondary_currency, node_client)?;
+	let (uri1, uri2) = trades::get_electrumx_uri(
+		&secondary_currency,
+		&params.electrum_node_uri1,
+		&params.electrum_node_uri2,
+	)?;
+	let mut swap_api =
+		crate::swap::api::create_instance(&secondary_currency, node_client, uri1, uri2)?;
 
 	let parent_key_id = w.parent_key_id(); // account is current one
 	let (outputs, total, amount, fee) = crate::internal::selection::select_coins_and_fee(
@@ -169,6 +175,8 @@ where
 		params.redeem_time_sec,
 		params.buyer_communication_method.clone(),
 		params.buyer_communication_address.clone(),
+		params.electrum_node_uri1.clone(),
+		params.electrum_node_uri2.clone(),
 	)?;
 
 	// Store swap result into the file.
@@ -335,6 +343,8 @@ pub fn swap_adjust<'a, L, C, K>(
 	destination: Option<String>,
 	secondary_address: Option<String>, // secondary address to adjust
 	secondary_fee: Option<f32>,
+	electrum_node_uri1: Option<String>,
+	electrum_node_uri2: Option<String>,
 ) -> Result<(StateId, Action), Error>
 where
 	L: WalletLCProvider<'a, C, K>,
@@ -350,25 +360,12 @@ where
 	let _l = swap_lock.lock();
 	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey, &*swap_lock)?;
 
-	let swap_api =
-		crate::swap::api::create_instance(&swap.secondary_currency, node_client.clone())?;
-	let mut fsm = swap_api.get_fsm(&keychain, &swap);
-
 	match adjust_cmd {
-		"cancel" => {
-			if !fsm.is_cancellable(&swap)? {
-				return Err(ErrorKind::Generic(
-					"Swap Trade is not cancellable at current stage".to_string(),
-				)
-				.into());
-			}
-
-			// Cancelling the trade
-			let tx_conf = swap_api.request_tx_confirmations(&keychain, &swap)?;
-			let resp = fsm.process(Input::Cancel, &mut swap, &context, &tx_conf)?;
+		"electrumx_uri" => {
+			swap.electrum_node_uri1 = electrum_node_uri1;
+			swap.electrum_node_uri2 = electrum_node_uri2;
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
-
-			return Ok((swap.state.clone(), resp.action.unwrap_or(Action::None)));
+			return Ok((swap.state.clone(), Action::None));
 		}
 		"destination" => {
 			if method.is_none() || destination.is_none() {
@@ -428,6 +425,38 @@ where
 			swap.secondary_fee = secondary_fee;
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 			return Ok((swap.state.clone(), Action::None));
+		}
+		_ => (), // Nothing to do. Will continue with api construction
+	}
+
+	let (uri1, uri2) = trades::get_electrumx_uri(
+		&swap.secondary_currency,
+		&swap.electrum_node_uri1,
+		&swap.electrum_node_uri2,
+	)?;
+	let swap_api = crate::swap::api::create_instance(
+		&swap.secondary_currency,
+		node_client.clone(),
+		uri1,
+		uri2,
+	)?;
+	let mut fsm = swap_api.get_fsm(&keychain, &swap);
+
+	match adjust_cmd {
+		"cancel" => {
+			if !fsm.is_cancellable(&swap)? {
+				return Err(ErrorKind::Generic(
+					"Swap Trade is not cancellable at current stage".to_string(),
+				)
+				.into());
+			}
+
+			// Cancelling the trade
+			let tx_conf = swap_api.request_tx_confirmations(&keychain, &swap)?;
+			let resp = fsm.process(Input::Cancel, &mut swap, &context, &tx_conf)?;
+			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+
+			return Ok((swap.state.clone(), resp.action.unwrap_or(Action::None)));
 		}
 		adjusted_state => {
 			let state = StateId::from_cmd_str(adjusted_state)?;
@@ -499,7 +528,13 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	let swap_api = crate::swap::api::create_instance(&swap.secondary_currency, node_client)?;
+	let (uri1, uri2) = trades::get_electrumx_uri(
+		&swap.secondary_currency,
+		&swap.electrum_node_uri1,
+		&swap.electrum_node_uri2,
+	)?;
+	let swap_api =
+		crate::swap::api::create_instance(&swap.secondary_currency, node_client, uri1, uri2)?;
 	let mut fsm = swap_api.get_fsm(keychain, swap);
 	let tx_conf = swap_api.request_tx_confirmations(keychain, swap)?;
 	let resp = fsm.process(Input::Check, swap, &context, &tx_conf)?;
@@ -520,6 +555,8 @@ pub fn update_swap_status_action<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	swap_id: &str,
+	electrum_node_uri1: Option<String>,
+	electrum_node_uri2: Option<String>,
 ) -> Result<
 	(
 		StateId,
@@ -544,6 +581,14 @@ where
 
 	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey, &*swap_lock)?;
 
+	// Updating electrumX URI if they are defined. We can't reset them. For reset use Adjust
+	if electrum_node_uri1.is_some() {
+		swap.electrum_node_uri1 = electrum_node_uri1;
+	}
+	if electrum_node_uri2.is_some() {
+		swap.electrum_node_uri2 = electrum_node_uri2;
+	}
+
 	match update_swap_status_action_impl(&mut swap, &context, node_client, &keychain) {
 		Ok((next_state_id, action, time_limit, eta)) => {
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
@@ -562,6 +607,8 @@ pub fn get_swap_tx_tstatus<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	swap_id: &str,
+	electrum_node_uri1: Option<String>,
+	electrum_node_uri2: Option<String>,
 ) -> Result<SwapTransactionsConfirmations, Error>
 where
 	L: WalletLCProvider<'a, C, K>,
@@ -577,7 +624,21 @@ where
 
 	let (_context, mut swap) = trades::get_swap_trade(swap_id, &skey, &*swap_lock)?;
 
-	let swap_api = crate::swap::api::create_instance(&swap.secondary_currency, node_client)?;
+	// Note, electrum_node_uri updates will not be saved. Needed for the check with failed ElectrumX node
+	if electrum_node_uri1.is_some() {
+		swap.electrum_node_uri1 = electrum_node_uri1;
+	}
+	if electrum_node_uri2.is_some() {
+		swap.electrum_node_uri2 = electrum_node_uri2;
+	}
+
+	let (uri1, uri2) = trades::get_electrumx_uri(
+		&swap.secondary_currency,
+		&swap.electrum_node_uri1,
+		&swap.electrum_node_uri2,
+	)?;
+	let swap_api =
+		crate::swap::api::create_instance(&swap.secondary_currency, node_client, uri1, uri2)?;
 	let res = swap_api.request_tx_confirmations(&keychain, &mut swap)?;
 
 	Ok(res)
@@ -621,8 +682,17 @@ where
 		}
 	}
 
-	let swap_api =
-		crate::swap::api::create_instance(&swap.secondary_currency, node_client.clone())?;
+	let (uri1, uri2) = trades::get_electrumx_uri(
+		&swap.secondary_currency,
+		&swap.electrum_node_uri1,
+		&swap.electrum_node_uri2,
+	)?;
+	let swap_api = crate::swap::api::create_instance(
+		&swap.secondary_currency,
+		node_client.clone(),
+		uri1,
+		uri2,
+	)?;
 
 	let tx_conf = swap_api.request_tx_confirmations(&keychain, swap)?;
 	let mut fsm = swap_api.get_fsm(&keychain, swap);
@@ -657,7 +727,7 @@ where
 		Action::SellerWaitingForOfferMessage
 		| Action::SellerWaitingForInitRedeemMessage
 		| Action::BuyerWaitingForRedeemMessage => {
-			let message_fn = message_file_name.ok_or(ErrorKind::Generic("Please run the appropriate listener to receive the messages. If you are using files for messages exchange, please specify income message file name with '--message_file_name' value".to_string()))?;
+			let message_fn = message_file_name.ok_or(ErrorKind::Generic("Wallet is waiting for the response from the Buyer. Make sure that your wallet is online and able to receive the messages. If you are using files for messages exchange, please specify income message file name with '--message_file_name' value".to_string()))?;
 
 			let mut file = File::open(message_fn.clone()).map_err(|e| {
 				ErrorKind::Generic(format!("Unable to open file {}, {}", message_fn, e))
@@ -795,6 +865,8 @@ pub fn swap_process<'a, L, C, K, F>(
 	buyer_refund_address: Option<String>,
 	secondary_fee: Option<f32>,
 	secondary_address: Option<String>,
+	electrum_node_uri1: Option<String>,
+	electrum_node_uri2: Option<String>,
 ) -> Result<StateProcessRespond, Error>
 where
 	L: WalletLCProvider<'a, C, K>,
@@ -814,6 +886,14 @@ where
 	let _l = swap_lock.lock();
 
 	let (context, mut swap) = trades::get_swap_trade(swap_id, &skey, &*swap_lock)?;
+
+	// Updating electrumX URI if they are defined. We can't reset them. For reset use Adjust
+	if electrum_node_uri1.is_some() {
+		swap.electrum_node_uri1 = electrum_node_uri1;
+	}
+	if electrum_node_uri2.is_some() {
+		swap.electrum_node_uri2 = electrum_node_uri2;
+	}
 
 	match swap_process_impl(
 		wallet_inst,
@@ -983,9 +1063,13 @@ where
 				return Err( ErrorKind::Generic(format!("trade with SwapID {} already exist. Probably you already processed this message", swap_id)).into());
 			}
 
+			let (uri1, uri2) =
+				trades::get_electrumx_uri(&offer_update.secondary_currency, &None, &None)?;
 			let mut swap_api = crate::swap::api::create_instance(
 				&offer_update.secondary_currency,
 				node_client.clone(),
+				uri1,
+				uri2,
 			)?;
 
 			// Creating Buyer context
@@ -1048,8 +1132,17 @@ where
 		_ => {
 			let (context, mut swap) = trades::get_swap_trade(swap_id.as_str(), &skey, &*lock)?;
 
-			let swap_api =
-				crate::swap::api::create_instance(&swap.secondary_currency, node_client)?;
+			let (uri1, uri2) = trades::get_electrumx_uri(
+				&swap.secondary_currency,
+				&swap.electrum_node_uri1,
+				&swap.electrum_node_uri2,
+			)?;
+			let swap_api = crate::swap::api::create_instance(
+				&swap.secondary_currency,
+				node_client,
+				uri1,
+				uri2,
+			)?;
 			let tx_conf = swap_api.request_tx_confirmations(&keychain, &swap)?;
 			let mut fsm = swap_api.get_fsm(&keychain, &swap);
 			let msg_gr = match &&message.inner {

@@ -13,15 +13,16 @@
 // limitations under the License.
 
 use super::ErrorKind;
-use crate::swap::types::Context;
+use crate::swap::types::{Context, Currency};
 use crate::swap::Swap;
 use base64;
 use grin_util::secp::key::SecretKey;
 use grin_util::{from_hex, to_hex};
 use grin_util::{Mutex, RwLock};
+use grin_wallet_util::grin_core::global;
 use rand::{thread_rng, Rng};
 use ring::aead;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -34,27 +35,60 @@ pub const SWAP_DEAL_SAVE_DIR: &'static str = "saved_swap_deal";
 
 lazy_static! {
 	static ref TRADE_DEALS_PATH: RwLock<Option<PathBuf>> = RwLock::new(None);
-	static ref ELECTRUM_X_URI: RwLock<Option<HashMap<String, String>>> = RwLock::new(None);
+	static ref ELECTRUM_X_URI: RwLock<Option<BTreeMap<String, String>>> = RwLock::new( Some(BTreeMap::new()));
 	// Locks for the swap reads. Note, all instances are in the memory, we don't expect too many of them
 	static ref SWAP_LOCKS: RwLock<HashMap< String, Arc<Mutex<()>>>> = RwLock::new(HashMap::new());
 }
 
 /// Init for file storage for saving swap deals
-pub fn init_swap_trade_backend(data_file_dir: &str, electrumx_uri: HashMap<String, String>) {
+pub fn init_swap_trade_backend(
+	data_file_dir: &str,
+	electrumx_config_uri: &Option<BTreeMap<String, String>>,
+) {
 	let stored_swap_deal_path = Path::new(data_file_dir).join(SWAP_DEAL_SAVE_DIR);
 	fs::create_dir_all(&stored_swap_deal_path)
 		.expect("Could not create swap deal storage directory!");
 
 	TRADE_DEALS_PATH.write().replace(stored_swap_deal_path);
-
-	if electrumx_uri.capacity() > 0 {
-		ELECTRUM_X_URI.write().replace(electrumx_uri);
+	if electrumx_config_uri.is_some() {
+		ELECTRUM_X_URI
+			.write()
+			.replace(electrumx_config_uri.clone().unwrap());
 	}
 }
 
 /// Get ElextrumX URL.
-pub fn get_electrumx_uri() -> Option<HashMap<String, String>> {
-	ELECTRUM_X_URI.read().clone()
+pub fn get_electrumx_uri(
+	currency: &Currency,
+	swap_electrum_node_uri1: &Option<String>,
+	swap_electrum_node_uri2: &Option<String>,
+) -> Result<(String, String), ErrorKind> {
+	let network = if global::is_mainnet() { "main" } else { "test" };
+
+	let map = ELECTRUM_X_URI.read();
+	let sec_coin = currency.to_string().to_lowercase();
+
+	// unwrap_or/unwrap_or_else  doesn't work because we don't wanle evaluate else part and else part can report error.
+	let uri1 = match swap_electrum_node_uri1.clone() {
+		Some(s) => s,
+		None => map
+			.as_ref()
+			.unwrap()
+			.get(&format!("{}_{}_1", sec_coin, network))
+			.ok_or(ErrorKind::UndefinedElectrumXURI("primary".to_string()))?
+			.clone(),
+	};
+	let uri2 = match swap_electrum_node_uri2.clone() {
+		Some(s) => s,
+		None => map
+			.as_ref()
+			.unwrap()
+			.get(&format!("{}_{}_2", sec_coin, network))
+			.ok_or(ErrorKind::UndefinedElectrumXURI("secondary".to_string()))?
+			.clone(),
+	};
+
+	Ok((uri1, uri2))
 }
 
 /// List available swap trades.

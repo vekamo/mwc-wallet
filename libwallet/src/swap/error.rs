@@ -23,9 +23,10 @@ use std::io;
 pub enum ErrorKind {
 	/// ElectrumX connection URI is not setup
 	#[fail(
-		display = "ElectrumX URI is not defined. Please specify at wallet config connection to ElectrumX host"
+		display = "ElectrumX {} URI is not defined. Please specify it at wallet config or with swap arguments",
+		_0
 	)]
-	UndefinedElectrumXURI,
+	UndefinedElectrumXURI(String),
 	/// Unexpected state or status. Business logic is broken
 	#[fail(display = "Swap Unexpected action, {}", _0)]
 	UnexpectedAction(String),

@@ -986,6 +986,9 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<command::SwapStartArgs
 	let method = parse_required(args, "method")?;
 	let destination = parse_required(args, "dest")?;
 
+	let electrum_node_uri1 = args.value_of("electrum_uri1").map(|s| String::from(s));
+	let electrum_node_uri2 = args.value_of("electrum_uri2").map(|s| String::from(s));
+
 	Ok(command::SwapStartArgs {
 		mwc_amount,
 		secondary_currency: secondary_currency.to_string(),
@@ -999,6 +1002,8 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<command::SwapStartArgs
 		redeem_time_sec: redeem_time * 60,
 		buyer_communication_method: method.to_string(),
 		buyer_communication_address: destination.to_string(),
+		electrum_node_uri1,
+		electrum_node_uri2,
 	})
 }
 
@@ -1051,6 +1056,9 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		)));
 	};
 
+	let electrum_node_uri1 = args.value_of("electrum_uri1").map(|s| String::from(s));
+	let electrum_node_uri2 = args.value_of("electrum_uri2").map(|s| String::from(s));
+
 	Ok(command::SwapArgs {
 		subcommand,
 		swap_id,
@@ -1064,18 +1072,9 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		start_listener,
 		secondary_address,
 		json_format: false,
+		electrum_node_uri1,
+		electrum_node_uri2,
 	})
-}
-
-pub fn get_supported_secondary_currency_node_addrs(
-	wallet_config: &WalletConfig,
-) -> HashMap<String, String> {
-	grin_wallet_libwallet::swap::defaults::get_swap_support_servers(
-		&wallet_config.electrumx_mainnet_bch_node_addr,
-		&wallet_config.electrumx_testnet_bch_node_addr,
-		&wallet_config.electrumx_mainnet_btc_node_addr,
-		&wallet_config.electrumx_testnet_btc_node_addr,
-	)
 }
 
 pub fn wallet_command<C, F>(
@@ -1203,12 +1202,9 @@ where
 
 			let wallet_inst = lc.wallet_inst()?;
 
-			let secondary_currency_node_addrs =
-				get_supported_secondary_currency_node_addrs(&wallet_config);
-
 			grin_wallet_libwallet::swap::trades::init_swap_trade_backend(
 				wallet_inst.get_data_file_dir(),
-				secondary_currency_node_addrs,
+				&wallet_config.swap_electrumx_addr,
 			);
 
 			if let Some(account) = wallet_args.value_of("account") {

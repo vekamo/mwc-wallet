@@ -21,6 +21,7 @@ use std::path::PathBuf;
 use crate::config::GRIN_WALLET_DIR;
 use crate::core::global::ChainTypes;
 use crate::util::logger::LoggingConfig;
+use std::collections::{BTreeMap, HashMap};
 
 /// Command-line wallet configuration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -65,14 +66,10 @@ pub struct WalletConfig {
 	pub keybase_notify_ttl: Option<u16>,
 	/// Wallet data directory. Default none is 'wallet_data'
 	pub wallet_data_dir: Option<String>,
-	/// Electrum node for BCH mainnet address
-	pub electrumx_mainnet_bch_node_addr: Option<String>,
-	/// Electrum node for BCH testnet address
-	pub electrumx_testnet_bch_node_addr: Option<String>,
-	/// Electrum node for BTC mainnet address
-	pub electrumx_mainnet_btc_node_addr: Option<String>,
-	/// Electrum node for BTC testnet address
-	pub electrumx_testnet_btc_node_addr: Option<String>,
+	/// Electrum nodes for secondary coins
+	/// Key: <coin>_[main|test]_[1|2]
+	/// Value: url
+	pub swap_electrumx_addr: Option<BTreeMap<String, String>>,
 }
 
 impl Default for WalletConfig {
@@ -96,10 +93,22 @@ impl Default for WalletConfig {
 			dark_background_color_scheme: Some(true),
 			keybase_notify_ttl: Some(1440),
 			wallet_data_dir: None,
-			electrumx_mainnet_bch_node_addr: None, // Some("52.23.248.83:8000".to_string()),   make them none because it is not Default Value. They will be overwritten by config. So this code add confusion and doesn't solve default values problem
-			electrumx_testnet_bch_node_addr: None, // Some("52.23.248.83:8000".to_string()),
-			electrumx_mainnet_btc_node_addr: None, // Some("52.23.248.83:8000".to_string()),
-			electrumx_testnet_btc_node_addr: None, // Some("52.23.248.83:8000".to_string()),
+			swap_electrumx_addr: Some(
+				[
+					("btc_main_1", "btc.main1.swap.mwc.mw:8000"),
+					("btc_main_2", "btc.main2.swap.mwc.mw:8000"),
+					("btc_test_1", "btc.test1.swap.mwc.mw:8000"),
+					("btc_test_2", "btc.test2.swap.mwc.mw:8000"),
+					("bch_main_1", "bch.main1.swap.mwc.mw:8000"),
+					("bch_main_2", "bch.main2.swap.mwc.mw:8000"),
+					("bch_test_1", "bch.test1.swap.mwc.mw:8000"),
+					("bch_test_2", "bch.test1.swap.mwc.mw:8000"),
+				]
+				.iter()
+				.cloned()
+				.map(|i| (i.0.to_string(), i.1.to_string()))
+				.collect::<BTreeMap<String, String>>(),
+			),
 		}
 	}
 }

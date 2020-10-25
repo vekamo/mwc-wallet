@@ -16,8 +16,12 @@ it's own node to monitor the blockchain and process transactions with a secondar
 community node, you can install your ouwn to get more security. 
 
 ```
-# ElectrumX BTC Node URI needed for atomic swap that include with BTC.
-electrum_node_addr = "52.23.248.83:8000"
+# ElectrumX Node URI needed for atomic swap. For every coin expected 4 instances:
+# mainnet primary, mainnet secondary, testnet primary, testnet secondary,
+# Key: <coin>_[main|test]_[1|2]
+# value: URI  
+swap_electrumx_addr = [ ("btc_test_1", "52.23.248.83:8000"), 
+                    ("btc_test_2", "52.23.248.83:8000") ]
 ```
 
 # Atomic swap workflow #

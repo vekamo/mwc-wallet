@@ -348,4 +348,8 @@ pub struct SwapStartArgs {
 	pub buyer_communication_method: String,
 	/// Buyer destination address
 	pub buyer_communication_address: String,
+	/// ElectrumX URI1
+	pub electrum_node_uri1: Option<String>,
+	/// ElectrumX failover URI2
+	pub electrum_node_uri2: Option<String>,
 }

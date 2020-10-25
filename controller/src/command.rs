@@ -1304,6 +1304,10 @@ pub struct SwapStartArgs {
 	pub buyer_communication_method: String,
 	/// Buyer destination address
 	pub buyer_communication_address: String,
+	/// ElectrumX URI1
+	pub electrum_node_uri1: Option<String>,
+	/// ElectrumX failover URI2
+	pub electrum_node_uri2: Option<String>,
 }
 
 pub fn swap_start<L, C, K>(
@@ -1354,6 +1358,8 @@ where
 				redeem_time_sec: args.redeem_time_sec,
 				buyer_communication_method: args.buyer_communication_method,
 				buyer_communication_address: args.buyer_communication_address,
+				electrum_node_uri1: args.electrum_node_uri1,
+				electrum_node_uri2: args.electrum_node_uri2,
 			},
 		);
 		match result {
@@ -1442,6 +1448,10 @@ pub struct SwapArgs {
 	pub secondary_address: Option<String>,
 	/// Print output in Json format. Note, it is not for all cases.
 	pub json_format: bool,
+	/// ElectrumX URI1
+	pub electrum_node_uri1: Option<String>,
+	/// ElectrumX failover URI2
+	pub electrum_node_uri2: Option<String>,
 }
 
 // For Json we can't use int 64, we have to convert all of them to Strings
@@ -1603,6 +1613,8 @@ where
 				args.destination.clone(),
 				secondary_address,
 				args.secondary_fee,
+				args.electrum_node_uri1,
+				args.electrum_node_uri2,
 			);
 			match result {
 				Ok((state, _action)) => {
@@ -1632,12 +1644,16 @@ where
 						wallet_inst.clone(),
 						keychain_mask,
 						&swap_id,
+						args.electrum_node_uri1.clone(),
+						args.electrum_node_uri2.clone(),
 					)?;
 					let (_status, action, time_limit, roadmap, journal_records) =
 						owner_swap::update_swap_status_action(
 							wallet_inst.clone(),
 							keychain_mask,
 							&swap_id,
+							args.electrum_node_uri1,
+							args.electrum_node_uri2,
 						)?;
 
 					let mwc_lock_time = if conf_status.mwc_tip < swap.refund_slate.lock_height {
@@ -1866,6 +1882,8 @@ where
 				args.buyer_refund_address,
 				args.secondary_fee,
 				args.secondary_address,
+				args.electrum_node_uri1,
+				args.electrum_node_uri2,
 			);
 
 			match result {
@@ -2042,13 +2060,20 @@ where
 
 			// Calling mostly for params and environment validation. Also it is a nice chance to print the status of the deal that will be started
 			let (mut prev_state, mut prev_action, mut prev_journal_len) = {
-				let conf_status =
-					owner_swap::get_swap_tx_tstatus(wallet_inst2.clone(), keychain_mask, &swap_id)?;
+				let conf_status = owner_swap::get_swap_tx_tstatus(
+					wallet_inst2.clone(),
+					keychain_mask,
+					&swap_id,
+					args.electrum_node_uri1.clone(),
+					args.electrum_node_uri2.clone(),
+				)?;
 				let (state, action, time_limit, roadmap, journal_records) =
 					owner_swap::update_swap_status_action(
 						wallet_inst2.clone(),
 						keychain_mask,
 						&swap_id,
+						args.electrum_node_uri1,
+						args.electrum_node_uri2,
 					)?;
 
 				// Autoswap has to be sure that ALL parameters are defined. There are multiple steps and potentioly all of them can be used.
@@ -2127,6 +2152,7 @@ where
 							wallet_inst2.clone(),
 							km2.as_ref(),
 							&swap_id2,
+							None,None, // URIs are already updated
 						) {
 							Ok(res) => res,
 							Err(e) => {
@@ -2148,6 +2174,7 @@ where
 								refund_address.clone(),
 								fee_satoshi.clone(),
 								secondary_address.clone(),
+								None, None, // URIs was already updated before. No need to update the same.
 							) {
 								Ok(res) => {
 									curr_state = res.next_state_id;

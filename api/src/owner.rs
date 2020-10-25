@@ -2370,6 +2370,8 @@ where
 		destination: Option<String>,
 		secondary_address: Option<String>, // secondary address to adjust
 		secondary_fee: Option<f32>,
+		electrum_node_uri1: Option<String>,
+		electrum_node_uri2: Option<String>,
 	) -> Result<(StateId, Action), Error> {
 		owner_swap::swap_adjust(
 			self.wallet_inst.clone(),
@@ -2380,6 +2382,8 @@ where
 			destination,
 			secondary_address,
 			secondary_fee,
+			electrum_node_uri1,
+			electrum_node_uri2,
 		)
 	}
 
@@ -2399,6 +2403,8 @@ where
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		swap_id: String,
+		electrum_node_uri1: Option<String>,
+		electrum_node_uri2: Option<String>,
 	) -> Result<
 		(
 			StateId,
@@ -2409,7 +2415,13 @@ where
 		),
 		Error,
 	> {
-		owner_swap::update_swap_status_action(self.wallet_inst.clone(), keychain_mask, &swap_id)
+		owner_swap::update_swap_status_action(
+			self.wallet_inst.clone(),
+			keychain_mask,
+			&swap_id,
+			electrum_node_uri1,
+			electrum_node_uri2,
+		)
 	}
 
 	/// Get a status of the transactions that involved into the swap.
@@ -2417,8 +2429,16 @@ where
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		swap_id: String,
+		electrum_node_uri1: Option<String>,
+		electrum_node_uri2: Option<String>,
 	) -> Result<SwapTransactionsConfirmations, Error> {
-		owner_swap::get_swap_tx_tstatus(self.wallet_inst.clone(), keychain_mask, &swap_id)
+		owner_swap::get_swap_tx_tstatus(
+			self.wallet_inst.clone(),
+			keychain_mask,
+			&swap_id,
+			electrum_node_uri1,
+			electrum_node_uri2,
+		)
 	}
 
 	pub fn swap_process<F>(
@@ -2430,6 +2450,8 @@ where
 		buyer_refund_address: Option<String>,
 		secondary_fee: Option<f32>,
 		secondary_address: Option<String>,
+		electrum_node_uri1: Option<String>,
+		electrum_node_uri2: Option<String>,
 	) -> Result<StateProcessRespond, Error>
 	where
 		F: FnOnce(Message, String, String) -> Result<(bool, String), crate::libwallet::Error>
@@ -2444,6 +2466,8 @@ where
 			buyer_refund_address,
 			secondary_fee,
 			secondary_address,
+			electrum_node_uri1,
+			electrum_node_uri2,
 		)
 	}
 

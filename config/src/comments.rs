@@ -132,9 +132,15 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
-		"electrum_node_addr".to_string(),
+		"[wallet.swap_electrumx_addr]".to_string(),
 		"
-# ElectrumX BTC Node URI needed for atomic swap that include with BTC.
+# Electrum X servers that are used for Atomic Swap operations. Each Secondary Currency need
+# its own dedicated Electrum X instance. We highly advise to use your own instance, instead of
+# using those community servers.
+# For every secondary currency expected 4 instances:
+# mainnet primary, mainnet secondary, testnet primary, testnet secondary,
+# Key: <coin>_[main|test]_[1|2]
+# value: URI
 "
 		.to_string(),
 	);

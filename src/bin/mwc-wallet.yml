@@ -548,6 +548,14 @@ subcommands:
             short: d
             long: dest
             takes_value: true
+        - electrum_uri1:
+            help: primary private ElectrumX node URI. If not defined, community node will be used
+            long: electrum_uri1
+            takes_value: true
+        - electrum_uri2:
+            help: secondary private ElectrumX node URI. If not defined, community node will be used
+            long: electrum_uri2
+            takes_value: true
   - swap:
       about: Trade MWC with another currency via atomic swap
       args:
@@ -599,6 +607,7 @@ subcommands:
               - destination
               - secondary_address
               - secondary_fee
+              - electrumx_uri
               - SellerOfferCreated
               - SellerSendingOffer
               - SellerWaitingForAcceptanceMessage
@@ -680,5 +689,13 @@ subcommands:
             help: Only needed if in CLI mode doing auto swap and the method is Tor or mwcmqs. Please specify false if listener was started in previous auto swap in the same CLI session.
             long: start_listener
             takes_value: false
+        - electrum_uri1:
+            help: primary private ElectrumX node URI. If never setup, community node will be used
+            long: electrum_uri1
+            takes_value: true
+        - electrum_uri2:
+            help: secondary private ElectrumX node URI. If never setup, community node will be used
+            long: electrum_uri2
+            takes_value: true
 
 
