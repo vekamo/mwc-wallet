@@ -21,7 +21,7 @@ use std::path::PathBuf;
 use crate::config::GRIN_WALLET_DIR;
 use crate::core::global::ChainTypes;
 use crate::util::logger::LoggingConfig;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 /// Command-line wallet configuration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
