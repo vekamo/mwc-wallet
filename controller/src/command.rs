@@ -181,19 +181,7 @@ where
 				}
 			}
 		}
-		"keybase" => {
-			let wallet_inst = owner_api.wallet_inst.clone();
-			let _ = controller::init_start_keybase_listener(
-				config.clone(),
-				wallet_inst,
-				keychain_mask,
-				!cli_mode,
-			)
-			.map_err(|e| {
-				error!("Unable to start keybase listener, {}", e);
-				Error::from(ErrorKind::ListenerError)
-			})?;
-		}
+
 		"mwcmqs" => {
 			let wallet_inst = owner_api.wallet_inst.clone();
 			let _ = controller::init_start_mwcmqs_listener(
@@ -244,15 +232,6 @@ where
 		)?;
 	}
 
-	// Starting Keybase
-	if config.owner_api_include_keybase_listener.unwrap_or(false) {
-		let _ = controller::init_start_keybase_listener(
-			config.clone(),
-			owner_api.wallet_inst.clone(),
-			km.clone(),
-			false,
-		)?;
-	}
 
 	// Now Owner API
 	controller::owner_listener(
@@ -338,7 +317,7 @@ pub struct SendArgs {
 
 pub fn send<L, C, K>(
 	owner_api: &mut Owner<L, C, K>,
-	config: &WalletConfig,
+	_config: &WalletConfig,
 	keychain_mask: Option<&SecretKey>,
 	tor_config: Option<TorConfig>,
 	mqs_config: Option<MQSConfig>,
@@ -415,21 +394,6 @@ where
 
 			//if it is mwcmqs, start listner first.
 			match args.method.as_str() {
-				"keybase" => {
-					// Warning!!!! keybase don't checking if it is already running because we are going to retire it.
-					let km = match keychain_mask.as_ref() {
-						None => None,
-						Some(&m) => Some(m.to_owned()),
-					};
-					//start the listener
-					let _ = controller::init_start_keybase_listener(
-						config.clone(),
-						wallet_inst.clone(),
-						Arc::new(Mutex::new(km)),
-						false,
-					)?;
-					thread::sleep(Duration::from_millis(2000));
-				}
 				"mwcmqs" => {
 					if grin_wallet_impls::adapters::get_mwcmqs_brocker().is_none() {
 						//check to see if mqs_config is there, if not, return error

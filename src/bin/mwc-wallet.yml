@@ -68,7 +68,6 @@ subcommands:
             long: method
             possible_values:
               - http
-              - keybase
               - mwcmqs
             default_value: http
             takes_value: true
@@ -139,7 +138,6 @@ subcommands:
               - http
               - file
               - self
-              - keybase
               - mwcmqs
             default_value: http
             takes_value: true

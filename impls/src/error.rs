@@ -115,15 +115,9 @@ pub enum ErrorKind {
 	#[fail(display = "MQS error: {}", _0)]
 	MqsGenericError(String),
 
-	/// Keybase generic error
-	#[fail(display = "Keybase error: {}", _0)]
-	KeybaseGenericError(String),
-
-	#[fail(display = "keybase not found! consider installing keybase locally first.")]
-	KeybaseNotFound,
-
-	#[fail(display = "Unable to send keybase message, {}", _0)]
-	KeybaseMessageSendError(String),
+	/// Address generic error
+	#[fail(display = "Address error: {}", _0)]
+	AddressGenericError(String),
 
 	/// Get MQS invalid response
 	#[fail(display = "{} Sender returned invalid response.", _0)]
@@ -135,9 +129,6 @@ pub enum ErrorKind {
 
 	#[fail(display = "unkown address!, {}", _0)]
 	UnknownAddressType(String),
-
-	#[fail(display = "could not parse `{}` to a keybase address!", 0)]
-	KeybaseAddressParsingError(String),
 
 	#[fail(display = "could not parse `{}` to a https address!", 0)]
 	HttpsAddressParsingError(String),

@@ -721,7 +721,7 @@ where
 				let original_slate = slate.clone();
 
 				match sa.method.as_ref() {
-					"http" | "keybase" | "mwcmqs" => {
+					"http" | "mwcmqs" => {
 						let tor_config_lock = self.tor_config.lock();
 						let comm_adapter = create_sender(
 							&sa.method,

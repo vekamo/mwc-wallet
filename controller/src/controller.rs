@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 
 use grin_wallet_impls::{Address, CloseReason, MWCMQPublisher, MWCMQSAddress, MWCMQSubscriber, Publisher,
-						Subscriber, SubscriptionHandler, KeybasePublisher, KeybaseSubscriber};
+						Subscriber, SubscriptionHandler};
 use grin_wallet_libwallet::wallet_lock;
 use grin_wallet_libwallet::swap::message::Message;
 use grin_wallet_util::grin_core::core;
@@ -40,7 +40,7 @@ use crate::apiwallet::{
 	EncryptedRequest, EncryptedResponse, EncryptionErrorResponse, Foreign,
 	ForeignCheckMiddlewareFn, ForeignRpc, Owner, OwnerRpc, OwnerRpcS,
 };
-use crate::config::{MQSConfig, TorConfig, WalletConfig};
+use crate::config::{MQSConfig, TorConfig};
 use crate::core::global;
 use crate::impls::tor::config as tor_config;
 use crate::impls::tor::process as tor_process;
@@ -682,88 +682,6 @@ pub fn start_mwcmqs_listener<L, C, K>(
 	}
 
 	Ok((mwcmqs_publisher, mwcmqs_subscriber))
-}
-
-pub fn init_start_keybase_listener<L, C, K>(
-	config: WalletConfig,
-	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
-	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
-	wait_for_thread: bool,
-) -> Result<(KeybasePublisher, KeybaseSubscriber), Error>
-	where
-		L: WalletLCProvider<'static, C, K> + 'static,
-		C: NodeClient + 'static,
-		K: Keychain + 'static,
-{
-	warn!("Starting Keybase Listener");
-
-	//start mwcmqs listener
-	start_keybase_listener(
-		wallet,
-		config.keybase_notify_ttl.clone().map(|u| format!("{}m", u)),
-		None,
-		wait_for_thread,
-		keychain_mask,
-		true,
-	)
-		.map_err(|e| ErrorKind::GenericError(format!("cannot start Keybase listener, {}", e)).into())
-}
-
-/// Start the keybase listener
-pub fn start_keybase_listener<L, C, K>(
-	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
-	ttl: Option<String>,
-	keybase_binary: Option<String>,
-	wait_for_thread: bool,
-	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
-	print_to_log: bool,
-) -> Result<(KeybasePublisher, KeybaseSubscriber), Error>
-	where
-		L: WalletLCProvider<'static, C, K> + 'static,
-		C: NodeClient + 'static,
-		K: Keychain + 'static,
-{
-	if grin_wallet_impls::adapters::get_keybase_brocker().is_some() {
-		return Err(ErrorKind::GenericError("keybase listener is already running".to_string()).into());
-	}
-
-	// make sure wallet is not locked, if it is try to unlock with no passphrase
-
-	let controller = Controller::new(
-		"keybase",
-		wallet.clone(),
-		keychain_mask,
-		None,
-		print_to_log,
-	);
-
-	let keybase_publisher = KeybasePublisher::new(ttl, keybase_binary.clone())?;
-	// Cross reference, need to setup the secondary pointer
-	controller.set_publisher(Box::new(keybase_publisher.clone()));
-
-	let keybase_subscriber = KeybaseSubscriber::new(keybase_binary, Box::new(controller.clone()));
-
-	let mut cloned_subscriber = keybase_subscriber.clone();
-
-	let thread = thread::Builder::new()
-		.name("keybase-broker".to_string())
-		.spawn(move || {
-			if let Err(e) = cloned_subscriber.start() {
-				let err_str = format!("Unable to start keybase controller, {}", e);
-				error!("{}", err_str);
-				panic!("{}", err_str);
-			}
-		})
-		.map_err(|e| ErrorKind::GenericError(format!("Unable to start keybase broker, {}", e)))?;
-
-	// Publishing this running MQS service
-	crate::impls::init_keybase_access_data( keybase_publisher.clone(), keybase_subscriber.clone() );
-
-	if wait_for_thread {
-		let _ = thread.join();
-	}
-
-	Ok((keybase_publisher, keybase_subscriber))
 }
 
 

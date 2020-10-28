@@ -925,6 +925,10 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
+	println!(
+		"I am coming to this scan method and the tip height is {}",
+		tip_height
+	);
 	// First, get a definitive list of outputs we own from the chain
 	if let Some(ref s) = status_send_channel {
 		let _ = s.send(StatusMessage::Scanning(
@@ -1061,6 +1065,10 @@ where
 		let mut batch = w.batch(keychain_mask)?;
 
 		for par_id in &accounts {
+			println!(
+				"scan: I am acutally saving the last confirmed height {}",
+				tip_height
+			);
 			batch.save_last_confirmed_height(par_id, tip_height)?;
 		}
 		batch.commit()?;

@@ -1017,6 +1017,7 @@ where
 		}
 	};
 
+
 	let blocks = w.last_scanned_blocks()?;
 
 	// If the server height is less than our confirmed height, don't apply

@@ -138,7 +138,7 @@ pub struct InitTxArgs {
 /// in one go
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InitTxSendArgs {
-	/// The transaction method. Can currently be 'http' or 'keybase'.
+	/// The transaction method. Can currently be 'http' .
 	pub method: String,
 	/// The destination, contents will depend on the particular method
 	pub dest: String,
