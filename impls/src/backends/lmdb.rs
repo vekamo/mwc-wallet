@@ -621,7 +621,6 @@ where
 			.as_ref()
 			.unwrap()
 			.put_ser(&height_key, &height)?;
-		println!("lmdb:I am saving the last confirmed height {}", height);
 		Ok(())
 	}
 
@@ -671,7 +670,6 @@ where
 				step *= 2;
 			}
 		}
-		println!("lmdb:I am saving the last scanned block");
 
 		Ok(())
 	}

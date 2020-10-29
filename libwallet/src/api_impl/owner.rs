@@ -1017,7 +1017,6 @@ where
 		}
 	};
 
-
 	let blocks = w.last_scanned_blocks()?;
 
 	// If the server height is less than our confirmed height, don't apply
@@ -1025,8 +1024,8 @@ where
 	if tip_height == 0 || tip_height < blocks.first().map(|b| b.height).unwrap_or(0) {
 		if let Some(ref s) = status_send_channel {
 			let _ = s.send(StatusMessage::Warning(
-					String::from("Wallet Update is skipped, please wait for sync on node to complete or fork to resolve.")
-				));
+				String::from("Wallet Update is skipped, please wait for sync on node to complete or fork to resolve.")
+			));
 		}
 		return Ok((0, String::new(), ScannedBlockInfo::empty(), false));
 	}
