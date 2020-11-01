@@ -16,6 +16,7 @@ use super::multisig;
 use failure::Fail;
 use grin_core::core::committed;
 use grin_util::secp;
+use std::error::Error as StdError;
 use std::io;
 
 /// Swap crate errors
@@ -86,7 +87,7 @@ pub enum ErrorKind {
 	LibWallet(crate::ErrorKind),
 	/// Secp issue
 	#[fail(display = "Swap Secp error: {}", _0)]
-	Secp(secp::Error),
+	Secp(String),
 	/// IO error
 	#[fail(display = "Swap I/O: {}", _0)]
 	IO(String),
@@ -152,11 +153,17 @@ impl From<crate::Error> for ErrorKind {
 	}
 }
 
+// we have to use e.description  because of the bug at rust-secp256k1-zkp
+#[allow(deprecated)]
+
 impl From<secp::Error> for ErrorKind {
 	fn from(error: secp::Error) -> ErrorKind {
-		ErrorKind::Secp(error)
+		// secp::Error to_string is broken, in past biilds.
+		ErrorKind::Secp(format!("{}", error.description()))
 	}
 }
+
+#[warn(deprecated)]
 
 impl From<io::Error> for ErrorKind {
 	fn from(error: io::Error) -> ErrorKind {

@@ -20,6 +20,7 @@ use crate::util::secp;
 use failure::{Backtrace, Context, Fail};
 use grin_wallet_util::OnionV3AddressError;
 use std::env;
+use std::error::Error as StdError;
 use std::fmt::{self, Display};
 
 /// Error definition
@@ -53,7 +54,7 @@ pub enum ErrorKind {
 
 	/// Secp Error
 	#[fail(display = "Secp error, {}", _0)]
-	Secp(secp::Error),
+	Secp(String),
 
 	/// Error when formatting json
 	#[fail(display = "Serde JSON error, {}", _0)]
@@ -213,13 +214,19 @@ impl From<keychain::Error> for Error {
 	}
 }
 
+// we have to use e.description  because of the bug at rust-secp256k1-zkp
+#[allow(deprecated)]
+
 impl From<secp::Error> for Error {
 	fn from(error: secp::Error) -> Error {
 		Error {
-			inner: Context::new(ErrorKind::Secp(error)),
+			// secp::Error to_string is broken, in past biilds.
+			inner: Context::new(ErrorKind::Secp(format!("{}", error.description()))),
 		}
 	}
 }
+
+#[warn(deprecated)]
 
 impl From<libwallet::Error> for Error {
 	fn from(error: libwallet::Error) -> Error {

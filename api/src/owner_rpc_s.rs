@@ -35,6 +35,7 @@ use crate::{ECDHPubkey, Owner, PubAddress, Token};
 use easy_jsonrpc_mw;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use rand::thread_rng;
+use std::error::Error;
 use std::time::Duration;
 
 /// Public definition used to generate Owner jsonrpc api.
@@ -2393,6 +2394,9 @@ where
 		Owner::node_height(self, (&token.keychain_mask).as_ref()).map_err(|e| e.kind())
 	}
 
+	// we have to use e.description  because of the bug at rust-secp256k1-zkp
+	#[allow(deprecated)]
+
 	fn init_secure_api(&self, ecdh_pubkey: ECDHPubkey) -> Result<ECDHPubkey, ErrorKind> {
 		let secp_inst = static_secp_instance();
 		let secp = secp_inst.lock();
@@ -2401,21 +2405,25 @@ where
 		let mut shared_pubkey = ecdh_pubkey.ecdh_pubkey;
 		shared_pubkey
 			.mul_assign(&secp, &sec_key)
-			.map_err(ErrorKind::Secp)?;
+			.map_err(|e| ErrorKind::Secp(format!("{}", e.description())))?;
 
 		let x_coord = shared_pubkey.serialize_vec(&secp, true);
-		let shared_key = SecretKey::from_slice(&secp, &x_coord[1..]).map_err(ErrorKind::Secp)?;
+		let shared_key = SecretKey::from_slice(&secp, &x_coord[1..])
+			.map_err(|e| ErrorKind::Secp(format!("{}", e.description())))?;
 		{
 			let mut s = self.shared_key.lock();
 			*s = Some(shared_key);
 		}
 
-		let pub_key = PublicKey::from_secret_key(&secp, &sec_key).map_err(ErrorKind::Secp)?;
+		let pub_key = PublicKey::from_secret_key(&secp, &sec_key)
+			.map_err(|e| ErrorKind::Secp(format!("{}", e.description())))?;
 
 		Ok(ECDHPubkey {
 			ecdh_pubkey: pub_key,
 		})
 	}
+
+	#[warn(deprecated)]
 
 	fn get_top_level_directory(&self) -> Result<String, ErrorKind> {
 		Owner::get_top_level_directory(self).map_err(|e| e.kind())
