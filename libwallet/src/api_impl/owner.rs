@@ -44,6 +44,7 @@ use std::sync::Arc;
 const USER_MESSAGE_MAX_LEN: usize = 256;
 use crate::proof::crypto;
 use crate::proof::proofaddress;
+use grin_core::global;
 
 /// List of accounts
 pub fn accounts<'a, T: ?Sized, C, K>(w: &mut T) -> Result<Vec<AcctPathMapping>, Error>
@@ -487,6 +488,13 @@ where
 	}
 	if let Some(v) = args.target_slate_version {
 		slate.version_info.orig_version = v;
+	}
+
+	slate.coin_type = Some("mwc".to_string());
+	if global::is_floonet() {
+		slate.network_type = Some("floonet".to_string());
+	} else {
+		slate.network_type = Some("mainnet".to_string());
 	}
 
 	Ok(slate)

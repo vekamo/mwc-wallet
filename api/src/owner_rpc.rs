@@ -450,6 +450,8 @@ pub trait OwnerRpc: Sync + Send {
 					"sender_address": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5"
 				  },
 				  "ttl_cutoff_height": "7",
+				  "coin_type": "mwc",
+				  "network_type": "mainnet",
 				  "tx": {
 					"body": {
 					  "inputs": [

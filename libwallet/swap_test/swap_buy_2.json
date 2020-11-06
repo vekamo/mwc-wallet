@@ -94,6 +94,8 @@
     "height": "300000",
     "lock_height": "0",
     "ttl_cutoff_height": null,
+    "coin_type": null,
+    "network_type": null,
     "participant_data": [
       {
         "id": "0",
@@ -154,6 +156,8 @@
     "height": "300000",
     "lock_height": "300280",
     "ttl_cutoff_height": null,
+    "coin_type": null,
+    "network_type": null,
     "participant_data": [
       {
         "id": "0",
@@ -214,6 +218,8 @@
     "height": "300002",
     "lock_height": "0",
     "ttl_cutoff_height": null,
+    "coin_type": null,
+    "network_type": null,
     "participant_data": [
       {
         "id": "0",

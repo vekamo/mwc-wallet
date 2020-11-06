@@ -63,6 +63,12 @@ pub struct SlateV3 {
 	/// associated outputs
 	#[serde(with = "secp_ser::opt_string_or_u64")]
 	pub ttl_cutoff_height: Option<u64>,
+	///we are not changing slate version with this two extra fields. If
+	/// a wallet doesn't support them, they will be filtered out.
+	/// coin Type the default is mwc.
+	pub coin_type: Option<String>,
+	/// network type default is mainnet
+	pub network_type: Option<String>,
 	/// Participant data, each participant in the transaction will
 	/// insert their public data here. For now, 0 is sender and 1
 	/// is receiver, though this will change for multi-party
@@ -239,6 +245,8 @@ impl From<SlateV2> for SlateV3 {
 			height,
 			lock_height,
 			ttl_cutoff_height: None,
+			coin_type: None,
+			network_type: None,
 			participant_data,
 			version_info,
 			payment_proof: None,
@@ -358,6 +366,8 @@ impl From<&SlateV3> for SlateV2 {
 			height,
 			lock_height,
 			ttl_cutoff_height,
+			coin_type,
+			network_type,
 			participant_data,
 			version_info,
 			payment_proof,

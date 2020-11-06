@@ -197,6 +197,12 @@ pub struct Slate {
 	/// associated outputs
 	#[serde(with = "secp_ser::opt_string_or_u64")]
 	pub ttl_cutoff_height: Option<u64>,
+	///we are not changing slate version with this two extra fields. If
+	/// a wallet doesn't support them, they will be filtered out.
+	/// coin Type the default is mwc.
+	pub coin_type: Option<String>,
+	/// network type default is mainnet
+	pub network_type: Option<String>,
 	/// Participant data, each participant in the transaction will
 	/// insert their public data here. For now, 0 is sender and 1
 	/// is receiver, though this will change for multi-party
@@ -242,6 +248,9 @@ impl Slate {
 	/// Recieve a slate, upgrade it to the latest version internally
 	pub fn deserialize_upgrade(slate_json: &str) -> Result<Slate, Error> {
 		let version = Slate::parse_slate_version(slate_json)?;
+
+		//I don't think we need to do this for coin_type and network_type, the slate containing these two
+		//fields has to be version 3. If receiver wallet doesn't supported them, they will be filtered out.
 		let ttl_cutoff_height = if version == 2 {
 			let parse_slate: Result<SlateV2ParseTTL, serde_json::error::Error> =
 				serde_json::from_str(slate_json);
@@ -288,6 +297,8 @@ impl Slate {
 			height: 0,
 			lock_height: 0,
 			ttl_cutoff_height: None,
+			coin_type: None,
+			network_type: None,
 			participant_data: vec![],
 			version_info: VersionCompatInfo {
 				version: CURRENT_SLATE_VERSION,
@@ -381,7 +392,11 @@ impl Slate {
 	/// Calculate minimal Slate version. For exchange we want to keep the varsion as low as possible
 	/// because there are might be many non upgraded wallets and we want ot be friendly to them.
 	pub fn lowest_version(&self) -> SlateVersion {
-		if self.payment_proof.is_some() || self.ttl_cutoff_height.is_some() {
+		if self.payment_proof.is_some()
+			|| self.ttl_cutoff_height.is_some()
+			|| self.coin_type.is_some()
+			|| self.network_type.is_some()
+		{
 			SlateVersion::V3
 		} else {
 			SlateVersion::V2
@@ -912,6 +927,8 @@ impl From<Slate> for SlateV3 {
 			height,
 			lock_height,
 			ttl_cutoff_height,
+			coin_type,
+			network_type,
 			participant_data,
 			version_info,
 			payment_proof,
@@ -932,6 +949,8 @@ impl From<Slate> for SlateV3 {
 			height,
 			lock_height,
 			ttl_cutoff_height,
+			coin_type,
+			network_type,
 			participant_data,
 			version_info,
 			payment_proof,
@@ -950,6 +969,8 @@ impl From<&Slate> for SlateV3 {
 			height,
 			lock_height,
 			ttl_cutoff_height,
+			coin_type,
+			network_type,
 			participant_data,
 			version_info,
 			payment_proof,
@@ -962,6 +983,14 @@ impl From<&Slate> for SlateV3 {
 		let height = *height;
 		let lock_height = *lock_height;
 		let ttl_cutoff_height = *ttl_cutoff_height;
+		let coin_type = match coin_type {
+			Some(c) => Some(c.to_string()),
+			None => None,
+		};
+		let network_type = match network_type {
+			Some(n) => Some(n.to_string()),
+			None => None,
+		};
 		let participant_data = map_vec!(participant_data, |data| ParticipantDataV3::from(data));
 		let version_info = VersionCompatInfoV3::from(version_info);
 		let payment_proof = match payment_proof {
@@ -977,6 +1006,8 @@ impl From<&Slate> for SlateV3 {
 			height,
 			lock_height,
 			ttl_cutoff_height,
+			coin_type,
+			network_type,
 			participant_data,
 			version_info,
 			payment_proof,
@@ -1136,6 +1167,8 @@ impl From<SlateV3> for Slate {
 			height,
 			lock_height,
 			ttl_cutoff_height,
+			coin_type,
+			network_type,
 			participant_data,
 			version_info,
 			payment_proof,
@@ -1156,6 +1189,8 @@ impl From<SlateV3> for Slate {
 			height,
 			lock_height,
 			ttl_cutoff_height,
+			coin_type,
+			network_type,
 			participant_data,
 			version_info,
 			payment_proof,
