@@ -503,7 +503,6 @@ pub trait OwnerRpcS {
 			  "num_participants": 2,
 			  "coin_type": "mwc",
 			  "network_type": "mainnet",
-			  "payment_proof": null,
 			  "participant_data": [
 				{
 				  "id": "0",

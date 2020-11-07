@@ -732,6 +732,8 @@ pub trait OwnerRpc: Sync + Send {
 			  "height": "4",
 			  "id": "0436430c-2b02-624c-2032-570501212b01",
 			  "lock_height": "0",
+			  "coin_type": null,
+			  "network_type": null,
 			  "num_participants": 2,
 			  "participant_data": [
 				{
