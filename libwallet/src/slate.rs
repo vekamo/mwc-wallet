@@ -197,8 +197,7 @@ pub struct Slate {
 	/// associated outputs
 	#[serde(with = "secp_ser::opt_string_or_u64")]
 	pub ttl_cutoff_height: Option<u64>,
-	///we are not changing slate version with this two extra fields. If
-	/// a wallet doesn't support them, they will be filtered out.
+	/// If a wallet doesn't support them, they will be filtered out.
 	/// coin Type the default is mwc.
 	pub coin_type: Option<String>,
 	/// network type default is mainnet
@@ -392,11 +391,7 @@ impl Slate {
 	/// Calculate minimal Slate version. For exchange we want to keep the varsion as low as possible
 	/// because there are might be many non upgraded wallets and we want ot be friendly to them.
 	pub fn lowest_version(&self) -> SlateVersion {
-		if self.payment_proof.is_some()
-			|| self.ttl_cutoff_height.is_some()
-			|| self.coin_type.is_some()
-			|| self.network_type.is_some()
-		{
+		if self.payment_proof.is_some() || self.ttl_cutoff_height.is_some() {
 			SlateVersion::V3
 		} else {
 			SlateVersion::V2

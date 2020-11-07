@@ -415,6 +415,9 @@ pub trait OwnerRpcS {
 			  "height": "4",
 			  "id": "0436430c-2b02-624c-2032-570501212b00",
 			  "lock_height": "0",
+			  "coin_type": "mwc",
+			  "ttl_cutoff_height": null,
+			  "network_type": "mainnet",
 			  "num_participants": 2,
 			  "participant_data": [
 				{
@@ -431,9 +434,6 @@ pub trait OwnerRpcS {
 				"receiver_signature": null,
 				"sender_address": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5"
 			  },
-			  "ttl_cutoff_height": null,
-			  "coin_type": "mwc",
-			  "network_type": "mainnet",
 			  "tx": {
 				"body": {
 				  "inputs": [
@@ -504,7 +504,6 @@ pub trait OwnerRpcS {
 			  "coin_type": "mwc",
 			  "network_type": "mainnet",
 			  "payment_proof": null,
-			  "ttl_cutoff_height": null,
 			  "participant_data": [
 				{
 				  "id": "0",
@@ -545,7 +544,7 @@ pub trait OwnerRpcS {
 			  "version_info": {
 				"block_header_version": 1,
 				"orig_version": 3,
-				"version": 3
+				"version": 2
 			  }
 			}
 		  }
@@ -588,6 +587,8 @@ pub trait OwnerRpcS {
 			  "height": "4",
 			  "id": "0436430c-2b02-624c-2032-570501212b00",
 			  "lock_height": "0",
+			  "coin_type": null,
+			  "network_type": null,
 			  "num_participants": 2,
 			  "participant_data": [
 				{
@@ -662,6 +663,8 @@ pub trait OwnerRpcS {
 			  "height": "4",
 			  "id": "0436430c-2b02-624c-2032-570501212b01",
 			  "lock_height": "0",
+			  "coin_type": null,
+			  "network_type": null,
 			  "num_participants": 2,
 			  "participant_data": [
 				{
@@ -731,6 +734,8 @@ pub trait OwnerRpcS {
 					  "height": "4",
 					  "id": "0436430c-2b02-624c-2032-570501212b01",
 					  "lock_height": "0",
+					  "coin_type": null,
+					  "network_type": null,
 					  "num_participants": 2,
 					  "participant_data": [
 						{
@@ -799,6 +804,8 @@ pub trait OwnerRpcS {
 			  "height": "4",
 			  "id": "0436430c-2b02-624c-2032-570501212b01",
 			  "lock_height": "0",
+			  "coin_type": null,
+			  "network_type": null,
 			  "num_participants": 2,
 			  "participant_data": [
 				{
@@ -925,6 +932,8 @@ pub trait OwnerRpcS {
 			  "fee": "7000000",
 			  "height": "5",
 			  "lock_height": "0",
+			  "coin_type": "mwc",
+			  "network_type": "mainnet",
 			  "participant_data": [
 				{
 				  "id": "0",
@@ -1021,6 +1030,8 @@ pub trait OwnerRpcS {
 			  "fee": "7000000",
 			  "height": "5",
 			  "lock_height": "0",
+			  "coin_type": "mwc",
+			  "network_type": "mainnet",
 			  "participant_data": [
 				{
 				  "id": "0",
@@ -1055,6 +1066,8 @@ pub trait OwnerRpcS {
 			  "height": "5",
 			  "id": "0436430c-2b02-624c-2032-570501212b00",
 			  "lock_height": "0",
+			  "coin_type": "mwc",
+			  "network_type": "mainnet",
 			  "num_participants": 2,
 			  "participant_data": [
 				{

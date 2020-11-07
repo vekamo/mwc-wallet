@@ -285,6 +285,8 @@ pub trait ForeignRpc {
 		  "fee": "7000000",
 		  "height": "5",
 		  "lock_height": "0",
+		  "coin_type": null,
+		  "network_type": null,
 		  "participant_data": [
 			{
 			  "id": "0",
@@ -313,6 +315,8 @@ pub trait ForeignRpc {
 		  "height": "5",
 		  "id": "0436430c-2b02-624c-2032-570501212b00",
 		  "lock_height": "0",
+		  "coin_type": null,
+		  "network_type": null,
 		  "num_participants": 2,
 		  "participant_data": [
 			{
@@ -448,6 +452,8 @@ pub trait ForeignRpc {
 		  "fee": "7000000",
 		  "height": "5",
 		  "lock_height": "0",
+		  "coin_type":"mwc",
+		  "network_type": "mainnet",
 		  "participant_data": [
 			{
 			  "id": "0",
@@ -481,6 +487,8 @@ pub trait ForeignRpc {
 		  "height": "5",
 		  "id": "0436430c-2b02-624c-2032-570501212b00",
 		  "lock_height": "0",
+		  "coin_type":"mwc",
+		  "network_type": "mainnet",
 		  "num_participants": 2,
 		  "participant_data": [
 			{

@@ -75,6 +75,11 @@ pub struct SlateV2ParseTTL {
 	/// is receiver, though this will change for multi-party
 	#[serde(with = "secp_ser::opt_string_or_u64")]
 	pub ttl_cutoff_height: Option<u64>,
+	/// If a wallet doesn't support them, they will be filtered out.
+	/// coin Type the default is mwc.
+	pub coin_type: Option<String>,
+	/// network type default is mainnet
+	pub network_type: Option<String>,
 	/// Participant data, each participant in the transaction will
 	/// insert their public data here. For now, 0 is sender and 1
 	/// is receiver, though this will change for multi-party
@@ -104,6 +109,11 @@ pub struct SlateV2 {
 	/// Lock height
 	#[serde(with = "secp_ser::string_or_u64")]
 	pub lock_height: u64,
+	/// If a wallet doesn't support them, they will be filtered out.
+	/// coin Type the default is mwc.
+	pub coin_type: Option<String>,
+	/// network type default is mainnet
+	pub network_type: Option<String>,
 	/// Participant data, each participant in the transaction will
 	/// insert their public data here. For now, 0 is sender and 1
 	/// is receiver, though this will change for multi-party

@@ -230,6 +230,8 @@ impl From<SlateV2> for SlateV3 {
 			fee,
 			height,
 			lock_height,
+			coin_type,
+			network_type,
 			participant_data,
 			version_info,
 		} = slate;
@@ -245,8 +247,8 @@ impl From<SlateV2> for SlateV3 {
 			height,
 			lock_height,
 			ttl_cutoff_height: None,
-			coin_type: None,
-			network_type: None,
+			coin_type,
+			network_type,
 			participant_data,
 			version_info,
 			payment_proof: None,
@@ -381,6 +383,14 @@ impl From<&SlateV3> for SlateV2 {
 		let lock_height = *lock_height;
 		let participant_data = map_vec!(participant_data, |data| ParticipantDataV2::from(data));
 		let version_info = VersionCompatInfoV2::from(version_info);
+		let coin_type = match coin_type {
+			Some(c) => Some(c.to_string()),
+			None => None,
+		};
+		let network_type = match network_type {
+			Some(n) => Some(n.to_string()),
+			None => None,
+		};
 		SlateV2 {
 			num_participants,
 			id,
@@ -389,6 +399,8 @@ impl From<&SlateV3> for SlateV2 {
 			fee,
 			height,
 			lock_height,
+			coin_type,
+			network_type,
 			participant_data,
 			version_info,
 		}
