@@ -38,9 +38,11 @@ use std::sync::{Arc, RwLock};
 const ENDPOINT: &str = "/v2/foreign";
 const CACHE_VALID_TIME_MS: u128 = 5000; // 2 seconds for cache should be enough for our purpose
 
-const NODE_CALL_RETRY: i32 = 3;
+const NODE_CALL_RETRY: i32 = 2;
 lazy_static! {
-	static ref NODE_CALL_DELAY: Vec<u64> = vec![5000, 3000, 1000];
+	// We used delays, 5000, 3000, 1000.  It is very slow and really doesn't make sense with connect,
+	// read, write timouts of 20 seconds. Keeping non zero sleeps just in case of internal glitch
+	static ref NODE_CALL_DELAY: Vec<u64> = vec![1000, 1000];
 }
 
 // cashed values are stored by the key K

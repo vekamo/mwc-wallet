@@ -33,7 +33,9 @@ use grin_wallet_impls::{PathToSlate, SlateGetter as _};
 use grin_wallet_libwallet::proof::proofaddress;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::Slate;
-use grin_wallet_libwallet::{IssueInvoiceTxArgs, NodeClient, WalletInst, WalletLCProvider};
+use grin_wallet_libwallet::{
+	IssueInvoiceTxArgs, NodeClient, SwapStartArgs, WalletInst, WalletLCProvider,
+};
 use grin_wallet_util::grin_core as core;
 use grin_wallet_util::grin_core::core::amount_to_hr_string;
 use grin_wallet_util::grin_core::global;
@@ -934,7 +936,7 @@ pub fn parse_verify_proof_args(args: &ArgMatches) -> Result<command::ProofVerify
 	})
 }
 
-pub fn parse_swap_start_args(args: &ArgMatches) -> Result<command::SwapStartArgs, ParseError> {
+pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseError> {
 	let mwc_amount = parse_required(args, "mwc_amount")?;
 	let mwc_amount = core::core::amount_from_hr_string(mwc_amount);
 	let mwc_amount = match mwc_amount {
@@ -988,7 +990,9 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<command::SwapStartArgs
 	let electrum_node_uri1 = args.value_of("electrum_uri1").map(|s| String::from(s));
 	let electrum_node_uri2 = args.value_of("electrum_uri2").map(|s| String::from(s));
 
-	Ok(command::SwapStartArgs {
+	let dry_run = args.is_present("dry_run");
+
+	Ok(SwapStartArgs {
 		mwc_amount,
 		secondary_currency: secondary_currency.to_string(),
 		secondary_amount: btc_amount.to_string(),
@@ -1003,6 +1007,7 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<command::SwapStartArgs
 		buyer_communication_address: destination.to_string(),
 		electrum_node_uri1,
 		electrum_node_uri2,
+		dry_run,
 	})
 }
 
@@ -1429,7 +1434,7 @@ where
 		}
 		("swap_start", Some(args)) => {
 			let a = arg_parse!(parse_swap_start_args(&args));
-			command::swap_start(owner_api, km, a)
+			command::swap_start(owner_api, km, &a)
 		}
 		("swap_create_from_offer", Some(args)) => {
 			let mwc_amount = arg_parse!(parse_required(args, "file"));

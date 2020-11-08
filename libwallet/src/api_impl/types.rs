@@ -352,4 +352,6 @@ pub struct SwapStartArgs {
 	pub electrum_node_uri1: Option<String>,
 	/// ElectrumX failover URI2
 	pub electrum_node_uri2: Option<String>,
+	/// Dry run flag. Use true if you want to validate config
+	pub dry_run: bool,
 }

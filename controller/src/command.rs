@@ -232,7 +232,6 @@ where
 		)?;
 	}
 
-
 	// Now Owner API
 	controller::owner_listener(
 		owner_api.wallet_inst.clone(),
@@ -1242,42 +1241,10 @@ where
 	Ok(())
 }
 
-/// Arguments for the swap command
-pub struct SwapStartArgs {
-	/// MWC to send
-	pub mwc_amount: u64,
-	/// Secondary currency
-	pub secondary_currency: String,
-	/// BTC to recieve
-	pub secondary_amount: String,
-	/// Secondary currency redeem address
-	pub secondary_redeem_address: String,
-	/// Funds locking order. true - seller lock mwc first
-	pub seller_lock_first: bool,
-	/// Minimum confirmation for outputs. Default is 10
-	pub minimum_confirmations: Option<u64>,
-	/// Required confirmations for MWC Locking
-	pub mwc_confirmations: u64,
-	/// Required confirmations for BTC Locking
-	pub secondary_confirmations: u64,
-	/// Time interval for message exchange session.
-	pub message_exchange_time_sec: u64,
-	/// Time interval needed to redeem or execute a refund transaction.
-	pub redeem_time_sec: u64,
-	/// Method how we are sending message to the buyer
-	pub buyer_communication_method: String,
-	/// Buyer destination address
-	pub buyer_communication_address: String,
-	/// ElectrumX URI1
-	pub electrum_node_uri1: Option<String>,
-	/// ElectrumX failover URI2
-	pub electrum_node_uri2: Option<String>,
-}
-
 pub fn swap_start<L, C, K>(
 	owner_api: &mut Owner<L, C, K>,
 	keychain_mask: Option<&SecretKey>,
-	args: SwapStartArgs,
+	args: &grin_wallet_libwallet::api_impl::types::SwapStartArgs,
 ) -> Result<(), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
@@ -1307,25 +1274,7 @@ where
 	}
 
 	controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, _m| {
-		let result = api.swap_start(
-			keychain_mask,
-			&grin_wallet_libwallet::api_impl::types::SwapStartArgs {
-				mwc_amount: args.mwc_amount,
-				secondary_currency: args.secondary_currency,
-				secondary_amount: args.secondary_amount,
-				secondary_redeem_address: args.secondary_redeem_address,
-				seller_lock_first: args.seller_lock_first,
-				minimum_confirmations: args.minimum_confirmations,
-				mwc_confirmations: args.mwc_confirmations,
-				secondary_confirmations: args.secondary_confirmations,
-				message_exchange_time_sec: args.message_exchange_time_sec,
-				redeem_time_sec: args.redeem_time_sec,
-				buyer_communication_method: args.buyer_communication_method,
-				buyer_communication_address: args.buyer_communication_address,
-				electrum_node_uri1: args.electrum_node_uri1,
-				electrum_node_uri2: args.electrum_node_uri2,
-			},
-		);
+		let result = api.swap_start(keychain_mask, args);
 		match result {
 			Ok(swap_id) => {
 				println!("Seller Swap trade is created: {}", swap_id);

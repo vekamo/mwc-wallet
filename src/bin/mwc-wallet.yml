@@ -554,6 +554,10 @@ subcommands:
             help: secondary private ElectrumX node URI. If not defined, community node will be used
             long: electrum_uri2
             takes_value: true
+        - dry_run:
+            help: verify parameters, do not create a new swap trade
+            long: dry_run
+            takes_value: false
   - swap:
       about: Trade MWC with another currency via atomic swap
       args:

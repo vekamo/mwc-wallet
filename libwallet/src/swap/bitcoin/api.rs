@@ -703,4 +703,29 @@ where
 		self.buyer_refund(keychain, context, swap, &refund_address, &input_script)?;
 		Ok(())
 	}
+
+	/// Validate clients. We want to be sure that the clients able to acceess the servers
+	fn test_client_connections(&self) -> Result<(), ErrorKind> {
+		{
+			let mut c = self.btc_node_client1.lock();
+			let name = c.name();
+			let _ = c.height().map_err(|e| {
+				ErrorKind::ElectrumNodeClient(format!(
+					"Unable to contact the primary ElectrumX client {}, {}",
+					name, e
+				))
+			})?;
+		}
+		{
+			let mut c = self.btc_node_client2.lock();
+			let name = c.name();
+			let _ = c.height().map_err(|e| {
+				ErrorKind::ElectrumNodeClient(format!(
+					"Unable to contact the secondary ElectrumX client {}, {}",
+					name, e
+				))
+			})?;
+		}
+		Ok(())
+	}
 }

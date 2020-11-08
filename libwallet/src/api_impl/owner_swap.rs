@@ -129,6 +129,9 @@ where
 	let mut swap_api =
 		crate::swap::api::create_instance(&secondary_currency, node_client, uri1, uri2)?;
 
+	// Checking ElectrumX nodes...
+	swap_api.test_client_connections()?;
+
 	let parent_key_id = w.parent_key_id(); // account is current one
 	let (outputs, total, amount, fee) = crate::internal::selection::select_coins_and_fee(
 		&mut **w,
@@ -190,6 +193,12 @@ where
 			"This trade record already exist".to_string(),
 		)
 		.into());
+	}
+
+	if params.dry_run {
+		// In case of dry run we don't want to store or start anything. Just validate is enough.
+		// Still we can return a new swap ID that is temporary, but still might be used for something
+		return Ok(swap_id);
 	}
 
 	trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;

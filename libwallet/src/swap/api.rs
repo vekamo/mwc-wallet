@@ -128,6 +128,9 @@ pub trait SwapApi<K: Keychain>: Sync + Send {
 		swap: &mut Swap,
 		refund_address: Option<String>,
 	) -> Result<(), ErrorKind>;
+
+	/// Validate clients. We want to be sure that the clients able to acceess the servers
+	fn test_client_connections(&self) -> Result<(), ErrorKind>;
 }
 
 /// Create an appropriate instance for the Currency

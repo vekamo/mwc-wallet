@@ -257,7 +257,7 @@ pub struct ElectrumTransaction {
 /// Warning: this client doesn't perform any of the SPV checks,
 /// it assumes the provided information is truthful
 pub struct ElectrumNodeClient {
-	/// BTC address
+	/// ElectrumX URI (host:port)
 	pub address: String,
 	/// transaction at block 1. The number of confirmations must be equal to the height
 	pub check_tx_hash: String,
@@ -306,6 +306,11 @@ impl ElectrumNodeClient {
 }
 
 impl BtcNodeClient for ElectrumNodeClient {
+	/// Name of this client. Normally it is URL
+	fn name(&self) -> String {
+		self.address.clone()
+	}
+
 	/// Fetch the current chain height
 	fn height(&mut self) -> Result<u64, ErrorKind> {
 		// The proper way to do this is to download all the block headers

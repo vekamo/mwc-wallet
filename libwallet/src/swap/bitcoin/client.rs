@@ -57,6 +57,8 @@ impl Hash for Output {
 
 /// Bitcoin node client
 pub trait BtcNodeClient: Sync + Send + 'static {
+	/// Name of this client. Normally it is URL
+	fn name(&self) -> String;
 	/// Get node height
 	fn height(&mut self) -> Result<u64, ErrorKind>;
 	/// Get unspent outputs for the address
@@ -166,6 +168,11 @@ impl TestBtcNodeClient {
 }
 
 impl BtcNodeClient for TestBtcNodeClient {
+	/// Name of this client. Normally it is URL
+	fn name(&self) -> String {
+		String::from("BTC test client")
+	}
+
 	fn height(&mut self) -> Result<u64, ErrorKind> {
 		Ok(self.state.lock().height)
 	}
