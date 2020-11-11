@@ -186,6 +186,49 @@ impl StateId {
 		}
 	}
 
+	/// Return state as a command. It is easier to parsing on the next lever (QT wallet)
+	pub fn to_cmd_str(&self) -> String {
+		let cmd_str = match &self {
+			StateId::SellerOfferCreated => "SellerOfferCreated",
+			StateId::SellerSendingOffer => "SellerSendingOffer",
+			StateId::SellerWaitingForAcceptanceMessage => "SellerWaitingForAcceptanceMessage",
+			StateId::SellerWaitingForBuyerLock => "SellerWaitingForBuyerLock",
+			StateId::SellerPostingLockMwcSlate => "SellerPostingLockMwcSlate",
+			StateId::SellerWaitingForLockConfirmations => "SellerWaitingForLockConfirmations",
+			StateId::SellerWaitingForInitRedeemMessage => "SellerWaitingForInitRedeemMessage",
+			StateId::SellerSendingInitRedeemMessage => "SellerSendingInitRedeemMessage",
+			StateId::SellerWaitingForBuyerToRedeemMwc => "SellerWaitingForBuyerToRedeemMwc",
+			StateId::SellerRedeemSecondaryCurrency => "SellerRedeemSecondaryCurrency",
+			StateId::SellerWaitingForRedeemConfirmations => "SellerWaitingForRedeemConfirmations",
+			StateId::SellerSwapComplete => "SellerSwapComplete",
+			StateId::SellerWaitingForRefundHeight => "SellerWaitingForRefundHeight",
+			StateId::SellerPostingRefundSlate => "SellerPostingRefundSlate",
+			StateId::SellerWaitingForRefundConfirmations => "SellerWaitingForRefundConfirmations",
+			StateId::SellerCancelledRefunded => "SellerCancelledRefunded",
+			StateId::SellerCancelled => "SellerCancelled",
+
+			StateId::BuyerOfferCreated => "BuyerOfferCreated",
+			StateId::BuyerSendingAcceptOfferMessage => "BuyerSendingAcceptOfferMessage",
+			StateId::BuyerWaitingForSellerToLock => "BuyerWaitingForSellerToLock",
+			StateId::BuyerPostingSecondaryToMultisigAccount => {
+				"BuyerPostingSecondaryToMultisigAccount"
+			}
+			StateId::BuyerWaitingForLockConfirmations => "BuyerWaitingForLockConfirmations",
+			StateId::BuyerSendingInitRedeemMessage => "BuyerSendingInitRedeemMessage",
+			StateId::BuyerWaitingForRespondRedeemMessage => "BuyerWaitingForRespondRedeemMessage",
+			StateId::BuyerRedeemMwc => "BuyerRedeemMwc",
+			StateId::BuyerWaitForRedeemMwcConfirmations => "BuyerWaitForRedeemMwcConfirmations",
+			StateId::BuyerSwapComplete => "BuyerSwapComplete",
+
+			StateId::BuyerWaitingForRefundTime => "BuyerWaitingForRefundTime",
+			StateId::BuyerPostingRefundForSecondary => "BuyerPostingRefundForSecondary",
+			StateId::BuyerWaitingForRefundConfirmations => "BuyerWaitingForRefundConfirmations",
+			StateId::BuyerCancelledRefunded => "BuyerCancelledRefunded",
+			StateId::BuyerCancelled => "BuyerCancelled",
+		};
+		String::from(cmd_str)
+	}
+
 	/// Convert string name to State instance
 	pub fn from_cmd_str(str: &str) -> Result<Self, ErrorKind> {
 		match str {

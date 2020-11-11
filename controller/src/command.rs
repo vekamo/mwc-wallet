@@ -1426,6 +1426,7 @@ where
 								"secondary_currency" : swap_info.secondary_currency,
 								"swap_id": swap_info.swap_id,
 								"state" : swap_info.state.to_string(),
+								"state_cmd" : swap_info.state.to_cmd_str(),
 								"action" : swap_info.action.unwrap_or(Action::None).to_string(),
 								"expiration" : swap_info.expiration.unwrap_or(0).to_string(),
 								"start_time" : swap_info.trade_start_time.to_string(),
@@ -1618,6 +1619,9 @@ where
 							"currentAction": action.to_string(),
 							"roadmap" : road_map_to_print,
 							"journal_records" : journal_records_to_print,
+
+							"electrumNodeUri1" : swap.electrum_node_uri1.clone().unwrap_or("".to_string()),
+							"electrumNodeUri2" : swap.electrum_node_uri2.clone().unwrap_or("".to_string()),
 						});
 
 						println!("JSON: {}", item.to_string());
@@ -2164,7 +2168,7 @@ where
 
 							let item = json::json!({
 									"swap_id" : swap_id2.clone(),
-									"autowsap_done" : curr_state.is_final_state(),
+									"stateCmd" : curr_state.to_cmd_str(),
 									"currentAction": curr_action.to_string(),
 									"currentState" : curr_state.to_string(),
 									"roadmap" : road_map_to_print,

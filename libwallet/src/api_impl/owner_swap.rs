@@ -371,6 +371,27 @@ where
 
 	match adjust_cmd {
 		"electrumx_uri" => {
+			// Let's test electrumX instances first.
+			let mut electrum1 = electrum_node_uri1.clone();
+			let mut electrum2 = electrum_node_uri2.clone();
+
+			if electrum1.is_some() || electrum2.is_some() {
+				if electrum1.is_none() {
+					electrum1 = electrum2.clone();
+				}
+				if electrum2.is_none() {
+					electrum2 = electrum1.clone();
+				}
+
+				let swap_api: Box<dyn SwapApi<K>> = crate::swap::api::create_instance(
+					&swap.secondary_currency,
+					node_client.clone(),
+					electrum1.unwrap(),
+					electrum2.unwrap(),
+				)?;
+				swap_api.test_client_connections()?;
+			}
+
 			swap.electrum_node_uri1 = electrum_node_uri1;
 			swap.electrum_node_uri2 = electrum_node_uri2;
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
@@ -1105,7 +1126,7 @@ where
 
 			trades::store_swap_trade(&context, &swap, &skey, &*lock)?;
 			println!(
-				"You get an offer to swap {} to MWC. SwapID is {}",
+				"INFO: You get an offer to swap {} to MWC. SwapID is {}",
 				swap.secondary_currency, swap.id
 			);
 			Some(Message::new(
@@ -1161,7 +1182,7 @@ where
 
 			fsm.process(Input::IncomeMessage(message), &mut swap, &context, &tx_conf)?;
 			trades::store_swap_trade(&context, &swap, &skey, &*lock)?;
-			println!("Processed income message for SwapId {}", swap.id);
+			println!("INFO: Processed income message for SwapId {}", swap.id);
 
 			Some(Message::new(
 				swap.id.clone(),
