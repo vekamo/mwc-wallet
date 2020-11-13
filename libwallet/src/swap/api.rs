@@ -155,6 +155,7 @@ where
 		currency.get_block1_tx_hash(!global::is_mainnet()),
 	);
 	Ok(Box::new(BtcSwapApi::new(
+		currency.clone(),
 		Arc::new(node_client),
 		Arc::new(Mutex::new(secondary_currency_node_client1)),
 		Arc::new(Mutex::new(secondary_currency_node_client2)),

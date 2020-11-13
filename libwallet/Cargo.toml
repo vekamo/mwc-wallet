@@ -41,6 +41,7 @@ colored ="1.6"
 bitcoin = { version = "0.19", git = "https://github.com/mwcproject/rust-bitcoin", branch = "zkp", features = ["bitcoinconsensus"] }
 bitcoin_hashes = { version = "0.7", features = ["serde"] }
 serial_test = "0.4.0"
+bch = { git = "https://github.com/mwcproject/rust-bch", branch = "master" }
 
 grin_wallet_util = { path = "../util", version = "3.2.2" }
 grin_wallet_config = { path = "../config", version = "3.2.2" }
@@ -66,7 +67,6 @@ grin_util = { git = "https://github.com/mwcproject/mwc-node", tag = "prerebase_t
 #grin_core= { path = "../../mwc-node/core"}
 #grin_keychain = { path = "../../mwc-node/keychain"}
 #grin_util = { path = "../../mwc-node/util"}
-
 
 [target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
 libc = { version = "0.2.69", default-features = false }

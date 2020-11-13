@@ -27,13 +27,12 @@ use crate::swap::types::{
 };
 use crate::swap::{ErrorKind, SellApi, Swap, SwapApi};
 use crate::{NodeClient, Slate};
-use bitcoin::{Address, Script};
+use bitcoin::Script;
 use bitcoin_hashes::sha256d;
 use failure::_core::marker::PhantomData;
 use grin_keychain::{Identifier, Keychain, SwitchCommitmentType};
 use grin_util::secp;
 use grin_util::secp::aggsig::export_secnonce_single as generate_nonce;
-use std::str::FromStr;
 use std::sync::Arc;
 
 /// SwapApi trait implementaiton for BTC
@@ -43,6 +42,8 @@ where
 	C: NodeClient + 'a,
 	B: BtcNodeClient + 'a,
 {
+	/// Currency. BTC - it is a BTC family. There are some tweaks for different coins.
+	secondary_currency: Currency,
 	/// Client for MWC node
 	pub node_client: Arc<C>,
 	/// Primary Client for BTC electrumx node
@@ -60,11 +61,13 @@ where
 {
 	/// Create BTC Swap API instance
 	pub fn new(
+		secondary_currency: Currency,
 		node_client: Arc<C>,
 		btc_node_client1: Arc<Mutex<B>>,
 		btc_node_client2: Arc<Mutex<B>>,
 	) -> Self {
 		Self {
+			secondary_currency,
 			node_client,
 			btc_node_client1,
 			btc_node_client2,
@@ -75,6 +78,7 @@ where
 	/// For tests doesn't make sense to use any failover
 	pub fn new_test(node_client: Arc<C>, btc_node_client: Arc<Mutex<B>>) -> Self {
 		Self {
+			secondary_currency: Currency::Btc,
 			node_client,
 			btc_node_client1: btc_node_client.clone(),
 			btc_node_client2: btc_node_client,
@@ -85,6 +89,7 @@ where
 	/// Clone instance
 	pub fn clone(&self) -> Self {
 		Self {
+			secondary_currency: self.secondary_currency.clone(),
 			node_client: self.node_client.clone(),
 			btc_node_client1: self.btc_node_client1.clone(),
 			btc_node_client2: self.btc_node_client2.clone(),
@@ -117,10 +122,17 @@ where
 		confirmations_needed: u64,
 	) -> Result<(u64, u64, u64, Vec<Output>), ErrorKind> {
 		let btc_data = swap.secondary_data.unwrap_btc()?;
-		let address = btc_data.address(input_script, swap.network)?;
-		let outputs = match self.btc_node_client1.lock().unspent(&address) {
+		let address = btc_data.address(self.secondary_currency, input_script, swap.network)?;
+		let outputs = match self
+			.btc_node_client1
+			.lock()
+			.unspent(self.secondary_currency, &address)
+		{
 			Ok(r) => r,
-			Err(_) => self.btc_node_client2.lock().unspent(&address)?,
+			Err(_) => self
+				.btc_node_client2
+				.lock()
+				.unspent(self.secondary_currency, &address)?,
 		};
 		let height = match self.btc_node_client1.lock().height() {
 			Ok(r) => r,
@@ -176,12 +188,9 @@ where
 		let cosign_id = &context.unwrap_seller()?.unwrap_btc()?.cosign;
 
 		let redeem_address_str = swap.unwrap_seller()?.0.clone();
-		let redeem_address = Address::from_str(&redeem_address_str).map_err(|e| {
-			ErrorKind::Generic(format!(
-				"Unable to parse BTC redeem address {}, {}",
-				redeem_address_str, e
-			))
-		})?;
+
+		self.secondary_currency
+			.validate_address(&redeem_address_str)?;
 
 		let cosign_secret = keychain.derive_key(0, cosign_id, SwitchCommitmentType::None)?;
 		let redeem_secret = SellApi::calculate_redeem_secret(keychain, swap)?;
@@ -201,8 +210,9 @@ where
 		conf_outputs.sort_by(|a, b| a.out_point.txid.cmp(&b.out_point.txid));
 
 		let (btc_transaction, _, _, _) = btc_data.build_redeem_tx(
+			&self.secondary_currency,
 			keychain.secp(),
-			&redeem_address,
+			&redeem_address_str,
 			&input_script,
 			swap.secondary_fee,
 			&cosign_secret,
@@ -218,7 +228,7 @@ where
 		keychain: &K,
 		context: &Context,
 		swap: &mut Swap,
-		refund_address: &Address,
+		refund_address: &String,
 		input_script: &Script,
 	) -> Result<(), ErrorKind> {
 		let (pending_amount, confirmed_amount, _, conf_outputs) =
@@ -239,6 +249,7 @@ where
 		let btc_lock_time = swap.get_time_btc_lock();
 		let btc_data = swap.secondary_data.unwrap_btc_mut()?;
 		let refund_tx = btc_data.refund_tx(
+			&self.secondary_currency,
 			keychain.secp(),
 			refund_address,
 			input_script,
@@ -416,12 +427,15 @@ where
 		electrum_node_uri2: Option<String>,
 	) -> Result<Swap, ErrorKind> {
 		// Checking if address is valid
-		let _redeem_address = Address::from_str(&secondary_redeem_address).map_err(|e| {
-			ErrorKind::Generic(format!(
-				"Unable to parse secondary currency redeem address {}, {}",
-				secondary_redeem_address, e
-			))
-		})?;
+
+		secondary_currency
+			.validate_address(&secondary_redeem_address)
+			.map_err(|e| {
+				ErrorKind::Generic(format!(
+					"Unable to parse secondary currency redeem address {}, {}",
+					secondary_redeem_address, e
+				))
+			})?;
 
 		if secondary_currency != Currency::Btc && secondary_currency != Currency::Bch {
 			return Err(ErrorKind::UnexpectedCoinType);
@@ -534,10 +548,19 @@ where
 		let mut least_confirmations = None;
 
 		if let Ok(input_script) = self.script(swap) {
-			if let Ok(address) = btc_data.address(&input_script, swap.network) {
-				let outputs = match self.btc_node_client1.lock().unspent(&address) {
+			if let Ok(address) =
+				btc_data.address(swap.secondary_currency, &input_script, swap.network)
+			{
+				let outputs = match self
+					.btc_node_client1
+					.lock()
+					.unspent(swap.secondary_currency, &address)
+				{
 					Ok(r) => r,
-					Err(_) => self.btc_node_client2.lock().unspent(&address)?,
+					Err(_) => self
+						.btc_node_client2
+						.lock()
+						.unspent(swap.secondary_currency, &address)?,
 				};
 				for output in outputs {
 					secondary_lock_amount += output.value;
@@ -666,10 +689,11 @@ where
 	/// Get a secondary address for the lock account
 	fn get_secondary_lock_address(&self, swap: &Swap) -> Result<String, ErrorKind> {
 		let input_script = self.script(swap)?;
-		let adrress = swap
-			.secondary_data
-			.unwrap_btc()?
-			.address(&input_script, swap.network)?;
+		let adrress = swap.secondary_data.unwrap_btc()?.address(
+			swap.secondary_currency,
+			&input_script,
+			swap.network,
+		)?;
 		Ok(adrress.to_string())
 	}
 
@@ -692,15 +716,11 @@ where
 			"Please define BTC refund address".to_string(),
 		))?;
 
-		let refund_address = Address::from_str(&refund_address_str).map_err(|e| {
-			ErrorKind::Generic(format!(
-				"Unable to parse BTC address {}, {}",
-				refund_address_str, e
-			))
-		})?;
+		swap.secondary_currency
+			.validate_address(&refund_address_str)?;
 
 		let input_script = self.script(swap)?;
-		self.buyer_refund(keychain, context, swap, &refund_address, &input_script)?;
+		self.buyer_refund(keychain, context, swap, &refund_address_str, &input_script)?;
 		Ok(())
 	}
 

@@ -22,6 +22,7 @@ use grin_core::{global, ser};
 use grin_keychain::Identifier;
 use grin_util::secp::key::SecretKey;
 use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::fmt;
 use std::str::FromStr;
 
@@ -148,19 +149,125 @@ impl Currency {
 		Ok(amount)
 	}
 
+	fn bch_network() -> bch::network::Network {
+		if global::is_mainnet() {
+			bch::network::Network::Mainnet
+		} else {
+			bch::network::Network::Testnet
+		}
+	}
+
 	/// Validate the secondary address
 	pub fn validate_address(&self, address: &String) -> Result<(), ErrorKind> {
 		match self {
-			Currency::Btc | Currency::Bch => {
-				let _ = Address::from_str(address).map_err(|e| {
-					ErrorKind::Generic(format!(
-						"Unable to parse {} address {}, {}",
-						self, address, e
-					))
+			Currency::Btc => {
+				let addr = Address::from_str(address).map_err(|e| {
+					ErrorKind::Generic(format!("Unable to parse BTC address {}, {}", address, e))
 				})?;
+				match addr.network {
+					bitcoin::network::constants::Network::Bitcoin => {
+						if !global::is_mainnet() {
+							return Err(ErrorKind::Generic(
+								"Address is from main BTC network, expected test network"
+									.to_string(),
+							));
+						}
+					}
+					bitcoin::network::constants::Network::Testnet => {
+						if global::is_mainnet() {
+							return Err(ErrorKind::Generic(
+								"Address is from test BTC network, expected main network"
+									.to_string(),
+							));
+						}
+					}
+					_ => {
+						return Err(ErrorKind::Generic(
+							"Address is from invalid BTC network".to_string(),
+						))
+					}
+				}
+
+				match addr.payload {
+					bitcoin::util::address::Payload::PubkeyHash(_) => (),
+					_ => {
+						return Err(ErrorKind::Generic(
+							"Expected BTC Pay-to-public-key-hash address".to_string(),
+						))
+					}
+				}
+			}
+			Currency::Bch => {
+				let nw = Self::bch_network();
+				let (v, addr_type) = match bch::address::cashaddr_decode(&address, nw) {
+					Err(e) => {
+						// Try legacy address
+						// Intentionally return error from first call. Legacy address error is not interesting much
+						let (hash, addr_type) = bch::address::legacyaddr_decode(&address, nw)
+							.map_err(|_| {
+								ErrorKind::Generic(format!(
+									"Unable to parse BCH address {}, {}",
+									address, e
+								))
+							})?;
+						(hash.0.to_vec(), addr_type)
+					}
+					Ok((v, addr_type)) => (v, addr_type),
+				};
+				if addr_type != bch::address::AddressType::P2PKH {
+					return Err(ErrorKind::Generic(
+						"Expected BTC Pay-to-public-key-hash address".to_string(),
+					));
+				}
+				if v.len() != 160 / 8 {
+					return Err(ErrorKind::Generic(
+						"Swap supporting only Legacy of 160 bit BCH addresses".to_string(),
+					));
+				}
 			}
 		}
 		Ok(())
+	}
+
+	/// Generate a script for this address. Address MUST be Hash160
+	pub fn address_2_script_pubkey(&self, address: &String) -> Result<bitcoin::Script, ErrorKind> {
+		let addr_str = match self {
+			Currency::Btc => address.clone(),
+			Currency::Bch => {
+				// With BCH problem that it doesn't have functionality to build scripts for pay to pubkey
+				// That is why we will use BTC library to do that.
+				// In order to do that, we need to have legacy address.
+				match bch::address::cashaddr_decode(&address, Self::bch_network()) {
+					Err(_) => {
+						// Legacy address - that is what we need
+						address.clone()
+					}
+					Ok((v, addr_type)) => {
+						if v.len() != 160 / 8 {
+							return Err(ErrorKind::Generic(
+								"Swap supporting only Legacy of 160 bit BCH addresses".to_string(),
+							));
+						}
+
+						let ba: Box<[u8; 20]> = v.into_boxed_slice().try_into().map_err(|_| {
+							ErrorKind::Generic(
+								"Internal error. Failed to convert address to hash".to_string(),
+							)
+						})?;
+						let hash_dt: [u8; 20] = *ba;
+
+						let hash160 = bch::util::Hash160(hash_dt);
+						// Converting into legacy address that is equal to BTC.
+						bch::address::legacyaddr_encode(&hash160, addr_type, Self::bch_network())
+					}
+				}
+			}
+		};
+
+		let addr = Address::from_str(&addr_str).map_err(|e| {
+			ErrorKind::Generic(format!("Unable to parse BTC address {}, {}", address, e))
+		})?;
+		Ok(addr.script_pubkey())
 	}
 
 	/// Return default fee for this coin
@@ -807,5 +914,29 @@ mod tests {
 			c.amount_from_hr_string("123456.789").unwrap(),
 			12_345_678_900_000
 		);
+	}
+
+	#[test]
+	fn test_bch_address_parsers() {
+		global::set_mining_mode(ChainTypes::Floonet);
+
+		let bch_q_address = "bchtest:qr972p5km7a9rdwtsnuqjfnm8epm48mhkgcgt6dprl".to_string();
+		let bch_legacy = "mz73pyxw6hpnyb8HHnPrTe5DikC2xYrfPX".to_string();
+
+		let btc_script = Currency::Btc.address_2_script_pubkey(&bch_legacy).unwrap();
+		let bch_legacy_script = Currency::Bch.address_2_script_pubkey(&bch_legacy).unwrap();
+		let bch_q_script = Currency::Bch
+			.address_2_script_pubkey(&bch_q_address)
+			.unwrap();
+
+		let script_sz = btc_script.len();
+
+		assert_eq!(script_sz, bch_legacy_script.len());
+		assert_eq!(script_sz, bch_q_script.len());
+
+		for i in 0..script_sz {
+			assert_eq!(btc_script.as_bytes()[i], bch_legacy_script.as_bytes()[i]);
+			assert_eq!(btc_script.as_bytes()[i], bch_q_script.as_bytes()[i]);
+		}
 	}
 }

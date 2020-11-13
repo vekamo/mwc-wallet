@@ -121,6 +121,10 @@ pub enum ErrorKind {
 	/// Generic error
 	#[fail(display = "Swap generic error, {}", _0)]
 	Generic(String),
+
+	/// BCH tweks related error
+	#[fail(display = "BCH error, {}", _0)]
+	BchError(String),
 }
 
 impl ErrorKind {

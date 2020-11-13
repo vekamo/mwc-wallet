@@ -537,9 +537,7 @@ where
 							.amount_to_hr_string(tx_conf.secondary_lock_amount, true),
 						swap.secondary_currency
 					));
-					return Ok(StateProcessRespond::new(
-						StateId::SellerWaitingForRefundHeight,
-					));
+					return Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime));
 				}
 
 				let time_limit = swap.get_time_message_redeem();

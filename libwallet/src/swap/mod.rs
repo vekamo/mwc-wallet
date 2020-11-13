@@ -2186,7 +2186,7 @@ mod tests {
 			.secondary_data
 			.unwrap_btc()
 			.unwrap()
-			.address(&input_script, buyer.swap.network)
+			.address(Currency::Btc, &input_script, buyer.swap.network)
 			.unwrap();
 		let tx_1 = BtcTransaction {
 			version: 2,
@@ -2194,7 +2194,9 @@ mod tests {
 			input: vec![],
 			output: vec![TxOut {
 				value: btc_amount_1,
-				script_pubkey: btc_address_to_deposit.script_pubkey(),
+				script_pubkey: Currency::Btc
+					.address_2_script_pubkey(&btc_address_to_deposit)
+					.unwrap(),
 			}],
 		};
 		let _txid_1 = tx_1.txid();
@@ -2204,7 +2206,9 @@ mod tests {
 			input: vec![],
 			output: vec![TxOut {
 				value: btc_amount_2,
-				script_pubkey: btc_address_to_deposit.script_pubkey(),
+				script_pubkey: Currency::Btc
+					.address_2_script_pubkey(&btc_address_to_deposit)
+					.unwrap(),
 			}],
 		};
 		let _txid_2 = tx_2.txid();
@@ -2214,7 +2218,9 @@ mod tests {
 			input: vec![],
 			output: vec![TxOut {
 				value: btc_amount_plus,
-				script_pubkey: btc_address_to_deposit.script_pubkey(),
+				script_pubkey: Currency::Btc
+					.address_2_script_pubkey(&btc_address_to_deposit)
+					.unwrap(),
 			}],
 		};
 		let _txid_plus = tx_plus.txid();

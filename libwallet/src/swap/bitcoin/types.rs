@@ -16,7 +16,7 @@ use super::client::Output;
 use crate::swap::message::SecondaryUpdate;
 use crate::swap::ser::*;
 use crate::swap::swap;
-use crate::swap::types::{Network, SecondaryData};
+use crate::swap::types::{Currency, Network, SecondaryData};
 use crate::swap::{ErrorKind, Keychain};
 use bitcoin::blockdata::opcodes::{all::*, OP_FALSE, OP_TRUE};
 use bitcoin::blockdata::script::Builder;
@@ -32,6 +32,10 @@ use grin_util::secp::key::{PublicKey, SecretKey};
 use grin_util::secp::{Message, Secp256k1, Signature};
 use std::io::Cursor;
 use std::ops::Deref;
+
+use bch::messages::{Tx as BchTx, TxIn as BchTxIn, TxOut as BchTxOut};
+use bitcoin_hashes::hex::ToHex;
+use bitcoin_hashes::{hash160, Hash};
 
 /// BTC transaction ready to post (any type). Here it is a redeem tx
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -170,15 +174,39 @@ impl BtcData {
 	}
 
 	/// Generate the P2SH address for the script
-	pub fn address(&self, script: &Script, network: Network) -> Result<Address, ErrorKind> {
-		let address = Address::p2sh(script, btc_network(network));
-		Ok(address)
+	pub fn address(
+		&self,
+		currency: Currency,
+		script: &Script,
+		network: Network,
+	) -> Result<String, ErrorKind> {
+		match currency {
+			Currency::Btc => {
+				let address = Address::p2sh(script, btc_network(network));
+				Ok(address.to_string())
+			}
+			Currency::Bch => {
+				let address = bch::address::cashaddr_encode(
+					&hash160::Hash::hash(&script[..]),
+					bch::address::AddressType::P2SH,
+					bch_network(network),
+				)
+				.map_err(|e| {
+					ErrorKind::BchError(format!(
+						"Unable to encode BCH address fron script hash, {}",
+						e
+					))
+				})?;
+				Ok(address)
+			}
+		}
 	}
 
 	// Build input/output for redeem or refund btc transaciton
 	fn build_input_outputs(
 		&self,
-		redeem_address: &Address,
+		currency: &Currency,
+		redeem_address: &String,
 		conf_outputs: &Vec<Output>,
 	) -> Result<(Vec<TxIn>, Vec<TxOut>, u64), ErrorKind> {
 		// Input(s)
@@ -203,18 +231,59 @@ impl BtcData {
 		let mut output = Vec::with_capacity(1);
 		output.push(TxOut {
 			value: total_amount, // Will be overwritten later
-			script_pubkey: redeem_address.script_pubkey(),
+			script_pubkey: currency.address_2_script_pubkey(redeem_address)?,
 		});
 
 		Ok((input, output, total_amount))
+	}
+
+	// Because BCH library can calculate the hash, but for the core we are using BTC, that is
+	// why we have this ugly solution. In any case it is better then have 2 separate implemenattions.
+	fn convert_tx_to_bch(tx: &Transaction) -> BchTx {
+		let mut inputs: Vec<BchTxIn> = vec![];
+		let mut outputs: Vec<BchTxOut> = vec![];
+
+		for tx_in in &tx.input {
+			let mut sig_script = bch::script::Script::new();
+			sig_script.append_slice(tx_in.script_sig.as_bytes());
+
+			let prev_output = bch::messages::OutPoint {
+				hash: bch::util::Hash256::decode(tx_in.previous_output.txid.to_hex().as_str())
+					.unwrap(),
+				index: tx_in.previous_output.vout,
+			};
+
+			inputs.push(BchTxIn {
+				prev_output,
+				/// Signature script for confirming authorization
+				sig_script,
+				sequence: tx_in.sequence,
+			})
+		}
+
+		for tx_out in &tx.output {
+			outputs.push(BchTxOut {
+				amount: bch::util::Amount(tx_out.value as i64),
+				/// Public key script to claim the output
+				pk_script: bch::script::Script(tx_out.script_pubkey.to_bytes()),
+			})
+		}
+
+		BchTx {
+			lock_time: tx.lock_time,
+			version: tx.version,
+			inputs,
+			outputs,
+		}
 	}
 
 	/// Build BTC redeem transactions
 	/// Update self.redeem_tx  with result
 	pub(crate) fn build_redeem_tx(
 		&self,
+		currency: &Currency,
 		secp: &Secp256k1,
-		redeem_address: &Address,
+		redeem_address: &String,
 		input_script: &Script,
 		fee_sat_per_byte: f32,
 		cosign_secret: &SecretKey,
@@ -222,7 +291,7 @@ impl BtcData {
 		conf_outputs: &Vec<Output>,
 	) -> Result<(BtcTtansaction, Transaction, usize, usize), ErrorKind> {
 		let (input, output, total_amount) =
-			self.build_input_outputs(redeem_address, conf_outputs)?;
+			self.build_input_outputs(currency, redeem_address, conf_outputs)?;
 
 		let mut tx = Transaction {
 			version: 2,
@@ -242,21 +311,58 @@ impl BtcData {
 		tx.output[0].value =
 			total_amount.saturating_sub((tx_size as f32 * fee_sat_per_byte + 0.5) as u64);
 
-		// Sign for inputs
-		for idx in 0..tx.input.len() {
-			let hash = tx.signature_hash(idx, &input_script, 0x01);
-			let msg = Message::from_slice(hash.deref())?;
+		match currency {
+			Currency::Btc => {
+				// Sign for inputs
+				for idx in 0..tx.input.len() {
+					let hash = tx.signature_hash(idx, &input_script, 0x01);
+					let msg = Message::from_slice(hash.deref())?;
 
-			tx.input
-				.get_mut(idx)
-				.ok_or(ErrorKind::Generic("Not found expected input".to_string()))?
-				.script_sig = self.redeem_script_sig(
-				secp,
-				input_script,
-				&secp.sign(&msg, cosign_secret)?,
-				&secp.sign(&msg, redeem_secret)?,
-			)?;
-		}
+					tx.input
+						.get_mut(idx)
+						.ok_or(ErrorKind::Generic("Not found expected input".to_string()))?
+						.script_sig = self.redeem_script_sig(
+						currency,
+						secp,
+						input_script,
+						&mut secp.sign(&msg, cosign_secret)?,
+						&mut secp.sign(&msg, redeem_secret)?,
+					)?;
+				}
+			}
+			Currency::Bch => {
+				let mut cache = bch::transaction::sighash::SigHashCache::new();
+				// Sign for inputs
+				let bch_tx = Self::convert_tx_to_bch(&tx);
+
+				for idx in 0..tx.input.len() {
+					let sighash_type = bch::transaction::sighash::SIGHASH_ALL
+						| bch::transaction::sighash::SIGHASH_FORKID;
+					let hash = bch::transaction::sighash::sighash(
+						&bch_tx,
+						0,
+						input_script.as_bytes(),
+						bch::util::Amount(total_amount as i64),
+						sighash_type,
+						&mut cache,
+					)
+					.map_err(|e| ErrorKind::BchError(format!("sighash failed, {}", e)))?;
+
+					let msg = Message::from_slice(&hash.0)?;
+
+					tx.input
+						.get_mut(idx)
+						.ok_or(ErrorKind::Generic("Not found expected input".to_string()))?
+						.script_sig = self.redeem_script_sig(
+						currency,
+						secp,
+						input_script,
+						&mut secp.sign(&msg, cosign_secret)?,
+						&mut secp.sign(&msg, redeem_secret)?,
+					)?;
+				}
+			}
+		};
 
 		let mut cursor = Cursor::new(Vec::with_capacity(tx_size));
 		let actual_size = tx
@@ -276,16 +382,34 @@ impl BtcData {
 
 	fn redeem_script_sig(
 		&self,
+		currency: &Currency,
 		secp: &Secp256k1,
 		input_script: &Script,
-		cosign_signature: &Signature,
-		redeem_signature: &Signature,
+		cosign_signature: &mut Signature,
+		redeem_signature: &mut Signature,
 	) -> Result<Script, ErrorKind> {
-		let mut cosign_ser = cosign_signature.serialize_der(secp);
-		cosign_ser.push(0x01); // SIGHASH_ALL
+		let (cosign_ser, redeem_ser) = match currency {
+			Currency::Btc => {
+				let mut cosign_ser = cosign_signature.serialize_der(secp);
+				cosign_ser.push(0x01); // SIGHASH_ALL
 
-		let mut redeem_ser = redeem_signature.serialize_der(secp);
-		redeem_ser.push(0x01); // SIGHASH_ALL
+				let mut redeem_ser = redeem_signature.serialize_der(secp);
+				redeem_ser.push(0x01); // SIGHASH_ALL
+
+				(cosign_ser, redeem_ser)
+			}
+			Currency::Bch => {
+				cosign_signature.normalize_s(&secp);
+				let mut cosign_ser = cosign_signature.serialize_der(secp);
+				cosign_ser.push(0x41); // SIGHASH_ALL
+
+				redeem_signature.normalize_s(&secp);
+				let mut redeem_ser = redeem_signature.serialize_der(secp);
+				redeem_ser.push(0x41); // SIGHASH_ALL
+
+				(cosign_ser, redeem_ser)
+			}
+		};
 
 		let script_sig = Builder::new()
 			.push_opcode(OP_FALSE) // Bitcoin multisig bug
@@ -302,8 +426,9 @@ impl BtcData {
 	/// Update self.redeem_tx  with result
 	pub(crate) fn refund_tx(
 		&mut self,
+		currency: &Currency,
 		secp: &Secp256k1,
-		refund_address: &Address,
+		refund_address: &String,
 		input_script: &Script,
 		fee_sat_per_byte: f32,
 		btc_lock_time: i64,
@@ -311,10 +436,10 @@ impl BtcData {
 		conf_outputs: &Vec<Output>,
 	) -> Result<BtcTtansaction, ErrorKind> {
 		let (input, output, total_amount) =
-			self.build_input_outputs(refund_address, conf_outputs)?;
+			self.build_input_outputs(currency, refund_address, conf_outputs)?;
 		let mut tx = Transaction {
 			version: 2,
-			lock_time: btc_lock_time as u32, // let's make the lock time equal to the script lock.
+			lock_time: (btc_lock_time + 1) as u32, // lock time must be larger for BCH
 			input,
 			output,
 		};
@@ -330,16 +455,57 @@ impl BtcData {
 		tx.output[0].value =
 			total_amount.saturating_sub((tx_size as f32 * fee_sat_per_byte + 0.5) as u64);
 
-		// Sign for inputs
-		for idx in 0..tx.input.len() {
-			let hash = tx.signature_hash(idx, input_script, 0x01);
-			let msg = Message::from_slice(hash.deref())?;
+		match currency {
+			Currency::Btc => {
+				// Sign for inputs
+				for idx in 0..tx.input.len() {
+					let hash = tx.signature_hash(idx, input_script, 0x01);
+					let msg = Message::from_slice(hash.deref())?;
 
-			tx.input
-				.get_mut(idx)
-				.ok_or(ErrorKind::Generic("Not found expected input".to_string()))?
-				.script_sig = self.refund_script_sig(secp, &secp.sign(&msg, buyer_btc_secret)?, input_script)?;
-		}
+					tx.input
+						.get_mut(idx)
+						.ok_or(ErrorKind::Generic("Not found expected input".to_string()))?
+						.script_sig = self.refund_script_sig(
+						currency,
+						secp,
+						&mut secp.sign(&msg, buyer_btc_secret)?,
+						input_script,
+					)?;
+				}
+			}
+			Currency::Bch => {
+				let mut cache = bch::transaction::sighash::SigHashCache::new();
+
+				let bch_tx = Self::convert_tx_to_bch(&tx);
+
+				// Sign for inputs
+				for idx in 0..tx.input.len() {
+					let sighash_type = bch::transaction::sighash::SIGHASH_ALL
+						| bch::transaction::sighash::SIGHASH_FORKID;
+					let hash = bch::transaction::sighash::sighash(
+						&bch_tx,
+						0,
+						input_script.as_bytes(),
+						bch::util::Amount(total_amount as i64),
+						sighash_type,
+						&mut cache,
+					)
+					.map_err(|e| ErrorKind::BchError(format!("sighash failed, {}", e)))?;
+
+					let msg = Message::from_slice(&hash.0)?;
+
+					tx.input
+						.get_mut(idx)
+						.ok_or(ErrorKind::Generic("Not found expected input".to_string()))?
+						.script_sig = self.refund_script_sig(
+						currency,
+						secp,
+						&mut secp.sign(&msg, buyer_btc_secret)?,
+						input_script,
+					)?;
+				}
+			}
+		};
 
 		let mut cursor = Cursor::new(Vec::with_capacity(tx_size));
 		let actual_size = tx
@@ -358,12 +524,24 @@ impl BtcData {
 
 	fn refund_script_sig(
 		&self,
+		currency: &Currency,
 		secp: &Secp256k1,
-		signature: &Signature,
+		signature: &mut Signature,
 		input_script: &Script,
 	) -> Result<Script, ErrorKind> {
-		let mut sign_ser = signature.serialize_der(secp);
-		sign_ser.push(0x01); // SIGHASH_ALL
+		let sign_ser = match currency {
+			Currency::Bch => {
+				signature.normalize_s(&secp);
+				let mut sign_ser = signature.serialize_der(secp);
+				sign_ser.push(0x41); // SIGHASH_ALL
+				sign_ser
+			}
+			Currency::Btc => {
+				let mut sign_ser = signature.serialize_der(secp);
+				sign_ser.push(0x01); // SIGHASH_ALL
+				sign_ser
+			}
+		};
 
 		let script_sig = Builder::new()
 			.push_slice(&sign_ser)
@@ -466,12 +644,20 @@ fn btc_network(network: Network) -> BtcNetwork {
 	}
 }
 
+fn bch_network(network: Network) -> bch::network::Network {
+	match network {
+		Network::Floonet => bch::network::Network::Testnet,
+		Network::Mainnet => bch::network::Network::Mainnet,
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use bitcoin::util::address::Payload;
 	use bitcoin::util::key::PublicKey as BTCPublicKey;
-	use bitcoin_hashes::{hash160, Hash};
+	use grin_core::global;
+	use grin_core::global::ChainTypes;
 	use grin_util::from_hex;
 	use grin_util::secp::key::PublicKey;
 	use grin_util::secp::{ContextFlag, Secp256k1};
@@ -526,16 +712,22 @@ mod tests {
 		assert_eq!(input_script.clone().to_bytes(), script_ref);
 
 		assert_eq!(
-			format!("{}", data.address(&input_script, Network::Floonet).unwrap()),
+			format!(
+				"{}",
+				data.address(Currency::Btc, &input_script, Network::Floonet)
+					.unwrap()
+			),
 			String::from("2NEwEAG9VyFYt2sjLpuHrU4Abb7nGJfc7PR")
 		);
 	}
 
 	#[test]
 	fn test_redeem_script() {
+		global::set_mining_mode(ChainTypes::Floonet);
+		let network = Network::Floonet;
+
 		let secp = Secp256k1::with_caps(ContextFlag::Commit);
 		let rng = &mut thread_rng();
-		let network = Network::Floonet;
 
 		let cosign = SecretKey::new(&secp, rng);
 		let refund = SecretKey::new(&secp, rng);
@@ -557,8 +749,10 @@ mod tests {
 				lock_time,
 			)
 			.unwrap();
-		let lock_address = data.address(&input_script, network).unwrap();
-		let lock_script_pubkey = lock_address.script_pubkey();
+		let lock_address = data.address(Currency::Btc, &input_script, network).unwrap();
+		let lock_script_pubkey = Currency::Btc
+			.address_2_script_pubkey(&lock_address)
+			.unwrap();
 
 		// Create a bunch of funding transactions
 		let count = rng.gen_range(3, 7);
@@ -622,8 +816,9 @@ mod tests {
 		// Generate redeem transaction
 		let (_btc_tx, tx, est_size, actual_size) = data
 			.build_redeem_tx(
+				&Currency::Btc,
 				&secp,
-				&redeem_address,
+				&redeem_address.to_string(),
 				&input_script,
 				10.0,
 				&cosign,

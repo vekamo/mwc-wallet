@@ -14,9 +14,10 @@
 
 use super::client::*;
 use super::rpc::*;
+use crate::swap::types::Currency;
 use crate::swap::ErrorKind;
 use bitcoin::consensus::Decodable;
-use bitcoin::{Address, OutPoint, Script, Transaction};
+use bitcoin::{OutPoint, Script, Transaction};
 use bitcoin_hashes::sha256d::Hash;
 use grin_util::{from_hex, to_hex};
 use serde::{Deserialize, Serialize};
@@ -336,11 +337,11 @@ impl BtcNodeClient for ElectrumNodeClient {
 	}
 
 	/// Fetch a list of unspent outputs belonging to this address
-	fn unspent(&mut self, address: &Address) -> Result<Vec<Output>, ErrorKind> {
+	fn unspent(&mut self, currency: Currency, address: &String) -> Result<Vec<Output>, ErrorKind> {
 		// A full SPV client should validate the Merkle proofs of the transactions
 		// that created these outputs
 		let client = self.client()?;
-		let utxos = client.unspent(&address.script_pubkey())?;
+		let utxos = client.unspent(&currency.address_2_script_pubkey(address)?)?;
 		let outputs: Vec<Output> = utxos
 			.into_iter()
 			.filter_map(|u| {

@@ -13,9 +13,10 @@
 // limitations under the License.
 
 use crate::grin_util::Mutex;
+use crate::swap::types::Currency;
 use crate::swap::ErrorKind;
 use bitcoin::consensus::Decodable;
-use bitcoin::{Address, OutPoint, Transaction};
+use bitcoin::{OutPoint, Transaction};
 use bitcoin_hashes::sha256d;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -62,7 +63,7 @@ pub trait BtcNodeClient: Sync + Send + 'static {
 	/// Get node height
 	fn height(&mut self) -> Result<u64, ErrorKind>;
 	/// Get unspent outputs for the address
-	fn unspent(&mut self, address: &Address) -> Result<Vec<Output>, ErrorKind>;
+	fn unspent(&mut self, currency: Currency, address: &String) -> Result<Vec<Output>, ErrorKind>;
 	/// Post BTC tranaction,
 	fn post_tx(&mut self, tx: Vec<u8>) -> Result<(), ErrorKind>;
 	/// Get BTC transaction info.
@@ -177,9 +178,9 @@ impl BtcNodeClient for TestBtcNodeClient {
 		Ok(self.state.lock().height)
 	}
 
-	fn unspent(&mut self, address: &Address) -> Result<Vec<Output>, ErrorKind> {
+	fn unspent(&mut self, currency: Currency, address: &String) -> Result<Vec<Output>, ErrorKind> {
 		let state = self.state.lock();
-		let script_pubkey = address.script_pubkey();
+		let script_pubkey = currency.address_2_script_pubkey(address)?;
 
 		let mut outputs = Vec::new();
 		for (txid, tx) in &state.txs {
