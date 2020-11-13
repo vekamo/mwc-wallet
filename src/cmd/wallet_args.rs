@@ -955,9 +955,9 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 
 	let secondary_currency = parse_required(args, "secondary_currency")?;
 	let secondary_currency = secondary_currency.to_lowercase();
-	if secondary_currency == "btc" {
+	if secondary_currency != "btc" && secondary_currency != "bch" {
 		return Err(ParseError::ArgumentError(format!(
-			"BTC is not supported yet and will be in the near future. Please stay tuned."
+			"{} is not on the supported currency list.", secondary_currency
 		)));
 	}
 
