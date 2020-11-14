@@ -33,6 +33,7 @@ use failure::_core::marker::PhantomData;
 use grin_keychain::{Identifier, Keychain, SwitchCommitmentType};
 use grin_util::secp;
 use grin_util::secp::aggsig::export_secnonce_single as generate_nonce;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 /// SwapApi trait implementaiton for BTC

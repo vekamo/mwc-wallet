@@ -22,6 +22,7 @@ use bitcoin_hashes::sha256d::Hash;
 use grin_util::{from_hex, to_hex};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::io::Cursor;
 use std::mem::replace;
 use std::str::FromStr;
@@ -342,7 +343,11 @@ impl BtcNodeClient for ElectrumNodeClient {
 		// that created these outputs
 		let client = self.client()?;
 		let utxos = client.unspent(&currency.address_2_script_pubkey(address)?)?;
-		let outputs: Vec<Output> = utxos
+
+		// Outputs can have duplicates. I saw that at BCH few times. User will see that like
+		// was posted twice as needed. In a moment that will be fixed by ElectrumX.
+		// Because of that we are using hash map for dedups...
+		let outputs: HashMap<bitcoin::hashes::sha256d::Hash, Output> = utxos
 			.into_iter()
 			.filter_map(|u| {
 				Hash::from_str(&u.tx_hash).ok().map(|h| {
@@ -354,7 +359,10 @@ impl BtcNodeClient for ElectrumNodeClient {
 					}
 				})
 			})
+			.map(|output| (output.out_point.txid.clone(), output))
 			.collect();
+
+		let outputs: Vec<Output> = outputs.values().cloned().collect();
 		Ok(outputs)
 	}
 	/// Post BTC transaction
