@@ -1051,7 +1051,7 @@ where
 					StateProcessRespond::new(StateId::SellerWaitingForBuyerToRedeemMwc)
 						.action(Action::SellerWaitForBuyerRedeemPublish {
 							mwc_tip: height,
-							lock_height: swap.lock_slate.lock_height,
+							lock_height: swap.refund_slate.lock_height,
 						})
 						.time_limit(calc_mwc_unlock_time(swap, &height)),
 				)
