@@ -203,23 +203,27 @@ impl BtcData {
 	}
 
 	// Build input/output for redeem or refund btc transaciton
+	// Inputs need to have amounts for BCH signature
 	fn build_input_outputs(
 		&self,
 		currency: &Currency,
 		redeem_address: &String,
 		conf_outputs: &Vec<Output>,
-	) -> Result<(Vec<TxIn>, Vec<TxOut>, u64), ErrorKind> {
+	) -> Result<(Vec<(TxIn, u64)>, Vec<TxOut>, u64), ErrorKind> {
 		// Input(s)
 		let mut input = Vec::with_capacity(conf_outputs.len());
 		let mut total_amount = 0;
 		for o in conf_outputs {
 			total_amount += o.value;
-			input.push(TxIn {
-				previous_output: o.out_point.clone(),
-				script_sig: Script::new(),
-				sequence: 0,
-				witness: Vec::new(),
-			});
+			input.push((
+				TxIn {
+					previous_output: o.out_point.clone(),
+					script_sig: Script::new(),
+					sequence: 0,
+					witness: Vec::new(),
+				},
+				o.value,
+			));
 		}
 
 		if input.is_empty() {
@@ -296,7 +300,7 @@ impl BtcData {
 		let mut tx = Transaction {
 			version: 2,
 			lock_time: 0,
-			input,
+			input: input.iter().map(|i| i.0.clone()).collect(),
 			output,
 		};
 
@@ -331,18 +335,20 @@ impl BtcData {
 				}
 			}
 			Currency::Bch => {
-				let mut cache = bch::transaction::sighash::SigHashCache::new();
 				// Sign for inputs
 				let bch_tx = Self::convert_tx_to_bch(&tx);
 
 				for idx in 0..tx.input.len() {
+					// Actually BCH team doesn't allow to reuse the cache. REALLY?  WHY?
+					let mut cache = bch::transaction::sighash::SigHashCache::new();
+
 					let sighash_type = bch::transaction::sighash::SIGHASH_ALL
 						| bch::transaction::sighash::SIGHASH_FORKID;
 					let hash = bch::transaction::sighash::sighash(
 						&bch_tx,
-						0,
+						idx,
 						input_script.as_bytes(),
-						bch::util::Amount(total_amount as i64),
+						bch::util::Amount(input[idx].1 as i64),
 						sighash_type,
 						&mut cache,
 					)
@@ -440,7 +446,7 @@ impl BtcData {
 		let mut tx = Transaction {
 			version: 2,
 			lock_time: (btc_lock_time + 1) as u32, // lock time must be larger for BCH
-			input,
+			input: input.iter().map(|i| i.0.clone()).collect(),
 			output,
 		};
 
@@ -474,19 +480,20 @@ impl BtcData {
 				}
 			}
 			Currency::Bch => {
-				let mut cache = bch::transaction::sighash::SigHashCache::new();
-
 				let bch_tx = Self::convert_tx_to_bch(&tx);
 
 				// Sign for inputs
 				for idx in 0..tx.input.len() {
+					// Actually BCH team doesn't allow to reuse the cache. REALLY?  WHY?
+					let mut cache = bch::transaction::sighash::SigHashCache::new();
+
 					let sighash_type = bch::transaction::sighash::SIGHASH_ALL
 						| bch::transaction::sighash::SIGHASH_FORKID;
 					let hash = bch::transaction::sighash::sighash(
 						&bch_tx,
 						0,
 						input_script.as_bytes(),
-						bch::util::Amount(total_amount as i64),
+						bch::util::Amount(input[idx].1 as i64),
 						sighash_type,
 						&mut cache,
 					)
