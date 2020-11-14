@@ -497,6 +497,7 @@ where
 				))
 				.into());
 			}
+			swap.add_journal_message(format!("State is manually adjusted to {}", adjusted_state));
 			swap.state = state;
 
 			let tx_conf = swap_api.request_tx_confirmations(&keychain, &swap)?;
