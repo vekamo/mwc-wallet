@@ -332,6 +332,8 @@ pub struct SwapStartArgs {
 	pub secondary_amount: String,
 	/// Secondary currency redeem address
 	pub secondary_redeem_address: String,
+	/// Tx fee for the secondary currency
+	pub secondary_fee: Option<f32>,
 	/// Locking order (True, seller does locking first)
 	pub seller_lock_first: bool,
 	/// Minimum confirmation number for the inputs to spend

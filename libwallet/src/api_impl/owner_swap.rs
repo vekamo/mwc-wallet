@@ -164,7 +164,7 @@ where
 		total - amount - fee,
 	)?;
 
-	let swap = (*swap_api).create_swap_offer(
+	let mut swap = (*swap_api).create_swap_offer(
 		&keychain,
 		&context,
 		params.mwc_amount, // mwc amount to sell
@@ -184,6 +184,14 @@ where
 
 	// Store swap result into the file.
 	let swap_id = swap.id.to_string();
+
+	if let Some(fee) = params.secondary_fee {
+		if fee <= 0.0 {
+			return Err(ErrorKind::Generic("Invalid secondary transaction fee".to_string()).into());
+		}
+		swap.secondary_fee = fee;
+	}
+
 	let swap_lock = trades::get_swap_lock(&swap_id);
 	let _l = swap_lock.lock();
 	if trades::get_swap_trade(swap_id.as_str(), &skey, &*swap_lock).is_ok() {

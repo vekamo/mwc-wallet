@@ -990,6 +990,14 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 	let electrum_node_uri1 = args.value_of("electrum_uri1").map(|s| String::from(s));
 	let electrum_node_uri2 = args.value_of("electrum_uri2").map(|s| String::from(s));
 
+	let secondary_fee = match args.value_of("secondary_fee") {
+		Some(fee_str) => Some(
+			fee_str.parse::<f32>()
+				.map_err(|e| ParseError::ArgumentError(format!("Invalid secondary_fee value, {}", e)))?
+		),
+		None => None,
+	};
+
 	let dry_run = args.is_present("dry_run");
 
 	Ok(SwapStartArgs {
@@ -997,6 +1005,7 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 		secondary_currency: secondary_currency.to_string(),
 		secondary_amount: btc_amount.to_string(),
 		secondary_redeem_address: btc_address.to_string(),
+		secondary_fee,
 		seller_lock_first: who_lock_first == "seller",
 		minimum_confirmations: Some(min_c),
 		mwc_confirmations: mwc_lock,

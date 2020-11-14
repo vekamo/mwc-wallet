@@ -503,6 +503,10 @@ subcommands:
             short: a
             long: secondary_address
             takes_value: true
+        - secondary_fee:
+            help: Tx fee for secondary currency (satoshi per byte)
+            long: secondary_fee
+            takes_value: true
         - who_lock_first:
             help: Coins locking order. Who locks first?
             short: l
