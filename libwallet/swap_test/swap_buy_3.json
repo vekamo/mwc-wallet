@@ -357,6 +357,7 @@
   "posted_lock": null,
   "posted_redeem": 1567632152,
   "posted_refund": null,
+  "last_process_error": null,
   "journal": [
     {
       "time": 1567632152,
