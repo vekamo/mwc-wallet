@@ -28,7 +28,7 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	let child = wallet.next_child(keychain_mask)?;
+	let child = wallet.next_child(keychain_mask, None)?;
 	Ok(child)
 }
 

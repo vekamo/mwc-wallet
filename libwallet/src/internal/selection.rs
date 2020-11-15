@@ -614,7 +614,7 @@ where
 				part_change
 			};
 
-			let change_key = wallet.next_child(keychain_mask)?;
+			let change_key = wallet.next_child(keychain_mask, None)?;
 
 			change_amounts_derivations.push((change_amount, change_key.clone(), None));
 			parts.push(build::output(change_amount, change_key));

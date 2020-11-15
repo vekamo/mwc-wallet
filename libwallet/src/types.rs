@@ -242,7 +242,11 @@ where
 	fn current_child_index(&mut self, parent_key_id: &Identifier) -> Result<u32, Error>;
 
 	/// Next child ID when we want to create a new output, based on current parent
-	fn next_child(&mut self, keychain_mask: Option<&SecretKey>) -> Result<Identifier, Error>;
+	fn next_child(
+		&mut self,
+		keychain_mask: Option<&SecretKey>,
+		parent_key_id: Option<Identifier>,
+	) -> Result<Identifier, Error>;
 
 	/// last verified height of outputs directly descending from the given parent key
 	fn last_confirmed_height(&mut self) -> Result<u64, Error>;

@@ -26,7 +26,7 @@ use crate::swap::swap::{Swap, SwapJournalRecord};
 use crate::swap::types::{Action, Currency, Role, SwapTransactionsConfirmations};
 use crate::swap::{trades, BuyApi, Context, SwapApi};
 use crate::types::NodeClient;
-use crate::Error;
+use crate::{get_receive_account, Error};
 use crate::{
 	wallet_lock, OutputData, OutputStatus, Slate, SwapStartArgs, TxLogEntry, TxLogEntryType,
 	WalletBackend, WalletInst, WalletLCProvider,
@@ -821,7 +821,7 @@ where
 						None,
 						seller_context.change_amount,
 					)],
-					w.parent_key_id(),
+					seller_context.parent_key_id.clone(),
 					0,
 				)?;
 				selection::lock_tx_context(
@@ -856,6 +856,7 @@ where
 					keychain_mask,
 					&swap.redeem_slate,
 					format!("Swap {}", swap.id),
+					&buyer_context.parent_key_id,
 					&buyer_context.redeem,
 				)?;
 			}
@@ -877,6 +878,7 @@ where
 					keychain_mask,
 					&swap.refund_slate,
 					format!("Swap {} Refund", swap.id),
+					&seller_context.parent_key_id,
 					&seller_context.refund_output,
 				)?;
 			}
@@ -974,16 +976,16 @@ fn create_receive_tx_record<'a, T: ?Sized, C, K>(
 	keychain_mask: Option<&SecretKey>,
 	slate: &Slate,
 	tx_name: String,
-	output_key_id: &Identifier,
+	parent_key_id: &Identifier, // account id
+	output_key_id: &Identifier, // output MUST match parent_key_id
 ) -> Result<(), Error>
 where
 	T: WalletBackend<'a, C, K>,
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	let parent_key_id = wallet.parent_key_id();
 	let mut batch = wallet.batch(keychain_mask)?;
-	let log_id = batch.next_tx_log_id(&parent_key_id)?;
+	let log_id = batch.next_tx_log_id(parent_key_id)?;
 	let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxReceived, log_id);
 
 	// Creating trnasaction
@@ -1004,7 +1006,7 @@ where
 	assert!(slate.tx.body.kernels.len() == 1);
 	t.kernel_excess = Some(slate.tx.body.kernels[0].excess);
 	t.kernel_lookup_min_height = Some(slate.height);
-	batch.save_tx_log_entry(t, &parent_key_id)?;
+	batch.save_tx_log_entry(t, parent_key_id)?;
 
 	assert!(slate.tx.body.outputs.len() == 1);
 
@@ -1231,8 +1233,25 @@ where
 		(**swap_api).context_key_count(keychain, secondary_currency, is_seller)?;
 	let mut keys: Vec<Identifier> = Vec::new();
 
+	let parent_key_id = if is_seller {
+		wallet.parent_key_id()
+	} else {
+		// For Buyer it is receive account
+		let dest_acct_name = get_receive_account();
+		match dest_acct_name {
+			Some(d) => {
+				let pm = wallet.get_acct_path(d.to_owned())?;
+				match pm {
+					Some(p) => p.path,
+					None => wallet.parent_key_id(),
+				}
+			}
+			None => wallet.parent_key_id(),
+		}
+	};
+
 	for _ in 0..secondary_key_size {
-		keys.push(wallet.next_child(keychain_mask)?);
+		keys.push(wallet.next_child(keychain_mask, Some(parent_key_id.clone()))?);
 	}
 
 	let context = (**swap_api).create_context(
@@ -1242,6 +1261,7 @@ where
 		inputs,
 		change_amount,
 		keys,
+		parent_key_id,
 	)?;
 
 	Ok(context)

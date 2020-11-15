@@ -367,6 +367,7 @@ where
 		inputs: Option<Vec<(Identifier, Option<u64>, u64)>>,
 		change_amount: u64,
 		keys: Vec<Identifier>,
+		parent_key_id: Identifier,
 	) -> Result<Context, ErrorKind> {
 		if secondary_currency != Currency::Btc && secondary_currency != Currency::Bch {
 			return Err(ErrorKind::UnexpectedCoinType);
@@ -377,6 +378,7 @@ where
 
 		let role_context = if is_seller {
 			RoleContext::Seller(SellerContext {
+				parent_key_id: parent_key_id,
 				inputs: inputs.ok_or(ErrorKind::UnexpectedRole(
 					"Fn create_context() for seller not found inputs".to_string(),
 				))?,
@@ -389,6 +391,7 @@ where
 			})
 		} else {
 			RoleContext::Buyer(BuyerContext {
+				parent_key_id: parent_key_id,
 				output: keys.next().unwrap(),
 				redeem: keys.next().unwrap(),
 				secondary_context: SecondaryBuyerContext::Btc(BtcBuyerContext {

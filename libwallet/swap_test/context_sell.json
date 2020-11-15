@@ -6,6 +6,7 @@
   "redeem_nonce": "08c0f5f566263bd9e98d2fdefdfc5c180f3fe0c3b236af7ab14f9ed84530db7f",
   "role_context": {
     "Seller": {
+      "parent_key_id": "0200000000000000000000000000000000",
       "inputs": [
         [
           "0200000000000000010000000000000000",

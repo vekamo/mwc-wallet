@@ -460,8 +460,12 @@ where
 		Ok(index)
 	}
 
-	fn next_child<'a>(&mut self, keychain_mask: Option<&SecretKey>) -> Result<Identifier, Error> {
-		let parent_key_id = self.parent_key_id.clone();
+	fn next_child<'a>(
+		&mut self,
+		keychain_mask: Option<&SecretKey>,
+		parent_key_id: Option<Identifier>,
+	) -> Result<Identifier, Error> {
+		let parent_key_id = parent_key_id.unwrap_or(self.parent_key_id.clone());
 		let mut deriv_idx = {
 			let batch = self.db.batch()?;
 			let deriv_key = to_key(DERIV_PREFIX, &mut self.parent_key_id.to_bytes().to_vec());

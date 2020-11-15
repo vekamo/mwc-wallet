@@ -48,6 +48,7 @@ pub trait SwapApi<K: Keychain>: Sync + Send {
 		inputs: Option<Vec<(Identifier, Option<u64>, u64)>>, // inputs with amounts that sellect is agree to use.
 		change_amount: u64,
 		keys: Vec<Identifier>,
+		parent_key_id: Identifier,
 	) -> Result<Context, ErrorKind>;
 
 	/// Seller creates a swap offer and creates the core Swap Object.

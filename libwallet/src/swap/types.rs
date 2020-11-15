@@ -458,6 +458,8 @@ pub enum RoleContext {
 /// Context for the seller party
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SellerContext {
+	/// Seller account. Both lock and redeem will go to the same account (not receive)
+	pub parent_key_id: Identifier,
 	/// MWC Inputs that we are agree to sell: <Id, mmr_index (if known), amount>
 	pub inputs: Vec<(Identifier, Option<u64>, u64)>,
 	/// MWC Change outputs from the lock slate (Derivative ID)
@@ -483,6 +485,8 @@ impl SellerContext {
 /// Context for the Bayer party
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BuyerContext {
+	/// Buyer recieve account
+	pub parent_key_id: Identifier,
 	/// Derivative ID for lock slate output. Buyer part of multisig
 	pub output: Identifier,
 	/// Secret that unlocks the funds on both chains (Derivative ID)

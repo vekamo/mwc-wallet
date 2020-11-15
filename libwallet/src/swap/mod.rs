@@ -140,6 +140,7 @@ mod tests {
 			refund_nonce: key(kc, 1, 2),
 			redeem_nonce: key(kc, 1, 3),
 			role_context: RoleContext::Seller(SellerContext {
+				parent_key_id: key_id(0, 0),
 				inputs: vec![
 					(key_id(0, 1), None, 60 * GRIN_UNIT),
 					(key_id(0, 2), None, 60 * GRIN_UNIT),
@@ -162,6 +163,7 @@ mod tests {
 			refund_nonce: key(kc, 1, 2),
 			redeem_nonce: key(kc, 1, 3),
 			role_context: RoleContext::Buyer(BuyerContext {
+				parent_key_id: key_id(0, 0),
 				output: key_id(0, 1),
 				redeem: key_id(0, 2),
 				secondary_context: SecondaryBuyerContext::Btc(BtcBuyerContext {
