@@ -957,7 +957,8 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 	let secondary_currency = secondary_currency.to_lowercase();
 	if secondary_currency != "btc" && secondary_currency != "bch" {
 		return Err(ParseError::ArgumentError(format!(
-			"{} is not on the supported currency list.", secondary_currency
+			"{} is not on the supported currency list.",
+			secondary_currency
 		)));
 	}
 
@@ -991,10 +992,9 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 	let electrum_node_uri2 = args.value_of("electrum_uri2").map(|s| String::from(s));
 
 	let secondary_fee = match args.value_of("secondary_fee") {
-		Some(fee_str) => Some(
-			fee_str.parse::<f32>()
-				.map_err(|e| ParseError::ArgumentError(format!("Invalid secondary_fee value, {}", e)))?
-		),
+		Some(fee_str) => Some(fee_str.parse::<f32>().map_err(|e| {
+			ParseError::ArgumentError(format!("Invalid secondary_fee value, {}", e))
+		})?),
 		None => None,
 	};
 
