@@ -1430,6 +1430,7 @@ where
 								"action" : swap_info.action.unwrap_or(Action::None).to_string(),
 								"expiration" : swap_info.expiration.unwrap_or(0).to_string(),
 								"start_time" : swap_info.trade_start_time.to_string(),
+								"last_process_error" : swap_info.last_process_error,
 							});
 							res.push(item);
 						}
@@ -1616,6 +1617,7 @@ where
 							"communicationMethod" : swap.communication_method,
 							"communicationAddress" : swap.communication_address,
 
+							"last_process_error" : swap.last_process_error,
 							"currentAction": action.to_string(),
 							"roadmap" : road_map_to_print,
 							"journal_records" : journal_records_to_print,
@@ -2169,6 +2171,7 @@ where
 							let item = json::json!({
 									"swap_id" : swap_id2.clone(),
 									"stateCmd" : curr_state.to_cmd_str(),
+									"last_process_error" : swap.last_process_error,
 									"currentAction": curr_action.to_string(),
 									"currentState" : curr_state.to_string(),
 									"roadmap" : road_map_to_print,

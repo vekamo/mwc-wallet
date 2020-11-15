@@ -236,6 +236,8 @@ pub struct SwapListInfo {
 	pub trade_start_time: i64,
 	/// Secondary address. Caller need to know if ti is set
 	pub secondary_address: String,
+	/// Last error message if process was failed. Note, error will be very generic
+	pub last_process_error: Option<String>,
 }
 
 /// List Swap trades. Returns SwapId + Status
@@ -285,6 +287,7 @@ where
 				expiration,
 				trade_start_time,
 				secondary_address: swap.get_secondary_address(),
+				last_process_error: swap.last_process_error.clone(),
 			});
 		} else {
 			result.push(SwapListInfo {
@@ -300,6 +303,7 @@ where
 				expiration: None,
 				trade_start_time,
 				secondary_address: swap.get_secondary_address(),
+				last_process_error: swap.last_process_error.clone(),
 			});
 		}
 		trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
@@ -630,10 +634,12 @@ where
 
 	match update_swap_status_action_impl(&mut swap, &context, node_client, &keychain) {
 		Ok((next_state_id, action, time_limit, eta)) => {
+			swap.last_process_error = None;
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 			Ok((next_state_id, action, time_limit, eta, swap.journal))
 		}
 		Err(e) => {
+			swap.last_process_error = Some(format!("{}", e));
 			swap.add_journal_message(format!("Processing error: {}", e));
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 			Err(e)
@@ -949,10 +955,12 @@ where
 		secondary_address,
 	) {
 		Ok(respond) => {
+			swap.last_process_error = None;
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 			Ok(respond)
 		}
 		Err(e) => {
+			swap.last_process_error = Some(format!("{}", e));
 			swap.add_journal_message(format!("Processing error: {}", e));
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 			Err(e)

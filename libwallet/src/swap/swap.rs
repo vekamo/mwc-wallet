@@ -131,6 +131,8 @@ pub struct Swap {
 	pub posted_redeem: Option<i64>,
 	/// timestamp when refund transaction was posted
 	pub posted_refund: Option<i64>,
+	/// Last error message if process was failed. Note, error will be very generic
+	pub last_process_error: Option<String>,
 	/// Event log for this swap trade.
 	pub journal: Vec<SwapJournalRecord>,
 	/// Secondary fee as it comes from the parameters or default value.

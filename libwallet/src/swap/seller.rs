@@ -128,6 +128,7 @@ impl SellApi {
 			secondary_fee,
 			electrum_node_uri1,
 			electrum_node_uri2,
+			last_process_error: None,
 		};
 
 		swap.add_journal_message("Swap offer is created".to_string());
