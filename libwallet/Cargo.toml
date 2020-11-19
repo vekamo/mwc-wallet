@@ -42,6 +42,7 @@ bitcoin = { version = "0.19", git = "https://github.com/mwcproject/rust-bitcoin"
 bitcoin_hashes = { version = "0.7", features = ["serde"] }
 serial_test = "0.4.0"
 bch = { git = "https://github.com/mwcproject/rust-bch", branch = "master" }
+native-tls = "0.2"
 
 grin_wallet_util = { path = "../util", version = "3.2.2" }
 grin_wallet_config = { path = "../config", version = "3.2.2" }

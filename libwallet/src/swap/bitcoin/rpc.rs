@@ -13,20 +13,32 @@
 // limitations under the License.
 
 use crate::swap::ErrorKind;
+use native_tls::{TlsConnector, TlsStream};
 use serde::Serialize;
 use serde_json::Value;
 use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
+enum StreamReader {
+	SSLReader(Option<BufReader<TlsStream<TcpStream>>>),
+	PlainReader(Option<BufReader<TcpStream>>),
+}
+
 pub struct LineStream {
-	inner: TcpStream,
-	reader: BufReader<TcpStream>,
+	reader: StreamReader,
 	connected: bool,
 }
 
 impl LineStream {
 	pub fn new(address: String) -> Result<Self, ErrorKind> {
+		match Self::create_as_ssl(&address) {
+			Ok(s) => Ok(s),
+			Err(_) => return Self::create_as_plain(&address),
+		}
+	}
+
+	fn create_tcp_stream(address: &String) -> Result<TcpStream, ErrorKind> {
 		let address = address
 			.to_socket_addrs()?
 			.next()
@@ -36,11 +48,38 @@ impl LineStream {
 		let stream = TcpStream::connect_timeout(&address, timeout)?;
 		stream.set_read_timeout(Some(timeout))?;
 		stream.set_write_timeout(Some(timeout))?;
+		Ok(stream)
+	}
 
-		let reader = BufReader::new(stream.try_clone()?);
+	// If SSL failed, we can't reuse the tcp connection for the plain because the RPC feed is broken
+	fn create_as_ssl(address: &String) -> Result<Self, ErrorKind> {
+		// Trying to use SSL, in case of failure, will use plain connection
+		let host: Vec<&str> = address.split(':').collect();
+		let host = host[0];
+
+		let connector = TlsConnector::new().map_err(|e| {
+			ErrorKind::ElectrumNodeClient(format!("Unable to create TLS connector, {}", e))
+		})?;
+
+		let stream = Self::create_tcp_stream(address)?;
+		let tls_stream = connector.connect(host, stream.try_clone()?).map_err(|e| {
+			ErrorKind::ElectrumNodeClient(format!(
+				"Unable to establesh SSL connection with host {}, {}",
+				host, e
+			))
+		})?;
+
 		Ok(Self {
-			inner: stream,
-			reader,
+			reader: StreamReader::SSLReader(Some(BufReader::new(tls_stream))),
+			connected: true,
+		})
+	}
+
+	// If SSL failed, we can't reuse the tcp connection for the plain because the RPC feed is broken
+	fn create_as_plain(address: &String) -> Result<Self, ErrorKind> {
+		let stream = Self::create_tcp_stream(address)?;
+		Ok(Self {
+			reader: StreamReader::PlainReader(Some(BufReader::new(stream.try_clone()?))),
 			connected: true,
 		})
 	}
@@ -51,7 +90,19 @@ impl LineStream {
 
 	pub fn read_line(&mut self) -> Result<String, ErrorKind> {
 		let mut line = String::new();
-		match self.reader.read_line(&mut line) {
+
+		let read_res = match &mut self.reader {
+			StreamReader::SSLReader(stream) => match stream {
+				Some(reader) => reader.read_line(&mut line),
+				None => Ok(0),
+			},
+			StreamReader::PlainReader(stream) => match stream {
+				Some(reader) => reader.read_line(&mut line),
+				None => Ok(0),
+			},
+		};
+
+		match read_res {
 			Err(e) => {
 				self.connected = false;
 				return Err(e.into());
@@ -69,7 +120,25 @@ impl LineStream {
 	pub fn write_line(&mut self, mut line: String) -> Result<(), ErrorKind> {
 		line.push_str("\n");
 		let bytes = line.into_bytes();
-		match self.inner.write(&bytes) {
+
+		// Reader must be non empty. We borrow the stream to write some data.
+		// It is fine for RPC. If there are some non read lines - they will be lost.
+		let res = match &mut self.reader {
+			StreamReader::SSLReader(reader) => {
+				let mut stream = reader.take().unwrap().into_inner();
+				let res = stream.write(&bytes);
+				reader.replace(BufReader::new(stream));
+				res
+			}
+			StreamReader::PlainReader(reader) => {
+				let mut stream = reader.take().unwrap().into_inner();
+				let res = stream.write(&bytes);
+				reader.replace(BufReader::new(stream));
+				res
+			}
+		};
+
+		match res {
 			Err(e) => {
 				self.connected = false;
 				Err(e.into())
@@ -104,7 +173,7 @@ impl RpcClient {
 			.read_line()
 			.map_err(|e| ErrorKind::Rpc(format!("Unable to read line, {}", e)))?;
 		let result: RpcResponse = serde_json::from_str(&line)
-			.map_err(|e| ErrorKind::Rpc(format!("Unable to deserialize, {}", e)))?;
+			.map_err(|e| ErrorKind::Rpc(format!("Unable to deserialize '{}', {}", line, e)))?;
 		Ok(result)
 	}
 
