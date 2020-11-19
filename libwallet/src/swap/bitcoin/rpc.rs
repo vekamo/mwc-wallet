@@ -17,7 +17,7 @@ use native_tls::{TlsConnector, TlsStream};
 use serde::Serialize;
 use serde_json::Value;
 use std::io::{BufRead, BufReader, Write};
-use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
 enum StreamReader {
