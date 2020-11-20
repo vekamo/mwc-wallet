@@ -81,7 +81,7 @@ jobs:
         PLATFORM: win-x64
   steps:
     - script: |
-        choco install -y llvm
+        choco install -y llvm --version 10.0.0
       displayName: Windows Install LLVM
     - template: '.ci/test.yml'
     - template: '.ci/windows-release.yml'
