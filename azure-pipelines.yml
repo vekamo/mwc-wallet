@@ -29,70 +29,70 @@ variables:
   ghpages_user: 'mwcproject'
   ghpages_repo: 'mwcproject.github.io'
   ghpages_auth_header: '$(echo -n "${ghpages_user}:$(github_pat)" | base64);'
+
 jobs:
-  - job: linux
-    timeoutInMinutes: 120
-    pool:
-      vmImage: ubuntu-latest
-    strategy:
-      matrix:
-        config/libwallet/api:
-          CI_JOB: test
-          CI_JOB_ARGS: config libwallet api
-        impls:
-          CI_JOB: test
-          CI_JOB_ARGS: impls
-        controller/all:
-          CI_JOB: test
-          CI_JOB_ARGS: controller .
-        release:
-          CI_JOB: release
-          PLATFORM: linux-amd64
-    steps:
-      - template: '.ci/test.yml'
-      - template: '.ci/release.yml'
-  - job: macos
-    timeoutInMinutes: 120
-    pool:
-      vmImage: macos-latest
-    strategy:
-      matrix:
-        test:
-          CI_JOB: test-all
-        release:
-          CI_JOB: release
-          PLATFORM: macos
-    steps:
-      - script: |
-          brew uninstall llvm
-        displayName: macOS Uninstall LLVM
-      - template: '.ci/test.yml'
-      - template: '.ci/release.yml'
-  - job: windows
-    timeoutInMinutes: 120
-    pool:
-      vmImage: windows-latest
-    strategy:
-      matrix:
-        test:
-          CI_JOB: test-all
-        release:
-          CI_JOB: release
-          PLATFORM: win-x64
-    steps:
-      - script: |
-          choco install -y llvm
-        displayName: Windows Install LLVM
-      - template: '.ci/test.yml'
-      - template: '.ci/windows-release.yml'
-  - job: Docs
-    timeoutInMinutes: 60
-    pool:
-      vmImage: ubuntu-latest
-    strategy:
-      matrix:
-        release:
-          CI_JOB: release
-          PLATFORM: linux-amd64
-    steps:
-      - template: '.ci/pushdocs.yml'
+- job: linux
+  timeoutInMinutes: 120
+  pool:
+    vmImage: ubuntu-latest
+  strategy:
+    matrix:
+      config/libwallet/api:
+        CI_JOB: test
+        CI_JOB_ARGS: config libwallet api
+      impls:
+        CI_JOB: test
+        CI_JOB_ARGS: impls
+      controller/all:
+        CI_JOB: test
+        CI_JOB_ARGS: controller .
+      release:
+        CI_JOB: release
+        PLATFORM: linux-amd64
+  steps:
+    - template: '.ci/test.yml'
+    - template: '.ci/release.yml'
+- job: macos
+  timeoutInMinutes: 120
+  pool:
+    vmImage: macos-latest
+  strategy:
+    matrix:
+      test:
+        CI_JOB: test-all
+      release:
+        CI_JOB: release
+        PLATFORM: macos
+  steps:
+    - script: |
+        brew uninstall llvm
+      displayName: macOS Uninstall LLVM
+    - template: '.ci/test.yml'
+    - template: '.ci/release.yml'
+- job: windows
+  pool:
+    vmImage: windows-latest
+  strategy:
+    matrix:
+      test:
+        CI_JOB: test-all
+      release:
+        CI_JOB: release
+        PLATFORM: win-x64
+  steps:
+    - script: |
+        choco install -y llvm
+      displayName: Windows Install LLVM
+    - template: '.ci/test.yml'
+    - template: '.ci/windows-release.yml'
+- job: Docs
+  timeoutInMinutes: 60
+  pool:
+    vmImage: ubuntu-latest
+  strategy:
+    matrix:
+      release:
+        CI_JOB: release
+        PLATFORM: linux-amd64
+  steps:
+    - template: '.ci/pushdocs.yml'
