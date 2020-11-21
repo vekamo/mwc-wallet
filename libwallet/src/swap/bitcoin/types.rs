@@ -732,6 +732,7 @@ mod tests {
 	fn test_redeem_script() {
 		global::set_mining_mode(ChainTypes::Floonet);
 		let network = Network::Floonet;
+		swap::set_testing_cur_time(1567632152);
 
 		let secp = Secp256k1::with_caps(ContextFlag::Commit);
 		let rng = &mut thread_rng();
