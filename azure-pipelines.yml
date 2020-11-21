@@ -81,7 +81,8 @@ jobs:
         PLATFORM: win-x64
   steps:
     - script: |
-        choco install -y llvm --version 5.0.0
+        choco install -y visualstudio2019buildtools --version 16.7.7.0
+        choco install -y llvm
       displayName: Windows Install LLVM
     - template: '.ci/test.yml'
     - template: '.ci/windows-release.yml'
