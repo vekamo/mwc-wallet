@@ -480,6 +480,8 @@ mod tests {
 		); // Swap cannot be accepted
 	}
 
+	// Because of gonden output new line symbol we skipping Windows.
+	#[cfg(not(target_os = "windows"))]
 	#[test]
 	#[serial]
 	fn test_btc_swap() {
@@ -1251,6 +1253,8 @@ mod tests {
 		assert!(!write_json, "json files written");
 	}
 
+	// Because of gonden output new line symbol we skipping Windows.
+	#[cfg(not(target_os = "windows"))]
 	#[test]
 	#[serial]
 	fn test_swap_serde() {
