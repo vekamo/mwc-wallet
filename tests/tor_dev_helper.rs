@@ -46,6 +46,12 @@ fn setup_no_clean() {
 #[ignore]
 #[test]
 fn socks_tor() -> Result<(), grin_wallet_controller::Error> {
+	// For windows we can't run it because of the leaks. And we dont want to see bunch of warnings as well
+	#[cfg(target_os = "windows")]
+	if true {
+		return Ok(());
+	}
+
 	let test_dir = "target/test_output/socks_tor";
 	let yml = load_yaml!("../src/bin/mwc-wallet.yml");
 	let app = App::from_yaml(yml);

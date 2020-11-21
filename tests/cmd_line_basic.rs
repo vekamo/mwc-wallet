@@ -535,6 +535,12 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), grin_wallet_controller::
 
 #[test]
 fn wallet_command_line() {
+	// For windows we can't run it because of the leaks. And we dont want to see bunch of warnings as well
+	#[cfg(target_os = "windows")]
+	if true {
+		return;
+	}
+
 	let test_dir = "target/test_output/command_line";
 	if let Err(e) = command_line_test_impl(test_dir) {
 		panic!("Libwallet Error: {} - {}", e, e.backtrace().unwrap());

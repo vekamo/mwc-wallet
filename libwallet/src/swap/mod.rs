@@ -109,8 +109,10 @@ mod tests {
 	use grin_util::secp::pedersen::{Commitment, RangeProof};
 	use grin_util::to_hex;
 	use std::collections::HashMap;
+	#[cfg(not(target_os = "windows"))]
 	use std::fs::{read_to_string, write};
 	use std::mem;
+	#[cfg(not(target_os = "windows"))]
 	use std::str::FromStr;
 	use std::sync::Arc;
 
