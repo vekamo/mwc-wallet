@@ -83,6 +83,7 @@ jobs:
     - script: |
         choco install -y visualstudio2019buildtools --version 16.7.7.0
         choco install -y llvm
+        choco install rust-ms --version 1.47.0
       displayName: Windows Install LLVM
     - template: '.ci/test.yml'
     - template: '.ci/windows-release.yml'
