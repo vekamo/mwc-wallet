@@ -1,7 +1,8 @@
 steps:
   - script: 'cargo test --all'
     displayName: Cargo Test All
-  - script: 'cargo build --release'
+    condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
+  - script: 'build_static.sh'
     displayName: Build Release
   - script: |
       MY_TAG="$(Build.SourceBranch)"
