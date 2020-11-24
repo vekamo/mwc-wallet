@@ -988,8 +988,8 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 	let method = parse_required(args, "method")?;
 	let destination = parse_required(args, "dest")?;
 
-	let electrum_node_uri1 = args.value_of("electrum_uri1").map(|s| String::from(s));
-	let electrum_node_uri2 = args.value_of("electrum_uri2").map(|s| String::from(s));
+	let electrum_node_uri1 = args.value_of("electrum_uri1").map(|s| String::from(s)).filter(|s| !s.is_empty());
+	let electrum_node_uri2 = args.value_of("electrum_uri2").map(|s| String::from(s)).filter(|s| !s.is_empty());
 
 	let secondary_fee = match args.value_of("secondary_fee") {
 		Some(fee_str) => Some(fee_str.parse::<f32>().map_err(|e| {
