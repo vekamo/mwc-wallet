@@ -294,7 +294,9 @@ impl State for BuyerWaitingForSellerToLock {
 								.time_limit(time_limit),
 						)
 					} else {
-						swap.add_journal_message("Seller start locking MWC funds".to_string());
+						swap.add_journal_message(
+							"Seller has started locking MWC funds".to_string(),
+						);
 						Ok(StateProcessRespond::new(
 							StateId::BuyerPostingSecondaryToMultisigAccount,
 						))
@@ -432,7 +434,7 @@ where
 
 				debug_assert!(chain_amount == swap.secondary_amount);
 
-				swap.add_journal_message("Funds are posted to Lock account".to_string());
+				swap.add_journal_message("Funds have been posted to lock account".to_string());
 				Ok(StateProcessRespond::new(
 					StateId::BuyerWaitingForLockConfirmations,
 				))

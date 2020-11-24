@@ -31,7 +31,7 @@ pub const JOURNAL_CANCELLED_BY_USER: &str = "Cancelled by user";
 pub const JOURNAL_CANCELLED_BY_TIMEOUT: &str = "Cancelled as expired";
 /// Journal messages that are repeatable for State
 pub const JOURNAL_CANCELLED_BYER_LOCK_TOO_MUCH_FUNDS: &str =
-	"Cancelled because buyer posted too much funds to the Lock account";
+	"Cancelled because the buyer posted funds greater than the agreed upon amount to the lock account";
 /// Journal messages that are repeatable for State
 pub const JOURNAL_NOT_LOCKED: &str = "Funds are not locking any more, switching back to waiting";
 
@@ -145,7 +145,7 @@ impl fmt::Display for StateId {
 			StateId::BuyerSendingAcceptOfferMessage => "Send offer message to Seller",
 			StateId::BuyerWaitingForSellerToLock => "Waiting for Seller to start locking",
 			StateId::BuyerPostingSecondaryToMultisigAccount => {
-				"Buyer posting Coins to Lock account"
+				"Buyer posting Coins to lock account"
 			}
 			StateId::BuyerWaitingForLockConfirmations => "Waiting for funds to be locked",
 			StateId::BuyerSendingInitRedeemMessage => "Send Init redeem message to Seller",

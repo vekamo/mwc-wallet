@@ -345,7 +345,7 @@ impl State for SellerWaitingForBuyerLock {
 					if tx_conf.secondary_lock_amount > swap.secondary_amount {
 						// Posted too much, byer probably will cancel the deal, we are not going to lock the MWCs
 						swap.add_journal_message(format!(
-							"Cancelled because buyer locked too much {} funds",
+							"Cancelled because buyer posted funds greater than the agreed upon {} amount to the lock account",
 							swap.secondary_currency
 						));
 						return Ok(StateProcessRespond::new(StateId::SellerCancelled));
@@ -485,7 +485,7 @@ where
 				// Posting the transaction
 				swap::publish_transaction(&*self.node_client, &swap.lock_slate.tx, false)?;
 				swap.posted_lock = Some(swap::get_cur_time());
-				swap.add_journal_message("MWC lock slate is posted".to_string());
+				swap.add_journal_message("MWC lock slate posted".to_string());
 
 				Ok(StateProcessRespond::new(
 					StateId::SellerWaitingForLockConfirmations,

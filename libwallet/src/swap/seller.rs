@@ -131,7 +131,7 @@ impl SellApi {
 			last_process_error: None,
 		};
 
-		swap.add_journal_message("Swap offer is created".to_string());
+		swap.add_journal_message("Swap offer created".to_string());
 
 		let mwc_lock_time = swap.get_time_mwc_lock();
 		let start_time = swap.get_time_start();

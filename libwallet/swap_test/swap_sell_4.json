@@ -418,7 +418,7 @@
   "journal": [
     {
       "time": 1567632152,
-      "message": "Swap offer is created"
+      "message": "Swap offer created"
     },
     {
       "time": 1567632152,
@@ -430,7 +430,7 @@
     },
     {
       "time": 1567632152,
-      "message": "MWC lock slate is posted"
+      "message": "MWC lock slate posted"
     },
     {
       "time": 1567632152,

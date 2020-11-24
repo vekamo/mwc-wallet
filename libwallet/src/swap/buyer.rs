@@ -261,7 +261,7 @@ impl BuyApi {
 			electrum_node_uri2: None,
 			last_process_error: None,
 		};
-		swap.add_journal_message("Get a Swap offer".to_string());
+		swap.add_journal_message("Received a swap offer".to_string());
 
 		// Minimum mwc heights
 		let expected_lock_height = height + (swap.get_time_mwc_lock() - now_ts) as u64 / 60;

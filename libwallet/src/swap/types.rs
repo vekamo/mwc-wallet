@@ -727,7 +727,7 @@ impl fmt::Display for Action {
 				amount,
 				address,
 			} => format!(
-				"Please deposit exactly {} {} at {}",
+				"Please deposit exactly {} {} to {}",
 				currency.amount_to_hr_string(*amount, true),
 				currency,
 				address

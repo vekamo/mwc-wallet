@@ -678,7 +678,7 @@ pub fn swap_trade(
 	}
 
 	println!(
-		"    Requied lock confirmations: {} for MWC and {} for {}",
+		"    Required lock confirmations: {} for MWC and {} for {}",
 		swap.mwc_confirmations.to_string().bold().yellow(),
 		swap.secondary_confirmations.to_string().bold().yellow(),
 		swap.secondary_currency
@@ -688,7 +688,7 @@ pub fn swap_trade(
 	let s2 = format!("{} minutes", swap.redeem_time_sec / 60);
 
 	println!(
-		"    Time limits: {} for messages exchange and {} for redeem/refund",
+		"    Time limits: {} for messages to be exchanged and {} for redeem/refund",
 		s1.bold().yellow(),
 		s2.bold().yellow()
 	);
@@ -706,7 +706,7 @@ pub fn swap_trade(
 		let sel_lock_m = (mwc_lock_sec % 3600) / 60;
 		let est_time_str = format!("{} hours and {} minutes", sel_lock_h, sel_lock_m);
 		println!(
-			"    MWC funds locked until block {}, expected to be mined in {}",
+			"    MWC funds will be locked until block {}, and are expected to be mined in {}",
 			swap.refund_slate.lock_height.to_string().bold().yellow(),
 			est_time_str.bold().yellow(),
 		);
@@ -722,7 +722,7 @@ pub fn swap_trade(
 		let buy_lock_m = (buyer_lock_time % 3600) / 60;
 		let est_time_str = format!("{} hours and {} minutes", buy_lock_h, buy_lock_m);
 		println!(
-			"    {} funds locked for {}",
+			"    {} funds will be locked for {}",
 			swap.secondary_currency,
 			est_time_str.bold().yellow()
 		);
