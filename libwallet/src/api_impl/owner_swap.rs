@@ -86,6 +86,10 @@ where
 	let skey = get_swap_storage_key(&keychain)?;
 	let height = node_client.get_chain_tip()?.0;
 
+	if height==0 {
+		return Err(ErrorKind::Generic("MWC node is syncing and not ready yet".to_string()).into());
+	}
+
 	let mut swap_reserved_amount = 0;
 
 	// Searching to swaps that are started, but not locked
