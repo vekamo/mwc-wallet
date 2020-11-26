@@ -788,10 +788,12 @@ impl fmt::Display for Action {
 			Action::WaitForMwcRefundUnlock {
 				mwc_tip,
 				lock_height,
-			} => format!(
-				"Waiting when locked MWC can be refunded. About {} minutes are left",
-				(lock_height.saturating_sub(*mwc_tip))
-			),
+			} => {
+				let blocks_left = lock_height.saturating_sub(*mwc_tip);
+				let hours = blocks_left / 60;
+				let minutes = blocks_left % 60;
+				format!( "Waiting for locked MWC to be refunded ({} hour{} and {} minute{} remaining)", hours, if hours == 1 { "" } else { "s" }, minutes, if minutes == 1 { "" } else { "s" })
+			},
 			Action::BuyerPublishMwcRedeemTx => "Posting MWC redeem transaction".to_string(),
 			Action::SellerPublishMwcRefundTx => "Posting MWC refund transaction".to_string(),
 			Action::BuyerPublishSecondaryRefundTx(currency) => {
@@ -802,11 +804,10 @@ impl fmt::Display for Action {
 				required,
 				current,
 			} => {
-				let time_left_sec = required - current;
+				let time_left_sec = required - current + 30; // 30 seconds for rounding
 				let hours = time_left_sec / 3600;
 				let minutes = (time_left_sec % 3600) / 60;
-				let seconds = time_left_sec % 60;
-				format!("Waiting until will be able to refund {}. Waiting time left: {} hours {} minutes and {} seconds", currency, hours, minutes, seconds)
+				format!("Waiting for locked {} to be refunded. ({} hour{} and {} minute{} remaining)", currency, hours, if hours==1 {""} else {"s"} , minutes, if minutes==1 {""} else {"s"} )
 			}
 		};
 		write!(f, "{}", disp)
