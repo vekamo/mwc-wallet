@@ -566,6 +566,8 @@ pub enum Action {
 	WaitForSecondaryConfirmations {
 		/// What exactly are we waiting for.
 		name: String,
+		/// Expected amount to be posted
+		expected_to_be_posted: u64,
 		/// Type of currency (BTC)
 		currency: Currency,
 		/// Required number of confirmations
@@ -581,6 +583,8 @@ pub enum Action {
 		mwc_actual: u64,
 		/// Type of secondary currency (BTC)
 		currency: Currency,
+		/// Expected amount to be posted
+		sec_expected_to_be_posted: u64,
 		/// Required number of confirmations for secondary
 		sec_required: u64,
 		/// Actual number of confirmations for secondary. None if secondary not posted
@@ -671,6 +675,7 @@ impl Action {
 			} => "WaitForMwcConfirmations",
 			Action::WaitForSecondaryConfirmations {
 				name: _,
+				expected_to_be_posted: _,
 				currency: _,
 				required: _,
 				actual: _,
@@ -679,6 +684,7 @@ impl Action {
 				mwc_required: _,
 				mwc_actual: _,
 				currency: _,
+				sec_expected_to_be_posted: _,
 				sec_required: _,
 				sec_actual: _,
 			} => "WaitForLockConfirmations",
@@ -742,17 +748,24 @@ impl fmt::Display for Action {
 			),
 			Action::WaitForSecondaryConfirmations {
 				name,
+				expected_to_be_posted,
 				currency,
 				required,
 				actual,
-			} => format!(
-				"{}, waiting for {} {} confirmations, has {}",
-				name, required, currency, actual
-			),
+			} => {
+				if *expected_to_be_posted == 0 {
+					format!("{}, waiting for {} {} confirmations, has {}", name, required, currency, actual)
+				}
+				else {
+					let posted_str = currency.amount_to_hr_string(*expected_to_be_posted, true);
+					format!("{}, waiting for {} {} to be posted", name, posted_str, currency)
+				}
+			}
 			Action::WaitForLockConfirmations {
 				mwc_required,
 				mwc_actual,
 				currency,
+				sec_expected_to_be_posted,
 				sec_required,
 				sec_actual,
 			} => {
@@ -766,19 +779,21 @@ impl fmt::Display for Action {
 					format!("Waiting for {} MWC Lock confirmations, has {}",mwc_required, mwc_actual)
 				};
 
-				let sec_str = if sec_actual.is_none() {
-					format!("Waiting for {} Lock transaction to be posted", currency)
-				}
-				else if sec_actual.unwrap() == 0 {
-					format!("{} Lock transaction is in the memory pool, waiting to be mined", currency)
-				}
-				else if sec_actual.unwrap() >= *sec_required {
-					format!("{} funds are locked", currency)
+				let sec_str = if *sec_expected_to_be_posted==0 {
+					if sec_actual.unwrap() == 0 {
+						format!("{} Lock transaction is in the memory pool, waiting to be mined", currency)
+					}
+					else if sec_actual.unwrap() >= *sec_required {
+						format!("{} funds are locked", currency)
+					}
+					else {
+						format!("Waiting for {} {} Lock confirmations, has {}", sec_required, currency, sec_actual.unwrap())
+					}
 				}
 				else {
-					format!("Waiting for {} {} Lock confirmations, has {}", sec_required, currency, sec_actual.unwrap())
+					let sec_posted_str = currency.amount_to_hr_string(*sec_expected_to_be_posted, true);
+					format!("Waiting for {} {} to be posted to Lock account", sec_posted_str, currency)
 				};
-
 				format!("{}; {}", mwc_str, sec_str)
 			}
 			Action::SellerWaitForBuyerRedeemPublish {

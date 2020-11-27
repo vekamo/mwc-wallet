@@ -355,6 +355,9 @@ impl State for SellerWaitingForBuyerLock {
 						Ok(StateProcessRespond::new(StateId::SellerWaitingForBuyerLock)
 							.action(Action::WaitForSecondaryConfirmations {
 								name: "Buyer to lock funds".to_string(),
+								expected_to_be_posted: swap
+									.secondary_amount
+									.saturating_sub(tx_conf.secondary_lock_amount),
 								currency: swap.secondary_currency,
 								required: 1,
 								actual: conf,
@@ -605,6 +608,8 @@ impl<K: Keychain> State for SellerWaitingForLockConfirmations<K> {
 						mwc_required: swap.mwc_confirmations,
 						mwc_actual: mwc_lock,
 						currency: swap.secondary_currency,
+						sec_expected_to_be_posted: swap.secondary_amount
+							- tx_conf.secondary_lock_amount,
 						sec_required: swap.secondary_confirmations,
 						sec_actual: tx_conf.secondary_lock_conf,
 					})
@@ -637,6 +642,8 @@ impl<K: Keychain> State for SellerWaitingForLockConfirmations<K> {
 					)
 					.action(Action::WaitForSecondaryConfirmations {
 						name: format!("{} Locking Account", swap.secondary_currency),
+						expected_to_be_posted: swap.secondary_amount
+							- tx_conf.secondary_lock_amount,
 						currency: swap.secondary_currency,
 						required: swap.secondary_confirmations,
 						actual: secondary_lock,
@@ -1304,6 +1311,7 @@ where
 					StateProcessRespond::new(StateId::SellerWaitingForRedeemConfirmations).action(
 						Action::WaitForSecondaryConfirmations {
 							name: "Redeeming funds".to_string(),
+							expected_to_be_posted: 0,
 							currency: swap.secondary_currency,
 							required: swap.secondary_confirmations,
 							actual: tx_conf.secondary_redeem_conf.unwrap_or(0),

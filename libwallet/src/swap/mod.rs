@@ -724,6 +724,7 @@ mod tests {
 				mwc_required: _,
 				mwc_actual: _,
 				currency: _,
+				sec_expected_to_be_posted: _,
 				sec_required: _,
 				sec_actual: actual,
 			} => assert_eq!(actual, Some(1)),
@@ -744,6 +745,7 @@ mod tests {
 				mwc_required: _,
 				mwc_actual: actual,
 				currency: _,
+				sec_expected_to_be_posted: _,
 				sec_required: _,
 				sec_actual: _,
 			} => assert_eq!(actual, 0),
@@ -835,6 +837,7 @@ mod tests {
 				mwc_required: required,
 				mwc_actual: actual,
 				currency: _,
+				sec_expected_to_be_posted: _,
 				sec_required: _,
 				sec_actual: _,
 			} => {
@@ -871,6 +874,7 @@ mod tests {
 				mwc_required: required,
 				mwc_actual: actual,
 				currency: _,
+				sec_expected_to_be_posted: _,
 				sec_required: _,
 				sec_actual: _,
 			} => {
@@ -891,6 +895,7 @@ mod tests {
 				mwc_required: required,
 				mwc_actual: actual,
 				currency: _,
+				sec_expected_to_be_posted: _,
 				sec_required: _,
 				sec_actual: _,
 			} => {
@@ -920,6 +925,7 @@ mod tests {
 				mwc_required: _,
 				mwc_actual: _,
 				currency: _,
+				sec_expected_to_be_posted: _,
 				sec_required: required,
 				sec_actual: actual,
 			} => {
@@ -1181,6 +1187,7 @@ mod tests {
 		match sell_resp.action.unwrap() {
 			Action::WaitForSecondaryConfirmations {
 				name: _,
+				expected_to_be_posted: _,
 				currency: _,
 				required,
 				actual,
@@ -1206,6 +1213,7 @@ mod tests {
 		match sell_resp.action.unwrap() {
 			Action::WaitForSecondaryConfirmations {
 				name: _,
+				expected_to_be_posted: _,
 				currency: _,
 				required,
 				actual,

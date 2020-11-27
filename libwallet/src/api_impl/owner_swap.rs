@@ -86,7 +86,7 @@ where
 	let skey = get_swap_storage_key(&keychain)?;
 	let height = node_client.get_chain_tip()?.0;
 
-	if height==0 {
+	if height == 0 {
 		return Err(ErrorKind::Generic("MWC node is syncing and not ready yet".to_string()).into());
 	}
 
@@ -265,6 +265,8 @@ where
 	let keychain = w.keychain(keychain_mask)?;
 	let skey = get_swap_storage_key(&keychain)?;
 
+	let mut do_check = do_check;
+
 	for sw_id in &swap_id {
 		let swap_lock = trades::get_swap_lock(sw_id);
 		let _l = swap_lock.lock();
@@ -272,12 +274,25 @@ where
 		let trade_start_time = swap.started.timestamp();
 
 		if do_check && !swap.state.is_final_state() {
-			let (state, action, expiration, _state_eta) = update_swap_status_action_impl(
+			let (state, action, expiration) = match update_swap_status_action_impl(
 				&mut swap,
 				&context,
 				node_client.clone(),
 				&keychain,
-			)?;
+			) {
+				Ok((state, action, expiration, _state_eta)) => {
+					swap.last_process_error = None;
+					trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+					(state, action, expiration)
+				}
+				Err(e) => {
+					do_check = false;
+					swap.last_process_error = Some(format!("{}", e));
+					swap.add_journal_message(format!("Processing error: {}", e));
+					(swap.state.clone(), Action::None, None)
+				}
+			};
+
 			result.push(SwapListInfo {
 				swap_id: sw_id.clone(),
 				is_seller: swap.is_seller(),

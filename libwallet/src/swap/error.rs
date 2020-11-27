@@ -83,7 +83,7 @@ pub enum ErrorKind {
 	#[fail(display = "Swap Keychain error: {}", _0)]
 	Keychain(grin_keychain::Error),
 	/// LibWallet error
-	#[fail(display = "Swap LibWaller error: {}", _0)]
+	#[fail(display = "Swap LibWallet error: {}", _0)]
 	LibWallet(crate::ErrorKind),
 	/// Secp issue
 	#[fail(display = "Swap Secp error: {}", _0)]

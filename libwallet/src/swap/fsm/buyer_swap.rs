@@ -518,9 +518,15 @@ where
 				let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
 
 				if tx_conf.secondary_lock_amount < swap.secondary_amount {
-					swap.add_journal_message(
-						"Found that Secondary lock acocunt need more funds".to_string(),
-					);
+					swap.add_journal_message(format!(
+						"Waiting for posting {} {} to secondary lock account",
+						swap.secondary_currency.amount_to_hr_string(
+							swap.secondary_amount
+								.saturating_sub(tx_conf.secondary_lock_amount),
+							true
+						),
+						swap.secondary_currency
+					));
 					// Need to deposit more. Something happens? Likely will be cancelled because of timeout.
 					return Ok(StateProcessRespond::new(
 						StateId::BuyerPostingSecondaryToMultisigAccount,
@@ -559,6 +565,7 @@ where
 								mwc_required: swap.mwc_confirmations,
 								mwc_actual: mwc_lock,
 								currency: swap.secondary_currency,
+								sec_expected_to_be_posted: 0,
 								sec_required: swap.secondary_confirmations,
 								sec_actual: tx_conf.secondary_lock_conf,
 							})
@@ -1392,6 +1399,7 @@ where
 					StateProcessRespond::new(StateId::BuyerWaitingForRefundConfirmations).action(
 						Action::WaitForSecondaryConfirmations {
 							name: format!("{} Refund", swap.secondary_currency),
+							expected_to_be_posted: 0,
 							currency: swap.secondary_currency,
 							required: swap.secondary_confirmations,
 							actual: tx_conf.secondary_refund_conf.unwrap_or(0),

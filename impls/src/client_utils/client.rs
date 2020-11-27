@@ -113,9 +113,9 @@ impl Client {
 		if !use_socks {
 			let https = hyper_rustls::HttpsConnector::new();
 			let mut connector = TimeoutConnector::new(https);
-			connector.set_connect_timeout(Some(Duration::from_secs(20)));
-			connector.set_read_timeout(Some(Duration::from_secs(20)));
-			connector.set_write_timeout(Some(Duration::from_secs(20)));
+			connector.set_connect_timeout(Some(Duration::from_secs(10)));
+			connector.set_read_timeout(Some(Duration::from_secs(10)));
+			connector.set_write_timeout(Some(Duration::from_secs(10)));
 			let client = HyperClient::builder()
 				.pool_idle_timeout(Duration::from_secs(120))
 				.build::<_, Body>(connector);
@@ -138,9 +138,9 @@ impl Client {
 				connector: https,
 			};
 			let mut connector = TimeoutConnector::new(socks);
-			connector.set_connect_timeout(Some(Duration::from_secs(20)));
-			connector.set_read_timeout(Some(Duration::from_secs(20)));
-			connector.set_write_timeout(Some(Duration::from_secs(20)));
+			connector.set_connect_timeout(Some(Duration::from_secs(10)));
+			connector.set_read_timeout(Some(Duration::from_secs(10)));
+			connector.set_write_timeout(Some(Duration::from_secs(10)));
 			let client = HyperClient::builder()
 				.pool_idle_timeout(Duration::from_secs(120))
 				.build::<_, Body>(connector);
