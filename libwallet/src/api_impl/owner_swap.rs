@@ -272,6 +272,7 @@ where
 		let _l = swap_lock.lock();
 		let (context, mut swap) = trades::get_swap_trade(sw_id.as_str(), &skey, &*swap_lock)?;
 		let trade_start_time = swap.started.timestamp();
+		swap.wait_for_backup1 = true; // allways waiting becasue moving forward it is not a swap list task
 
 		if do_check && !swap.state.is_final_state() {
 			let (state, action, expiration) = match update_swap_status_action_impl(
@@ -531,6 +532,8 @@ where
 			swap.add_journal_message(format!("State is manually adjusted to {}", adjusted_state));
 			swap.state = state;
 
+			swap.wait_for_backup1 = true; // Don't want to go forward
+
 			let tx_conf = swap_api.request_tx_confirmations(&keychain, &swap)?;
 			let resp = fsm.process(Input::Check, &mut swap, &context, &tx_conf)?;
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
@@ -619,6 +622,7 @@ pub fn update_swap_status_action<'a, L, C, K>(
 	swap_id: &str,
 	electrum_node_uri1: Option<String>,
 	electrum_node_uri2: Option<String>,
+	wait_for_backup1: bool,
 ) -> Result<
 	(
 		StateId,
@@ -650,6 +654,8 @@ where
 	if electrum_node_uri2.is_some() {
 		swap.electrum_node_uri2 = electrum_node_uri2;
 	}
+
+	swap.wait_for_backup1 = wait_for_backup1;
 
 	match update_swap_status_action_impl(&mut swap, &context, node_client, &keychain) {
 		Ok((next_state_id, action, time_limit, eta)) => {
@@ -933,6 +939,7 @@ pub fn swap_process<'a, L, C, K, F>(
 	secondary_address: Option<String>,
 	electrum_node_uri1: Option<String>,
 	electrum_node_uri2: Option<String>,
+	wait_for_backup1: bool,
 ) -> Result<StateProcessRespond, Error>
 where
 	L: WalletLCProvider<'a, C, K>,
@@ -960,6 +967,8 @@ where
 	if electrum_node_uri2.is_some() {
 		swap.electrum_node_uri2 = electrum_node_uri2;
 	}
+
+	swap.wait_for_backup1 = wait_for_backup1;
 
 	match swap_process_impl(
 		wallet_inst,

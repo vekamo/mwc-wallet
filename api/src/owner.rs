@@ -2421,6 +2421,7 @@ where
 			&swap_id,
 			electrum_node_uri1,
 			electrum_node_uri2,
+			false,
 		)
 	}
 
@@ -2468,6 +2469,7 @@ where
 			secondary_address,
 			electrum_node_uri1,
 			electrum_node_uri2,
+			false,
 		)
 	}
 

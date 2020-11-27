@@ -333,6 +333,12 @@ impl State for SellerWaitingForBuyerLock {
 					return Ok(StateProcessRespond::new(StateId::SellerCancelled));
 				}
 
+				if swap.wait_for_backup1 {
+					return Ok(StateProcessRespond::new(StateId::SellerWaitingForBuyerLock)
+						.action(Action::WaitingForTradeBackup)
+						.time_limit(time_limit));
+				}
+
 				if swap.seller_lock_first {
 					// Skipping this step. Buyer waiting for us to start locking
 					Ok(StateProcessRespond::new(StateId::SellerPostingLockMwcSlate))

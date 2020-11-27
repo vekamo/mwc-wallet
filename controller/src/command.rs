@@ -1365,6 +1365,8 @@ pub struct SwapArgs {
 	pub electrum_node_uri1: Option<String>,
 	/// ElectrumX failover URI2
 	pub electrum_node_uri2: Option<String>,
+	/// Need to wait for the first backup.
+	pub wait_for_backup1: bool,
 }
 
 // For Json we can't use int 64, we have to convert all of them to Strings
@@ -1569,6 +1571,7 @@ where
 							&swap_id,
 							args.electrum_node_uri1,
 							args.electrum_node_uri2,
+							args.wait_for_backup1,
 						)?;
 
 					let mwc_lock_time = if conf_status.mwc_tip < swap.refund_slate.lock_height {
@@ -1803,6 +1806,7 @@ where
 				args.secondary_address,
 				args.electrum_node_uri1,
 				args.electrum_node_uri2,
+				args.wait_for_backup1,
 			);
 
 			match result {
@@ -1993,6 +1997,7 @@ where
 						&swap_id,
 						args.electrum_node_uri1,
 						args.electrum_node_uri2,
+						args.wait_for_backup1,
 					)?;
 
 				// Autoswap has to be sure that ALL parameters are defined. There are multiple steps and potentioly all of them can be used.
@@ -2054,6 +2059,7 @@ where
 			};
 			let stop_thread_clone = SWAP_THREADS_RUN.clone();
 			let json_format_clone = args.json_format.clone();
+			let wait_for_backup1 = args.wait_for_backup1;
 
 			debug!("Starting autoswap thread for swap id {}", swap_id);
 			let api_thread = thread::Builder::new()
@@ -2072,6 +2078,7 @@ where
 							km2.as_ref(),
 							&swap_id2,
 							None,None, // URIs are already updated
+							wait_for_backup1,
 						) {
 							Ok(res) => res,
 							Err(e) => {
@@ -2094,6 +2101,7 @@ where
 								fee_satoshi.clone(),
 								secondary_address.clone(),
 								None, None, // URIs was already updated before. No need to update the same.
+								wait_for_backup1,
 							) {
 								Ok(res) => {
 									curr_state = res.next_state_id;

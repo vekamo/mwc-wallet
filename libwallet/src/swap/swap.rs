@@ -142,6 +142,18 @@ pub struct Swap {
 	pub electrum_node_uri1: Option<String>,
 	/// ElectrumX failover URI2
 	pub electrum_node_uri2: Option<String>,
+
+	// --------------------------------
+	// Additional non stored params for the trade. They good for a single call, not for all sessions
+	/// For the step 1 backup. The QT wallet will take care about the backup. Here we should wait until
+	/// it is done by user
+	#[serde(skip)]
+	#[serde(default = "default_false")]
+	pub wait_for_backup1: bool,
+}
+
+fn default_false() -> bool {
+	false
 }
 
 impl Swap {

@@ -539,7 +539,8 @@ pub enum Action {
 	SellerSendRedeemMessage(Message),
 	/// Buyer waiting for Redeem Message
 	BuyerWaitingForRedeemMessage,
-
+	/// Waiting for the backup is done by user
+	WaitingForTradeBackup,
 	/// Seller Publishing an MWC lock transaction to the network
 	SellerPublishMwcLockTx,
 	/// Seller Publishing BTC redeem transaction to the network
@@ -661,6 +662,7 @@ impl Action {
 			Action::SellerWaitingForInitRedeemMessage => "SellerWaitingForInitRedeemMessage",
 			Action::SellerSendRedeemMessage(_) => "SellerSendRedeemMessage",
 			Action::BuyerWaitingForRedeemMessage => "BuyerWaitingForRedeemMessage",
+			Action::WaitingForTradeBackup => "WaitingForTradeBackup",
 			Action::SellerPublishMwcLockTx => "SellerPublishMwcLockTx",
 			Action::SellerPublishTxSecondaryRedeem(_) => "SellerPublishTxSecondaryRedeem",
 			Action::DepositSecondary {
@@ -724,6 +726,7 @@ impl fmt::Display for Action {
 			Action::BuyerWaitingForRedeemMessage => {
 				"Waiting for Redeem response message from Seller".to_string()
 			}
+			Action::WaitingForTradeBackup => "Waiting when backup will be done".to_string(),
 			Action::SellerPublishMwcLockTx => "Posting MWC lock transaction".to_string(),
 			Action::SellerPublishTxSecondaryRedeem(currency) => {
 				format!("Posting {} redeem transaction", currency)
