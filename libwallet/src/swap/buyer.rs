@@ -260,6 +260,7 @@ impl BuyApi {
 			electrum_node_uri1: None, // User need to review the offer first. Then to electrumX uri can be updated
 			electrum_node_uri2: None,
 			last_process_error: None,
+			last_check_error: None,
 			wait_for_backup1: false,
 		};
 		swap.add_journal_message("Received a swap offer".to_string());

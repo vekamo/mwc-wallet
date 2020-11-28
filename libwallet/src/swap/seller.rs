@@ -129,6 +129,7 @@ impl SellApi {
 			electrum_node_uri1,
 			electrum_node_uri2,
 			last_process_error: None,
+			last_check_error: None,
 			wait_for_backup1: false,
 		};
 

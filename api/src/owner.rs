@@ -2412,6 +2412,7 @@ where
 			Option<i64>,
 			Vec<StateEtaInfo>,
 			Vec<SwapJournalRecord>,
+			Option<String>,
 		),
 		Error,
 	> {

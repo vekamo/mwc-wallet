@@ -241,7 +241,7 @@ pub struct SwapListInfo {
 	/// Secondary address. Caller need to know if ti is set
 	pub secondary_address: String,
 	/// Last error message if process was failed. Note, error will be very generic
-	pub last_process_error: Option<String>,
+	pub last_error: Option<String>,
 }
 
 /// List Swap trades. Returns SwapId + Status
@@ -282,13 +282,13 @@ where
 				&keychain,
 			) {
 				Ok((state, action, expiration, _state_eta)) => {
-					swap.last_process_error = None;
+					swap.last_check_error = None;
 					trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 					(state, action, expiration)
 				}
 				Err(e) => {
 					do_check = false;
-					swap.last_process_error = Some(format!("{}", e));
+					swap.last_check_error = Some(format!("{}", e));
 					swap.add_journal_message(format!("Processing error: {}", e));
 					(swap.state.clone(), Action::None, None)
 				}
@@ -307,7 +307,7 @@ where
 				expiration,
 				trade_start_time,
 				secondary_address: swap.get_secondary_address(),
-				last_process_error: swap.last_process_error.clone(),
+				last_error: swap.get_last_error(),
 			});
 		} else {
 			result.push(SwapListInfo {
@@ -323,7 +323,7 @@ where
 				expiration: None,
 				trade_start_time,
 				secondary_address: swap.get_secondary_address(),
-				last_process_error: swap.last_process_error.clone(),
+				last_error: swap.get_last_error(),
 			});
 		}
 		trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
@@ -630,6 +630,7 @@ pub fn update_swap_status_action<'a, L, C, K>(
 		Option<i64>,
 		Vec<StateEtaInfo>,
 		Vec<SwapJournalRecord>,
+		Option<String>,
 	),
 	Error,
 >
@@ -659,12 +660,13 @@ where
 
 	match update_swap_status_action_impl(&mut swap, &context, node_client, &keychain) {
 		Ok((next_state_id, action, time_limit, eta)) => {
-			swap.last_process_error = None;
+			swap.last_check_error = None;
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
-			Ok((next_state_id, action, time_limit, eta, swap.journal))
+			let last_error = swap.get_last_error();
+			Ok((next_state_id, action, time_limit, eta, swap.journal, last_error))
 		}
 		Err(e) => {
-			swap.last_process_error = Some(format!("{}", e));
+			swap.last_check_error = Some(format!("{}", e));
 			swap.add_journal_message(format!("Processing error: {}", e));
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 			Err(e)
@@ -984,8 +986,9 @@ where
 		secondary_fee,
 		secondary_address,
 	) {
-		Ok(respond) => {
+		Ok(mut respond) => {
 			swap.last_process_error = None;
+			respond.last_error = swap.get_last_error();
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 			Ok(respond)
 		}

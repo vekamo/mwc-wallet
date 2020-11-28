@@ -131,7 +131,9 @@ pub struct Swap {
 	pub posted_redeem: Option<i64>,
 	/// timestamp when refund transaction was posted
 	pub posted_refund: Option<i64>,
-	/// Last error message if process was failed. Note, error will be very generic
+	/// Last error message if --check was failed. Note, error will be very generic
+	pub last_check_error: Option<String>,
+	/// Last error message if --process was failed. Note, error will be very generic
 	pub last_process_error: Option<String>,
 	/// Event log for this swap trade.
 	pub journal: Vec<SwapJournalRecord>,
@@ -436,6 +438,16 @@ impl Swap {
 		// adding extra 10% for chain instability
 		self.secondary_confirmations as i64 * self.secondary_currency.block_time_period_sec() * 11
 			/ 10
+	}
+
+	/// Latest error message. Check has higher priority because it is normally done first
+	pub fn get_last_error(&self) -> Option<String> {
+		if self.last_check_error.is_some() {
+			self.last_check_error.clone()
+		}
+		else {
+			self.last_process_error.clone()
+		}
 	}
 }
 

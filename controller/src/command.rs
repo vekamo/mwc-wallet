@@ -1432,7 +1432,7 @@ where
 								"action" : swap_info.action.unwrap_or(Action::None).to_string(),
 								"expiration" : swap_info.expiration.unwrap_or(0).to_string(),
 								"start_time" : swap_info.trade_start_time.to_string(),
-								"last_process_error" : swap_info.last_process_error,
+								"last_process_error" : swap_info.last_error.clone(),
 							});
 							res.push(item);
 						}
@@ -1564,7 +1564,7 @@ where
 						args.electrum_node_uri1.clone(),
 						args.electrum_node_uri2.clone(),
 					)?;
-					let (_status, action, time_limit, roadmap, journal_records) =
+					let (_status, action, time_limit, roadmap, journal_records, last_error) =
 						owner_swap::update_swap_status_action(
 							wallet_inst.clone(),
 							keychain_mask,
@@ -1620,7 +1620,7 @@ where
 							"communicationMethod" : swap.communication_method,
 							"communicationAddress" : swap.communication_address,
 
-							"last_process_error" : swap.last_process_error,
+							"last_process_error" : last_error,
 							"currentAction": action.to_string(),
 							"roadmap" : road_map_to_print,
 							"journal_records" : journal_records_to_print,
@@ -1990,7 +1990,7 @@ where
 					args.electrum_node_uri1.clone(),
 					args.electrum_node_uri2.clone(),
 				)?;
-				let (state, action, time_limit, roadmap, journal_records) =
+				let (state, action, time_limit, roadmap, journal_records, _last_error ) =
 					owner_swap::update_swap_status_action(
 						wallet_inst2.clone(),
 						keychain_mask,
@@ -2073,6 +2073,7 @@ where
 							_time_limit,
 							roadmap,
 							mut journal_records,
+							mut last_error,
 						) = match owner_swap::update_swap_status_action(
 							wallet_inst2.clone(),
 							km2.as_ref(),
@@ -2105,6 +2106,7 @@ where
 							) {
 								Ok(res) => {
 									curr_state = res.next_state_id;
+									last_error = res.last_error;
 									if let Some(a) = res.action {
 										curr_action = a;
 									}
@@ -2179,7 +2181,7 @@ where
 							let item = json::json!({
 									"swap_id" : swap_id2.clone(),
 									"stateCmd" : curr_state.to_cmd_str(),
-									"last_process_error" : swap.last_process_error,
+									"last_process_error" : last_error,
 									"currentAction": curr_action.to_string(),
 									"currentState" : curr_state.to_string(),
 									"roadmap" : road_map_to_print,

@@ -304,6 +304,8 @@ pub struct StateProcessRespond {
 	pub time_limit: Option<i64>,
 	/// New swap journal records
 	pub journal: Vec<SwapJournalRecord>,
+	/// Last erro for this swap
+	pub last_error: Option<String>,
 }
 
 impl StateProcessRespond {
@@ -314,6 +316,7 @@ impl StateProcessRespond {
 			action: None,
 			time_limit: None,
 			journal: Vec::new(),
+			last_error: None,
 		}
 	}
 
@@ -324,6 +327,7 @@ impl StateProcessRespond {
 			action: Some(action),
 			time_limit: self.time_limit,
 			journal: self.journal,
+			last_error: self.last_error,
 		}
 	}
 
@@ -334,6 +338,7 @@ impl StateProcessRespond {
 			action: self.action,
 			time_limit: Some(tl),
 			journal: self.journal,
+			last_error: self.last_error,
 		}
 	}
 }
