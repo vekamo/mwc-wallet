@@ -810,7 +810,7 @@ pub fn foreign_listener<L, C, K>(
 		let _ = lc.wallet_inst()?;
 	}
 	// need to keep in scope while the main listener is running
-	let _tor_process = match use_tor {
+	let tor_process = match use_tor {
 		true => match init_tor_listener(wallet.clone(), keychain_mask.clone(), addr, None) {
 			Ok(tp) => Some(tp),
 			Err(e) => {
@@ -847,6 +847,11 @@ pub fn foreign_listener<L, C, K>(
 		.map_err(|e| ErrorKind::GenericError(format!("API thread panicked :{:?}", e)).into());
 
 	*FOREIGN_API_RUNNING.write().unwrap() = false;
+
+	// Stopping tor, we failed to start in any case
+	if let Some(mut tor_process) = tor_process {
+		let _ = tor_process.kill();
+	}
 
 	res
 }
