@@ -444,8 +444,7 @@ impl Swap {
 	pub fn get_last_error(&self) -> Option<String> {
 		if self.last_check_error.is_some() {
 			self.last_check_error.clone()
-		}
-		else {
+		} else {
 			self.last_process_error.clone()
 		}
 	}

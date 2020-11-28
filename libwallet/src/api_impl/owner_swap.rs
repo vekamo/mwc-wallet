@@ -663,7 +663,14 @@ where
 			swap.last_check_error = None;
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 			let last_error = swap.get_last_error();
-			Ok((next_state_id, action, time_limit, eta, swap.journal, last_error))
+			Ok((
+				next_state_id,
+				action,
+				time_limit,
+				eta,
+				swap.journal,
+				last_error,
+			))
 		}
 		Err(e) => {
 			swap.last_check_error = Some(format!("{}", e));

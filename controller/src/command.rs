@@ -1990,7 +1990,7 @@ where
 					args.electrum_node_uri1.clone(),
 					args.electrum_node_uri2.clone(),
 				)?;
-				let (state, action, time_limit, roadmap, journal_records, _last_error ) =
+				let (state, action, time_limit, roadmap, journal_records, _last_error) =
 					owner_swap::update_swap_status_action(
 						wallet_inst2.clone(),
 						keychain_mask,
