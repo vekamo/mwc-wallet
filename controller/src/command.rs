@@ -1932,7 +1932,11 @@ where
 					})?;
 
 					if !controller::is_foreign_api_running() {
-						return Err(ErrorKind::GenericError("tor listener is not running. Please start it with 'listen' command or '--start_listener' argument".to_string()).into());
+						return Err(ErrorKind::GenericError(
+							"Foreign API is not active and tor listener is not running."
+								.to_string(),
+						)
+						.into());
 					}
 					from_address = controller::get_current_tor_address()
 						.ok_or(ErrorKind::GenericError("Tor is not running".to_string()))?;
