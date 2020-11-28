@@ -1236,7 +1236,7 @@ where
 				Update::Offer(_) | Update::AcceptOffer(_) => 1,
 				_ => 2,
 			};
-
+			swap.wait_for_backup1 = true; // Processing message pessimistic way. We don't want to trigger any action
 			fsm.process(Input::IncomeMessage(message), &mut swap, &context, &tx_conf)?;
 			trades::store_swap_trade(&context, &swap, &skey, &*lock)?;
 			println!("INFO: Processed income message for SwapId {}", swap.id);
