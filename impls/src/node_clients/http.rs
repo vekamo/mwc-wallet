@@ -384,7 +384,7 @@ impl NodeClient for HTTPNodeClient {
 			return Some(v.clone());
 		}
 		let retval = match self
-			.send_json_request::<GetVersionResp>("get_version", &serde_json::Value::Null, 2)
+			.send_json_request::<GetVersionResp>("get_version", &serde_json::Value::Null, 1)
 		{
 			Ok(n) => NodeVersionInfo {
 				node_version: n.node_version,

@@ -1557,13 +1557,61 @@ where
 			let result = owner_swap::swap_get(wallet_inst.clone(), keychain_mask, &swap_id);
 			match result {
 				Ok(swap) => {
-					let conf_status = owner_swap::get_swap_tx_tstatus(
+					let conf_status = match owner_swap::get_swap_tx_tstatus(
 						wallet_inst.clone(),
 						keychain_mask,
 						&swap_id,
 						args.electrum_node_uri1.clone(),
 						args.electrum_node_uri2.clone(),
-					)?;
+					) {
+						Ok(status) => status,
+						Err(e) => {
+							// json_format is used for QT wallet. And we don't want to just fail because of that. We need to respond with as much details as possible
+							if args.json_format {
+								let journal_records_to_print: Vec<SwapJournalRecordString> = swap
+									.journal
+									.iter()
+									.map(|j| SwapJournalRecordString {
+										time: j.time.to_string(),
+										message: j.message.to_string(),
+									})
+									.collect();
+
+								let item = json::json!({
+									"swapId" : swap.id.to_string(),
+									"isSeller" : swap.is_seller(),
+									"mwcAmount": core::amount_to_hr_string(swap.primary_amount, true),
+									"secondaryCurrency" : swap.secondary_currency.to_string(),
+									"secondaryAmount" : swap.secondary_currency.amount_to_hr_string(swap.secondary_amount, true),
+									"secondaryAddress" : swap.get_secondary_address(),
+									"secondaryFee" : swap.secondary_fee.to_string(),
+									"secondaryFeeUnits" : swap.secondary_currency.get_fee_units(),
+									"mwcConfirmations" : swap.mwc_confirmations,
+									"secondaryConfirmations" : swap.secondary_confirmations,
+									"messageExchangeTimeLimit" : swap.message_exchange_time_sec,
+									"redeemTimeLimit" : swap.redeem_time_sec,
+									"sellerLockingFirst" : swap.seller_lock_first,
+									"mwcLockHeight" : swap.refund_slate.lock_height,
+									"mwcLockTime" : "0".to_string(),
+									"secondaryLockTime" : swap.get_time_btc_lock().to_string(),
+									"communicationMethod" : swap.communication_method,
+									"communicationAddress" : swap.communication_address,
+
+									"last_process_error" : format!("{}", e),
+									"currentAction": "",
+									"roadmap" : Vec::<StateEtaInfoString>::new(),
+									"journal_records" : journal_records_to_print,
+									"electrumNodeUri1" : swap.electrum_node_uri1.clone().unwrap_or("".to_string()),
+									"electrumNodeUri2" : swap.electrum_node_uri2.clone().unwrap_or("".to_string()),
+								});
+								println!("JSON: {}", item.to_string());
+								return Ok(());
+							} else {
+								return Err(Error::from(e));
+							}
+						}
+					};
+
 					let (_status, action, time_limit, roadmap, journal_records, last_error) =
 						owner_swap::update_swap_status_action(
 							wallet_inst.clone(),

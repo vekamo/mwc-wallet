@@ -1093,7 +1093,7 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		json_format: false,
 		electrum_node_uri1,
 		electrum_node_uri2,
-		wait_for_backup1: false, // waiting primary usage is qt wallet. We are not documented that properly to make available for all users.
+		wait_for_backup1: false, // waiting is a primary usage for qt wallet. We are not documented that properly to make available for all users.
 	})
 }
 
