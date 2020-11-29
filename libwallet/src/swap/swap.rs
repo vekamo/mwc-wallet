@@ -134,7 +134,7 @@ pub struct Swap {
 	/// Last error message if --check was failed. Note, error will be very generic
 	pub last_check_error: Option<String>,
 	/// Last error message if --process was failed. Note, error will be very generic
-	pub last_process_error: Option<String>,
+	pub last_process_error: Option<(StateId, String)>,
 	/// Event log for this swap trade.
 	pub journal: Vec<SwapJournalRecord>,
 	/// Secondary fee as it comes from the parameters or default value.
@@ -445,7 +445,17 @@ impl Swap {
 		if self.last_check_error.is_some() {
 			self.last_check_error.clone()
 		} else {
-			self.last_process_error.clone()
+			if let Some((state, err)) = self.last_process_error.clone() {
+				// Error is reportable only if it happend for the current state. If state was changed,
+				// th error is not applicable any more.
+				if state == self.state {
+					Some(err)
+				} else {
+					None
+				}
+			} else {
+				None
+			}
 		}
 	}
 }

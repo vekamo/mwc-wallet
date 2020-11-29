@@ -1000,7 +1000,7 @@ where
 			Ok(respond)
 		}
 		Err(e) => {
-			swap.last_process_error = Some(format!("{}", e));
+			swap.last_process_error = Some((swap.state.clone(), format!("{}", e)));
 			swap.add_journal_message(format!("Processing error: {}", e));
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 			Err(e)
