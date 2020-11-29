@@ -112,6 +112,7 @@ pub trait SwapApi<K: Keychain>: Sync + Send {
 		keychain: &K,
 		swap: &mut Swap,
 		context: &Context,
+		post_tx: bool,
 	) -> Result<(), ErrorKind>;
 
 	/// Get a secondary address for the lock account
@@ -128,6 +129,7 @@ pub trait SwapApi<K: Keychain>: Sync + Send {
 		context: &Context,
 		swap: &mut Swap,
 		refund_address: Option<String>,
+		post_tx: bool,
 	) -> Result<(), ErrorKind>;
 
 	/// Validate clients. We want to be sure that the clients able to acceess the servers

@@ -230,6 +230,7 @@ where
 		swap: &mut Swap,
 		refund_address: &String,
 		input_script: &Script,
+		post_tx: bool,
 	) -> Result<(), ErrorKind> {
 		let (pending_amount, confirmed_amount, _, conf_outputs) =
 			self.btc_balance(swap, input_script, 0)?;
@@ -260,9 +261,12 @@ where
 		)?;
 
 		let tx = refund_tx.tx.clone();
-		if let Err(_) = self.btc_node_client1.lock().post_tx(tx.clone()) {
-			self.btc_node_client2.lock().post_tx(tx)?;
+		if post_tx {
+			if let Err(_) = self.btc_node_client1.lock().post_tx(tx.clone()) {
+				self.btc_node_client2.lock().post_tx(tx)?;
+			}
 		}
+
 		btc_data.refund_tx = Some(refund_tx.txid);
 		btc_data.tx_fee = Some(swap.secondary_fee);
 		Ok(())
@@ -501,6 +505,7 @@ where
 		keychain: &K,
 		swap: &mut Swap,
 		context: &Context,
+		post_tx: bool,
 	) -> Result<(), ErrorKind> {
 		assert!(swap.is_seller());
 
@@ -508,8 +513,10 @@ where
 
 		let btc_tx = self.seller_build_redeem_tx(keychain, swap, context, &input_script)?;
 
-		if let Err(_) = self.btc_node_client1.lock().post_tx(btc_tx.tx.clone()) {
-			self.btc_node_client2.lock().post_tx(btc_tx.tx)?;
+		if post_tx {
+			if let Err(_) = self.btc_node_client1.lock().post_tx(btc_tx.tx.clone()) {
+				self.btc_node_client2.lock().post_tx(btc_tx.tx)?;
+			}
 		}
 
 		let btc_data = swap.secondary_data.unwrap_btc_mut()?;
@@ -712,6 +719,7 @@ where
 		context: &Context,
 		swap: &mut Swap,
 		refund_address: Option<String>,
+		post_tx: bool,
 	) -> Result<(), ErrorKind> {
 		assert!(!swap.is_seller());
 
@@ -723,7 +731,14 @@ where
 			.validate_address(&refund_address_str)?;
 
 		let input_script = self.script(swap)?;
-		self.buyer_refund(keychain, context, swap, &refund_address_str, &input_script)?;
+		self.buyer_refund(
+			keychain,
+			context,
+			swap,
+			&refund_address_str,
+			&input_script,
+			post_tx,
+		)?;
 		Ok(())
 	}
 

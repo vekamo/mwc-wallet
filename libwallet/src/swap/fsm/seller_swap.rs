@@ -1199,8 +1199,12 @@ where
 				)
 			}
 			Input::Execute => {
-				self.swap_api
-					.publish_secondary_transaction(&*self.keychain, swap, context)?;
+				self.swap_api.publish_secondary_transaction(
+					&*self.keychain,
+					swap,
+					context,
+					true,
+				)?;
 				debug_assert!(swap.secondary_data.unwrap_btc()?.redeem_tx.is_some());
 				swap.posted_redeem = Some(swap::get_cur_time());
 				swap.add_journal_message(format!(

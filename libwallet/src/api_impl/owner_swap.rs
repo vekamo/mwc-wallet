@@ -580,7 +580,91 @@ where
 	let skey = get_swap_storage_key(&keychain)?;
 	let swap_lock = trades::get_swap_lock(&"export".to_string());
 	let _l = swap_lock.lock();
-	Ok(trades::import_trade(trade_file_name, &skey, &*swap_lock)?)
+	let node_client = w.w2n_client();
+
+	// Checking if MWC node is available
+	let mwc_tip = node_client.get_chain_tip()?.0;
+	if mwc_tip == 0 {
+		return Err(ErrorKind::Generic(
+			"Unable contact healthy MWC node. The node probably in sync process".to_string(),
+		)
+		.into());
+	}
+
+	let swap_id = trades::import_trade(trade_file_name, &skey, &*swap_lock)?;
+
+	// It is not enough to restore the data. Now we need to update the state. Backup likely from the past, so something can happen.
+	let swap_lock = trades::get_swap_lock(&swap_id.to_string());
+	let _l = swap_lock.lock();
+	let (context, mut swap) = trades::get_swap_trade(&swap_id, &skey, &*swap_lock)?;
+
+	let (uri1, uri2) = trades::get_electrumx_uri(
+		&swap.secondary_currency,
+		&swap.electrum_node_uri1,
+		&swap.electrum_node_uri2,
+	)?;
+	let swap_api = crate::swap::api::create_instance(
+		&swap.secondary_currency,
+		node_client.clone(),
+		uri1,
+		uri2,
+	)?;
+
+	// let's calcutate the scrip hashes if needed and can
+	if swap.is_seller() && swap.secondary_data.unwrap_btc()?.redeem_tx.is_none() {
+		// try to calculate the hash if possible
+		let _ = swap_api.publish_secondary_transaction(&keychain, &mut swap, &context, false);
+	}
+	if !swap.is_seller() && swap.secondary_data.unwrap_btc()?.refund_tx.is_none() {
+		let refund_address = swap.unwrap_buyer()?;
+		let _ = swap_api.post_secondary_refund_tx(
+			&keychain,
+			&context,
+			&mut swap,
+			refund_address,
+			false,
+		);
+	}
+
+	let tx_conf = swap_api.request_tx_confirmations(&keychain, &swap)?;
+	if tx_conf.mwc_tip == 0 {
+		// here the swap trade is written, there is not much what we can do
+		return Err(ErrorKind::Generic("Unable contact healthy MWC node. Please fix the problem and retry to restore this swap trade".to_string()).into());
+	}
+	if tx_conf.secondary_tip == 0 {
+		// here the swap trade is written, there is not much what we can do
+		return Err(ErrorKind::Generic(format!("Unable contact {} ElectrumX node. Please fix the problem and retry to restore this swap trade", swap.secondary_currency)).into());
+	}
+
+	if swap.is_seller() {
+		if tx_conf.secondary_redeem_conf.is_some() {
+			swap.state = StateId::SellerWaitingForRedeemConfirmations;
+		} else if tx_conf.mwc_refund_conf.is_some() {
+			swap.state = StateId::SellerWaitingForRefundConfirmations;
+		} else if tx_conf.mwc_lock_conf.is_some() {
+			swap.state = StateId::SellerWaitingForLockConfirmations;
+		} else {
+			swap.state = StateId::SellerCancelled;
+		}
+	} else {
+		// Buyer case
+		if tx_conf.mwc_redeem_conf.is_some() {
+			swap.state = StateId::BuyerWaitForRedeemMwcConfirmations;
+		} else if tx_conf.secondary_refund_conf.is_some() {
+			swap.state = StateId::BuyerWaitingForRefundConfirmations;
+		} else if tx_conf.secondary_lock_conf.is_some() {
+			swap.state = StateId::BuyerWaitingForLockConfirmations;
+		} else {
+			swap.state = StateId::BuyerCancelled;
+		}
+	}
+
+	swap.last_check_error = None;
+	swap.last_process_error = None;
+
+	trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+
+	Ok(swap_id)
 }
 
 fn update_swap_status_action_impl<'a, C, K>(

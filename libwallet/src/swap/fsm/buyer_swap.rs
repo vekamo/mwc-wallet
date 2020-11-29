@@ -1308,6 +1308,7 @@ where
 					context,
 					swap,
 					refund_address,
+					true,
 				)?;
 				swap.posted_refund = Some(swap::get_cur_time());
 				swap.add_journal_message(format!("{} refund is posted", swap.secondary_currency));
