@@ -2907,7 +2907,7 @@ mod tests {
 			// BRANCH - Check Buyer cancel in far future is different
 			buyer.pushs();
 			let cur_ts = swap::get_cur_time();
-			swap::set_testing_cur_time(btc_lock_time_limit + 1);
+			swap::set_testing_cur_time(btc_lock_time_limit + 1 + 600*5); // Will wait 5 blocks before refund
 			let res = buyer.process(Input::Cancel).unwrap();
 			assert_eq!(res.next_state_id, StateId::BuyerPostingRefundForSecondary);
 			swap::set_testing_cur_time(cur_ts);
@@ -3100,7 +3100,7 @@ mod tests {
 			let res = buyer.process(Input::Cancel).unwrap();
 			assert_eq!(res.next_state_id, StateId::BuyerWaitingForRefundTime);
 			assert_eq!(res.action.unwrap().get_id_str(), "WaitingForBtcRefund");
-			assert_eq!(res.time_limit.unwrap(), btc_lock_time_limit);
+			assert_eq!(res.time_limit.unwrap(), btc_lock_time_limit + 600*5); // waiting for 5 extra blocks before refund
 
 			let lock_height = seller.swap.refund_slate.lock_height;
 			let need_blocks = lock_height - nc.state.lock().height;
@@ -3255,7 +3255,7 @@ mod tests {
 			test_responds(
 				&mut buyer,
 				StateId::BuyerWaitingForRefundTime,
-				Some((btc_lock_time_limit, -1)),
+				Some((btc_lock_time_limit + 600*5, -1)),
 				None,
 				StateId::BuyerWaitingForRefundTime, // Expected state before timeput
 				StateId::BuyerPostingRefundForSecondary, // Expected state after timeout
@@ -3267,7 +3267,7 @@ mod tests {
 				None,
 			);
 
-			swap::set_testing_cur_time(btc_lock_time_limit + 1);
+			swap::set_testing_cur_time(btc_lock_time_limit + 1  + 600*5);
 
 			let res = buyer.process(Input::Check).unwrap();
 			assert_eq!(res.next_state_id, StateId::BuyerPostingRefundForSecondary);
@@ -3455,7 +3455,7 @@ mod tests {
 			test_responds(
 				&mut buyer,
 				StateId::BuyerWaitingForLockConfirmations,
-				Some((lock_second_message_round_timelimit, btc_lock_time_limit)), // timeout if possible
+				Some((lock_second_message_round_timelimit, btc_lock_time_limit + 600*5)), // timeout if possible
 				Some(StateId::BuyerWaitingForRefundTime),
 				StateId::BuyerWaitingForLockConfirmations, // Expected state before timeput
 				StateId::BuyerWaitingForRefundTime,        // Expected state after timeout
@@ -3488,7 +3488,7 @@ mod tests {
 		test_responds(
 			&mut buyer,
 			StateId::BuyerWaitingForLockConfirmations,
-			Some((lock_second_message_round_timelimit, btc_lock_time_limit)), // timeout if possible
+			Some((lock_second_message_round_timelimit, btc_lock_time_limit + 600*5)), // timeout if possible
 			Some(StateId::BuyerWaitingForRefundTime),
 			StateId::BuyerWaitingForLockConfirmations, // Expected state before timeput
 			StateId::BuyerWaitingForRefundTime,        // Expected state after timeout
@@ -3527,7 +3527,7 @@ mod tests {
 			test_responds(
 				&mut buyer,
 				StateId::BuyerWaitingForLockConfirmations,
-				Some((lock_start_timelimit, btc_lock_time_limit)), // timeout if possible
+				Some((lock_start_timelimit, btc_lock_time_limit + 600*5)), // timeout if possible
 				Some(StateId::BuyerWaitingForRefundTime),
 				StateId::BuyerPostingSecondaryToMultisigAccount, // Expected state before timeput
 				StateId::BuyerCancelled,                         // Expected state after timeout
@@ -3564,7 +3564,7 @@ mod tests {
 		test_responds(
 			&mut buyer,
 			StateId::BuyerWaitingForLockConfirmations,
-			Some((lock_second_message_round_timelimit, btc_lock_time_limit)), // timeout if possible
+			Some((lock_second_message_round_timelimit, btc_lock_time_limit + 600*5)), // timeout if possible
 			Some(StateId::BuyerWaitingForRefundTime),
 			StateId::BuyerSendingInitRedeemMessage, // Expected state before timeput
 			StateId::BuyerWaitingForRefundTime,     // Expected state after timeout
@@ -3641,11 +3641,11 @@ mod tests {
 			test_responds(
 				&mut buyer,
 				StateId::BuyerSendingInitRedeemMessage,
-				Some((lock_second_message_round_timelimit, btc_lock_time_limit)), // timeout if possible
+				Some((lock_second_message_round_timelimit, btc_lock_time_limit + 600*5)), // timeout if possible
 				Some(StateId::BuyerWaitingForRefundTime),
 				StateId::BuyerWaitingForLockConfirmations, // Expected state before timeput
 				StateId::BuyerWaitingForRefundTime,        // Expected state after timeout
-				Some((lock_second_message_round_timelimit, btc_lock_time_limit)),
+				Some((lock_second_message_round_timelimit, btc_lock_time_limit + 600*5)),
 				Some(StateId::BuyerWaitingForLockConfirmations), // Expected state before timeput
 				Some(StateId::BuyerWaitingForRefundTime),        // Expected state after timeout
 				None,                                            // Acceptable message
@@ -3678,7 +3678,7 @@ mod tests {
 			test_responds(
 				&mut buyer,
 				StateId::BuyerSendingInitRedeemMessage,
-				Some((lock_second_message_round_timelimit, btc_lock_time_limit)), // timeout if possible
+				Some((lock_second_message_round_timelimit, btc_lock_time_limit + 600*5)), // timeout if possible
 				Some(StateId::BuyerWaitingForRefundTime),
 				StateId::BuyerCancelled, // Expected state before timeput
 				StateId::BuyerCancelled, // Expected state after timeout
@@ -3711,7 +3711,7 @@ mod tests {
 		test_responds(
 			&mut buyer,
 			StateId::BuyerSendingInitRedeemMessage,
-			Some((lock_second_message_round_timelimit, btc_lock_time_limit)), // timeout if possible
+			Some((lock_second_message_round_timelimit, btc_lock_time_limit + 600*5)), // timeout if possible
 			Some(StateId::BuyerWaitingForRefundTime),
 			StateId::BuyerSendingInitRedeemMessage, // Expected state before timeput
 			StateId::BuyerWaitingForRefundTime,     // Expected state after timeout
@@ -3792,13 +3792,13 @@ mod tests {
 		test_responds(
 			&mut buyer,
 			StateId::BuyerWaitingForRespondRedeemMessage,
-			Some((lock_second_message_round_timelimit, btc_lock_time_limit)), // timeout if possible
+			Some((lock_second_message_round_timelimit, btc_lock_time_limit + 600*5)), // timeout if possible
 			Some(StateId::BuyerWaitingForRefundTime),
 			StateId::BuyerWaitingForRespondRedeemMessage, // Expected state before timeput
 			StateId::BuyerWaitingForRefundTime,           // Expected state after timeout
 			Some((
 				lock_second_message_round_timelimit + REDEEM_TIME,
-				btc_lock_time_limit,
+				btc_lock_time_limit + 600*5,
 			)),
 			None,                   // Expected state before timeput
 			None,                   // Expected state after timeout
@@ -3834,7 +3834,7 @@ mod tests {
 			test_responds(
 				&mut buyer,
 				StateId::BuyerWaitingForRespondRedeemMessage,
-				Some((lock_second_message_round_timelimit, btc_lock_time_limit)), // timeout if possible
+				Some((lock_second_message_round_timelimit, btc_lock_time_limit + 600*5)), // timeout if possible
 				Some(StateId::BuyerWaitingForRefundTime),
 				StateId::BuyerWaitingForLockConfirmations, // Expected state before timeput
 				StateId::BuyerWaitingForRefundTime,        // Expected state after timeout
@@ -3913,11 +3913,11 @@ mod tests {
 			test_responds(
 				&mut buyer,
 				StateId::BuyerWaitingForRespondRedeemMessage,
-				Some((lock_second_message_round_timelimit, btc_lock_time_limit)), // timeout if possible
+				Some((lock_second_message_round_timelimit, btc_lock_time_limit + 600*5)), // timeout if possible
 				Some(StateId::BuyerWaitingForRefundTime),
 				StateId::BuyerWaitingForLockConfirmations, // Expected state before timeput
 				StateId::BuyerWaitingForRefundTime,        // Expected state after timeout
-				Some((lock_second_message_round_timelimit, btc_lock_time_limit)),
+				Some((lock_second_message_round_timelimit, btc_lock_time_limit + 600*5)),
 				None,                   // Expected state before timeput
 				None,                   // Expected state after timeout
 				Some(message4.clone()), // Acceptable message
@@ -4011,7 +4011,7 @@ mod tests {
 			StateId::BuyerRedeemMwc,
 			Some((
 				lock_second_message_round_timelimit + REDEEM_TIME,
-				btc_lock_time_limit,
+				btc_lock_time_limit + 600*5,
 			)), // timeout if possible
 			Some(StateId::BuyerWaitingForRefundTime),
 			StateId::BuyerRedeemMwc,            // Expected state before timeput
