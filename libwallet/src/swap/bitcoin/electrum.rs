@@ -54,7 +54,7 @@ impl From<ElectrumError> for ErrorKind {
 	fn from(error: ElectrumError) -> ErrorKind {
 		match error {
 			ElectrumError::Response(e) => {
-				ErrorKind::ElectrumNodeClient(format!("Received error: {}", e.message))
+				ErrorKind::ElectrumNodeClient(format!("ElectrumX error response: {}", e.message))
 			}
 			ElectrumError::Other(e) => e,
 		}
@@ -83,7 +83,10 @@ impl ElectrumRpcClient {
 				if e.id.map(|res_id| res_id == id).unwrap_or(true) {
 					let err: ElectrumResponseError =
 						serde_json::from_value(e.error).map_err(|e| {
-							ErrorKind::ElectrumNodeClient(format!("Received error, {}", e))
+							ErrorKind::ElectrumNodeClient(format!(
+								"ElectrumX error response, {}",
+								e
+							))
 						})?;
 					return Err(err.into());
 				}

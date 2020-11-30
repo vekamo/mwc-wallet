@@ -411,17 +411,30 @@ impl Swap {
 		self.get_time_mwc_lock() + self.redeem_time_sec as i64
 	}
 
-	/// BTC lock time
-	pub fn get_time_btc_lock(&self) -> i64 {
+	/// BTC lock time for script
+	pub fn get_time_btc_lock_script(&self) -> i64 {
 		self.get_time_mwc_refund()
 			+ self.redeem_time_sec as i64
 			+ self.get_timeinterval_mwc_lock()
 			+ self.get_timeinterval_btc_lock()
 	}
 
+	/// BTC lock time publish
+	pub fn get_time_btc_lock_publish(&self) -> i64 {
+		// Here is what BTC node said:
+		// Only accept nLockTime-using transactions that can be mined in the next
+		// block; we don't want our mempool filled up with transactions that can't
+		// be mined yet.
+		//
+		// As a result we have to wait guarantee 1 block. To be safe, we will wait time for 5 blocks before we try to publish
+		// 5 is a large number, but accordign the testnet, it is needed.
+		self.get_time_btc_lock_script() + self.secondary_currency.block_time_period_sec() * 5
+	}
+
 	/// btc redeem time limit
 	pub fn get_time_btc_redeem_limit(&self) -> i64 {
-		self.get_time_btc_lock() - self.get_timeinterval_btc_lock()
+		// Using script time as lowest possible value
+		self.get_time_btc_lock_script() - self.get_timeinterval_btc_lock()
 	}
 
 	////////////////////////////////////////////////////////////

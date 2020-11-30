@@ -1150,8 +1150,9 @@ where
 	}
 	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
 		Some(
+			// Using script lock time as more pessimistic
 			StateEtaInfo::new("Post Secondary Redeem Transaction")
-				.end_time(swap.get_time_btc_lock() - swap.get_timeinterval_btc_lock()),
+				.end_time(swap.get_time_btc_lock_script() - swap.get_timeinterval_btc_lock()),
 		)
 	}
 	fn is_cancellable(&self) -> bool {
@@ -1191,11 +1192,14 @@ where
 
 				// Ready to redeem BTC.
 				Ok(
+					// Using script lock time for ETA as more pessimistic
 					StateProcessRespond::new(StateId::SellerRedeemSecondaryCurrency)
 						.action(Action::SellerPublishTxSecondaryRedeem(
 							swap.secondary_currency,
 						))
-						.time_limit(swap.get_time_btc_lock() - swap.get_timeinterval_btc_lock()),
+						.time_limit(
+							swap.get_time_btc_lock_script() - swap.get_timeinterval_btc_lock(),
+						),
 				)
 			}
 			Input::Execute => {

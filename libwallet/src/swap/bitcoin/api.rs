@@ -109,7 +109,7 @@ where
 					"swap.redeem_public value is not defined. Method BtcSwapApi::script"
 						.to_string(),
 				))?,
-			swap.get_time_btc_lock() as u64,
+			swap.get_time_btc_lock_script() as u64,
 		)?)
 	}
 
@@ -247,7 +247,7 @@ where
 			SwitchCommitmentType::None,
 		)?;
 
-		let btc_lock_time = swap.get_time_btc_lock();
+		let btc_lock_time = swap.get_time_btc_lock_script();
 		let btc_data = swap.secondary_data.unwrap_btc_mut()?;
 		let refund_tx = btc_data.refund_tx(
 			&self.secondary_currency,

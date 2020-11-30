@@ -1172,7 +1172,7 @@ impl State for BuyerWaitingForRefundTime {
 	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
 		Some(
 			StateEtaInfo::new("Waiting for Secondary to unlock")
-				.start_time(swap.get_time_btc_lock()),
+				.start_time(swap.get_time_btc_lock_publish()),
 		)
 	}
 	fn is_cancellable(&self) -> bool {
@@ -1196,7 +1196,7 @@ impl State for BuyerWaitingForRefundTime {
 				debug_assert!(tx_conf.mwc_redeem_conf.is_none());
 
 				let cur_time = swap::get_cur_time();
-				let time_limit = swap.get_time_btc_lock();
+				let time_limit = swap.get_time_btc_lock_publish();
 				if cur_time > time_limit {
 					swap.add_journal_message(format!(
 						"{} funds are unlocked, ready for refund",
@@ -1263,7 +1263,10 @@ where
 		StateId::BuyerPostingRefundForSecondary
 	}
 	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
-		Some(StateEtaInfo::new("Post Refund for Secondary").start_time(swap.get_time_btc_lock()))
+		Some(
+			StateEtaInfo::new("Post Refund for Secondary")
+				.start_time(swap.get_time_btc_lock_publish()),
+		)
 	}
 	fn is_cancellable(&self) -> bool {
 		false
@@ -1280,7 +1283,7 @@ where
 		match input {
 			Input::Check => {
 				let cur_time = swap::get_cur_time();
-				let time_limit = swap.get_time_btc_lock();
+				let time_limit = swap.get_time_btc_lock_publish();
 				if cur_time < time_limit {
 					return Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime));
 				}

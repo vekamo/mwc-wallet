@@ -1593,7 +1593,7 @@ where
 									"sellerLockingFirst" : swap.seller_lock_first,
 									"mwcLockHeight" : swap.refund_slate.lock_height,
 									"mwcLockTime" : "0".to_string(),
-									"secondaryLockTime" : swap.get_time_btc_lock().to_string(),
+									"secondaryLockTime" : swap.get_time_btc_lock_publish().to_string(),
 									"communicationMethod" : swap.communication_method,
 									"communicationAddress" : swap.communication_address,
 
@@ -1664,7 +1664,7 @@ where
 							"sellerLockingFirst" : swap.seller_lock_first,
 							"mwcLockHeight" : swap.refund_slate.lock_height,
 							"mwcLockTime" : mwc_lock_time.to_string(),
-							"secondaryLockTime" : swap.get_time_btc_lock().to_string(),
+							"secondaryLockTime" : swap.get_time_btc_lock_publish().to_string(),
 							"communicationMethod" : swap.communication_method,
 							"communicationAddress" : swap.communication_address,
 
