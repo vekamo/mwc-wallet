@@ -1294,7 +1294,7 @@ where
 					if conf >= swap.secondary_confirmations {
 						// We are done
 						swap.add_journal_message(format!(
-							"{} redeem transaction get enough confirmations. Trade is complete",
+							"{} redeem transaction has enough confirmations. Trade is complete",
 							swap.secondary_currency
 						));
 						return Ok(StateProcessRespond::new(StateId::SellerSwapComplete));
@@ -1685,7 +1685,7 @@ impl State for SellerWaitingForRefundConfirmations {
 				let refund_conf = tx_conf.mwc_refund_conf.unwrap_or(0);
 				if refund_conf > swap.mwc_confirmations {
 					// already published.
-					swap.add_journal_message("MWC refund transaction get enough confirmation. Trade is cancelled and refunded".to_string());
+					swap.add_journal_message("MWC refund transaction has enough confirmation. Trade is cancelled and refunded".to_string());
 					return Ok(StateProcessRespond::new(StateId::SellerCancelledRefunded));
 				}
 

@@ -1009,7 +1009,7 @@ impl State for BuyerWaitForRedeemMwcConfirmations {
 				if conf >= swap.mwc_confirmations {
 					// We are done
 					swap.add_journal_message(
-						"Redeem transacton get enough confirnation. The Swap trade is finished"
+						"Redeem transacton has enough confirnation. The Swap trade is finished"
 							.to_string(),
 					);
 					return Ok(StateProcessRespond::new(StateId::BuyerSwapComplete));

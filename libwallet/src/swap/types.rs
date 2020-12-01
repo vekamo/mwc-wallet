@@ -746,8 +746,8 @@ impl fmt::Display for Action {
 				required,
 				actual,
 			} => format!(
-				"{}, waiting for {} MWC confirmations, has {}",
-				name, required, actual
+				"{}, waiting for confirmations. MWC {}/{}",
+				name, actual, required
 			),
 			Action::WaitForSecondaryConfirmations {
 				name,
@@ -757,7 +757,7 @@ impl fmt::Display for Action {
 				actual,
 			} => {
 				if *expected_to_be_posted == 0 {
-					format!("{}, waiting for {} {} confirmations, has {}", name, required, currency, actual)
+					format!("{}, waiting for confirmations. {} {}/{}", name, currency, actual, required)
 				}
 				else {
 					let posted_str = currency.amount_to_hr_string(*expected_to_be_posted, true);
@@ -772,32 +772,30 @@ impl fmt::Display for Action {
 				sec_required,
 				sec_actual,
 			} => {
-				let mwc_str = if *mwc_actual == 0 {
-					"Waiting for MWC Lock transaction to be confirmed".to_string()
-				}
-				else if mwc_actual >= mwc_required {
-					"MWC funds are locked".to_string()
+				let mwc_str = if mwc_actual >= mwc_required {
+					"MWC are locked".to_string()
 				}
 				else {
-					format!("Waiting for {} MWC Lock confirmations, has {}",mwc_required, mwc_actual)
+					format!("MWC {}/{}", mwc_actual, mwc_required)
 				};
 
 				let sec_str = if *sec_expected_to_be_posted==0 {
 					if sec_actual.unwrap() == 0 {
-						format!("{} Lock transaction is in the memory pool, waiting to be mined", currency)
+						format!("{} are in memory pool", currency)
 					}
 					else if sec_actual.unwrap() >= *sec_required {
-						format!("{} funds are locked", currency)
+						format!("{} are locked", currency)
 					}
 					else {
-						format!("Waiting for {} {} Lock confirmations, has {}", sec_required, currency, sec_actual.unwrap())
+						format!("{} {}/{}", currency, sec_actual.unwrap(), sec_required)
 					}
 				}
 				else {
 					let sec_posted_str = currency.amount_to_hr_string(*sec_expected_to_be_posted, true);
-					format!("Waiting for {} {} to be posted to Lock account", sec_posted_str, currency)
+					format!("Waiting for {} {} to be posted", sec_posted_str, currency)
 				};
-				format!("{}; {}", mwc_str, sec_str)
+
+				format!("Locking, waiting for confirmations. {}; {}", mwc_str, sec_str)
 			}
 			Action::SellerWaitForBuyerRedeemPublish {
 				mwc_tip,

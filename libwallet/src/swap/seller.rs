@@ -250,7 +250,7 @@ impl SellApi {
 	}
 
 	/// Seller initializing the redeem slate. At that moment Both BTC and MWC are expected to be at
-	/// the locked slated published and get enough confirmations.
+	/// the locked slated published and has enough confirmations.
 	/// Result:
 	/// 	swap.redeem_slate
 	// 	 	swap.adaptor_signature

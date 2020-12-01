@@ -455,7 +455,7 @@
     },
     {
       "time": 1567632152,
-      "message": "BTC redeem transaction get enough confirmations. Trade is complete"
+      "message": "BTC redeem transaction has enough confirmations. Trade is complete"
     }
   ],
   "secondary_fee": 1.4,
