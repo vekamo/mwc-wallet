@@ -3748,14 +3748,14 @@ mod tests {
 			StateId::SellerWaitingForInitRedeemMessage,
 			Some((lock_second_message_round_timelimit, -1)), // timeout if possible
 			Some(StateId::SellerWaitingForRefundHeight),
-			StateId::SellerWaitingForInitRedeemMessage, // Expected state before timeput
+			StateId::SellerWaitingForInitRedeemMessage, // Expected state before timeout
 			StateId::SellerWaitingForRefundHeight,      // Expected state after timeout
 			None,
 			None,                   // Expected state before timeput
 			None,                   // Expected state after timeout
 			Some(message3.clone()), // Acceptable message
 			Some(StateId::SellerSendingInitRedeemMessage),
-			Some(StateId::SellerWaitingForRefundHeight),
+			Some(StateId::SellerWaitingForBuyerToRedeemMwc),
 		);
 
 		// Message is already known from steps above, it is message3.
@@ -3834,9 +3834,9 @@ mod tests {
 			&mut seller,
 			StateId::SellerSendingInitRedeemMessage,
 			Some((lock_second_message_round_timelimit, -1)), // timeout if possible
-			Some(StateId::SellerWaitingForRefundHeight),
+			None,
 			StateId::SellerSendingInitRedeemMessage, // Expected state before timeput
-			StateId::SellerWaitingForRefundHeight,   // Expected state after timeout
+			StateId::SellerWaitingForBuyerToRedeemMwc, // Expected state after timeout
 			None,
 			Some(StateId::SellerWaitingForBuyerToRedeemMwc), // Expected state before timeput
 			Some(StateId::SellerWaitingForBuyerToRedeemMwc), // NOT CANCELLABLE by time, will check about the height
@@ -3844,6 +3844,53 @@ mod tests {
 			None,
 			None,
 		);
+
+		{
+			// BRANCH - what happens if chan will loose it's data
+			// Checking if Buyer sneaky, reporting that message was never received. But instead it goes with redeem process.
+			buyer.pushs();
+			seller.pushs();
+
+			// Testing mwc chain reset
+			let nc_state = nc.get_state();
+
+			assert_eq!(seller.swap.state, StateId::SellerSendingInitRedeemMessage);
+			assert_eq!(seller.swap.message2.is_some(), false);
+			assert_eq!(seller.swap.posted_msg2.is_none(), true);
+
+			// Buyer is getting the messege but never respond back.
+			let res = buyer
+				.process(Input::IncomeMessage(message4.clone()))
+				.unwrap();
+			assert_eq!(res.next_state_id, StateId::BuyerRedeemMwc);
+			// Still nothing happens, seller still sending the message
+			let res = seller.process(Input::Check).unwrap();
+			assert_eq!(res.next_state_id, StateId::SellerSendingInitRedeemMessage);
+
+			// Buyer posting MWC slate
+			let res = buyer.process(Input::Execute).unwrap();
+			assert_eq!(
+				res.next_state_id,
+				StateId::BuyerWaitForRedeemMwcConfirmations
+			);
+			// Still nothing happens, seller still sending the message
+			let res = seller.process(Input::Check).unwrap();
+			assert_eq!(res.next_state_id, StateId::SellerSendingInitRedeemMessage);
+
+			// The block is mined, so the secret can be revealed
+			nc.mine_block();
+
+			// Now seller should detect the fact that MWC are redeemed, the secret is revealed, so the message does delivered
+			assert_eq!(seller.swap.posted_msg2.is_none(), true);
+			let res = seller.process(Input::Check).unwrap();
+			assert_eq!(res.next_state_id, StateId::SellerRedeemSecondaryCurrency);
+			assert_eq!(seller.swap.posted_msg2.is_none(), false);
+
+			nc.set_state(&nc_state);
+
+			seller.pops();
+			buyer.pops();
+		}
 
 		{
 			// BRANCH - what happens if chan will loose it's data
@@ -3876,7 +3923,7 @@ mod tests {
 				&mut seller,
 				StateId::SellerSendingInitRedeemMessage,
 				Some((lock_second_message_round_timelimit, -1)), // timeout if possible
-				Some(StateId::SellerWaitingForRefundHeight),
+				None,
 				StateId::SellerWaitingForRefundHeight, // Expected state before timeput
 				StateId::SellerWaitingForRefundHeight, // Expected state after timeout
 				None,
@@ -3961,7 +4008,7 @@ mod tests {
 				&mut seller,
 				StateId::SellerSendingInitRedeemMessage,
 				Some((lock_second_message_round_timelimit, -1)), // timeout if possible
-				Some(StateId::SellerWaitingForRefundHeight),
+				None,
 				StateId::SellerWaitingForLockConfirmations, // Expected state before timeput
 				StateId::SellerWaitingForRefundHeight,      // Expected state after timeout
 				None,

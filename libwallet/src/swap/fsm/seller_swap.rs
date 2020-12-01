@@ -802,16 +802,32 @@ impl<K: Keychain> State for SellerWaitingForInitRedeemMessage<K> {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// State SellerSendingInitRedeemMessage
-pub struct SellerSendingInitRedeemMessage {
+pub struct SellerSendingInitRedeemMessage<'a, C>
+where
+	C: NodeClient + 'a,
+{
+	node_client: Arc<C>,
+	phantom: PhantomData<&'a C>,
 	message: Option<Message>,
 }
-impl SellerSendingInitRedeemMessage {
+
+impl<'a, C> SellerSendingInitRedeemMessage<'a, C>
+where
+	C: NodeClient + 'a,
+{
 	/// Create in instance
-	pub fn new() -> Self {
-		Self { message: None }
+	pub fn new(node_client: Arc<C>) -> Self {
+		Self {
+			node_client,
+			phantom: PhantomData,
+			message: None,
+		}
 	}
 }
-impl State for SellerSendingInitRedeemMessage {
+impl<'a, C> State for SellerSendingInitRedeemMessage<'a, C>
+where
+	C: NodeClient + 'a,
+{
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerSendingInitRedeemMessage
 	}
@@ -822,7 +838,7 @@ impl State for SellerSendingInitRedeemMessage {
 		)
 	}
 	fn is_cancellable(&self) -> bool {
-		true
+		false
 	}
 
 	fn process(
@@ -833,22 +849,22 @@ impl State for SellerSendingInitRedeemMessage {
 		tx_conf: &SwapTransactionsConfirmations,
 	) -> Result<StateProcessRespond, ErrorKind> {
 		match input {
-			Input::Cancel => {
-				swap.add_journal_message(JOURNAL_CANCELLED_BY_USER.to_string());
-				if swap.posted_msg2.is_none() {
-					Ok(StateProcessRespond::new(
-						StateId::SellerWaitingForRefundHeight,
-					))
-				} else {
-					// we can't cancel, we must continue to wait
-					Ok(StateProcessRespond::new(
-						StateId::SellerWaitingForBuyerToRedeemMwc,
-					))
-				}
-			} // Last chance to quit
 			Input::Check => {
+				// Checking if can redeem. The Buyer can be sneaky and try to fool us. We should assume that
+				// message was delivered and buyer can do the redeem.
+				if !swap.redeem_slate.tx.kernels().is_empty() {
+					if check_mwc_redeem(swap, &*self.node_client)? {
+						// Buyer did a redeem, we can continue processing and redeem BTC
+						swap.posted_msg2 = Some(u32::MAX as i64);
+						return Ok(StateProcessRespond::new(
+							StateId::SellerWaitingForBuyerToRedeemMwc,
+						));
+					}
+				}
+
 				// Redeem is published, so we are good
 				if swap.redeem_kernel_updated {
+					swap.posted_msg2 = Some(u32::MAX as i64);
 					return Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForBuyerToRedeemMwc,
 					));
@@ -885,20 +901,13 @@ impl State for SellerSendingInitRedeemMessage {
 								.time_limit(time_limit),
 						)
 					} else {
-						if swap.posted_msg2.is_none() {
-							swap.add_journal_message(JOURNAL_CANCELLED_BY_TIMEOUT.to_string());
-							Ok(StateProcessRespond::new(
-								StateId::SellerWaitingForRefundHeight,
-							))
-						} else {
-							// we can't cancel, we must continue to wait
-							// because it is cancellation, let's do ack for this send.
-							// Sending really doesn't needed any more
-							swap.ack_msg2();
-							Ok(StateProcessRespond::new(
-								StateId::SellerWaitingForBuyerToRedeemMwc,
-							))
-						}
+						// we can't cancel, we must continue to wait
+						// because it is cancellation, let's do ack for this send.
+						// Sending really doesn't needed any more
+						swap.posted_msg2 = Some(u32::MAX as i64);
+						Ok(StateProcessRespond::new(
+							StateId::SellerWaitingForBuyerToRedeemMwc,
+						))
 					}
 				} else {
 					// Probably it is a rerun because of some reset. We should tolerate that
@@ -951,6 +960,12 @@ fn check_mwc_redeem<C: NodeClient>(swap: &mut Swap, node_client: &C) -> Result<b
 			kernel,
 		);
 		swap.redeem_kernel_updated = true;
+
+		swap.add_journal_message(
+			"Buyer redeemed MWC, transaction published on the blockchain".to_string(),
+		);
+		swap.ack_msg2();
+
 		return Ok(true);
 	}
 	Ok(false)
@@ -1025,11 +1040,6 @@ where
 				// Then we want to do redeem and refund from redeem branch.
 				if !swap.redeem_slate.tx.kernels().is_empty() {
 					if check_mwc_redeem(swap, &*self.node_client)? {
-						swap.add_journal_message(
-							"Buyer redeemed MWC, transaction published on the blockchain"
-								.to_string(),
-						);
-						swap.ack_msg2();
 						// Buyer did a redeem, we can continue processing and redeem BTC
 						return Ok(StateProcessRespond::new(
 							StateId::SellerRedeemSecondaryCurrency,

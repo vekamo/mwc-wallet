@@ -641,7 +641,7 @@ where
 				Box::new(seller_swap::SellerWaitingForInitRedeemMessage::new(
 					kc.clone(),
 				)),
-				Box::new(seller_swap::SellerSendingInitRedeemMessage::new()),
+				Box::new(seller_swap::SellerSendingInitRedeemMessage::new(nc.clone())),
 				Box::new(seller_swap::SellerWaitingForBuyerToRedeemMwc::new(
 					nc.clone(),
 				)),

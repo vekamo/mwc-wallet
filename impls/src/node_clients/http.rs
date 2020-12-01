@@ -38,7 +38,7 @@ use std::sync::{Arc, RwLock};
 const ENDPOINT: &str = "/v2/foreign";
 const CACHE_VALID_TIME_MS: u128 = 5000; // 2 seconds for cache should be enough for our purpose
 
-const NODE_CALL_RETRY: i32 = 2;
+const NODE_CALL_RETRY: i32 = 2; // it is total 3 attempts  to get the data
 lazy_static! {
 	// We used delays, 5000, 3000, 1000.  It is very slow and really doesn't make sense with connect,
 	// read, write timouts of 20 seconds. Keeping non zero sleeps just in case of internal glitch
