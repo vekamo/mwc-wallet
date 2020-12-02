@@ -19,7 +19,7 @@ use crate::util::to_base64;
 use crossbeam_utils::thread::scope;
 use failure::{Backtrace, Context, Fail};
 use hyper::body;
-use hyper::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
+use hyper::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT, CONNECTION};
 use hyper::{self, Body, Client as HyperClient, Request, Uri};
 use hyper_rustls;
 use hyper_timeout::TimeoutConnector;
@@ -305,6 +305,7 @@ impl Client {
 			.header(USER_AGENT, "mwc-client")
 			.header(ACCEPT, "application/json")
 			.header(CONTENT_TYPE, "application/json")
+			.header(CONNECTION, "keep-alive")
 			.body(match body {
 				None => Body::empty(),
 				Some(json) => json.into(),

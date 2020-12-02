@@ -629,3 +629,141 @@ impl NodeClient for HTTPNodeClient {
 		Ok(result_blocks)
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use std::thread;
+	use crate::HTTPNodeClient;
+	use std::thread::JoinHandle;
+	use grin_wallet_libwallet::NodeClient;
+	use std::time::Instant;
+	use crate::util::secp::pedersen::Commitment;
+	use crate::libwallet;
+	use crate::util;
+	use crate::core::global;
+
+	// Let's do a stress test for the Node.
+	// Normally test is ignoting because the point of that test to run it manually and review the results.
+	#[test]
+	#[ignore]
+	fn run_node_stress_test() -> Result<(), libwallet::Error> {
+		global::set_mining_mode(global::ChainTypes::Floonet);
+
+		let threads_number = 40;
+		let iterations_per_thread = 5;
+		let print_call_latency = false;
+		let print_stat = true;
+
+		//let node_url = "http://127.0.0.1:13413";
+		let node_url = "https://mwc713.floonet.mwc.mw";
+		let api_secret = "11ne3EAUtOXVKwhxm84U";
+
+		//let node_url = "http://52.47.109.152:13413";
+		//let api_secret = "xgSQOfZLDkoYOVWTmjps";
+
+		let mut joins : Vec<JoinHandle<Result<(),libwallet::Error>>> = Vec::new();
+
+		for thr_idx in 0..threads_number {
+			let thr_idx = thr_idx;
+
+			let kernel_exist = Commitment::from_vec(
+				util::from_hex("0974e00703b771aaed85d3ff0c2050018a0b648078b3793fabb19dd9ce97b07efb").unwrap(),
+			);
+			let kernel_not_exist = Commitment::from_vec(
+				util::from_hex("0974e00703b771aaed85d3ff0c2050018a0b648078b3793fabb19dd9ce97b07efa").unwrap(),
+			);
+
+			let outputs_exist: Vec<Commitment> = vec![
+				Commitment::from_vec(util::from_hex("08a30bc4893f169098cab8291d699741853553f897f202fcdea2ca3d9c187551ab").unwrap()),
+				Commitment::from_vec(util::from_hex("09118e17c6a39d50336344cb490c94f96503d1fa45a7014ac037c89778839639c4").unwrap())
+			];
+
+			let outputs_not_exist: Vec<Commitment> = vec![
+				Commitment::from_vec(util::from_hex("08a30bc4893f169098cab8291d699741853553f897f202fcdea2ca3d9c187551ac").unwrap()),
+				Commitment::from_vec(util::from_hex("09118e17c6a39d50336344cb490c94f96503d1fa45a7014ac037c89778839639c5").unwrap())
+			];
+
+			joins.push(
+				thread::spawn(move || {
+					let client = HTTPNodeClient::new(node_url, Some( api_secret.to_string() ))
+						.map_err(|e| libwallet::ErrorKind::ClientCallback(format!("{}", e)))?;
+
+					let total_time = Instant::now();
+
+					for _ in 0..iterations_per_thread {
+						let now = Instant::now();
+						let (h, _, _) = client.get_chain_tip()?;
+						if print_call_latency {
+							println!("get_tip height {}, latency {} ms", h, now.elapsed().as_millis() );
+						}
+
+						let now = Instant::now();
+						let _ = client.get_header_info(h-2)?;
+						if print_call_latency {
+							println!("get_header_info latency {} ms", now.elapsed().as_millis() );
+						}
+
+						let now = Instant::now();
+						let _ = client.get_connected_peer_info()?;
+						if print_call_latency {
+							println!("get_connected_peer_info latency {} ms", now.elapsed().as_millis() );
+						}
+
+						let now = Instant::now();
+						let _ = client.get_kernel(&kernel_exist, None, None)?;
+						if print_call_latency {
+							println!("get_kernel exist latency {} ms", now.elapsed().as_millis() );
+						}
+						let now = Instant::now();
+						let _ = client.get_kernel(&kernel_not_exist, None, None)?;
+						if print_call_latency {
+							println!("get_kernel not exist latency {} ms", now.elapsed().as_millis() );
+						}
+
+						let now = Instant::now();
+						let _ = client.get_outputs_from_node(&outputs_exist)?;
+						if print_call_latency {
+							println!("get_outputs_from_node exist latency {} ms", now.elapsed().as_millis() );
+						}
+						let now = Instant::now();
+						let _ = client.get_outputs_from_node(&outputs_not_exist)?;
+						if print_call_latency {
+							println!("get_outputs_from_node not exist latency {} ms", now.elapsed().as_millis() );
+						}
+
+						let now = Instant::now();
+						let _ = client.get_outputs_by_pmmr_index(1342000, None, 100)?;
+						if print_call_latency {
+							println!("get_outputs_by_pmmr_index latency {} ms", now.elapsed().as_millis() );
+						}
+
+						let now = Instant::now();
+						let _ = client.height_range_to_pmmr_indices(h-10, None)?;
+						if print_call_latency {
+							println!("height_range_to_pmmr_indices latency {} ms", now.elapsed().as_millis() );
+						}
+
+						/*let now = Instant::now();
+						let blocks = client.get_blocks_by_height(h-3000, h, 5)?;
+						if print_call_latency {
+							println!("get_blocks_by_height {}, latency {} ms", blocks.len(), now.elapsed().as_millis() );
+						}*/
+					}
+
+					if print_stat {
+						println!("Thread {} is done, latency per iteratoin {} ms", thr_idx, total_time.elapsed().as_millis()/iterations_per_thread );
+					}
+
+					Ok(())
+				}));
+		}
+
+		for j in joins {
+			if let Err(e) = j.join().unwrap() {
+				println!("Thread failed with error: {}", e);
+			}
+		}
+
+		Ok(())
+	}
+}
