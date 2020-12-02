@@ -117,7 +117,7 @@ impl Client {
 			connector.set_read_timeout(Some(Duration::from_secs(20)));
 			connector.set_write_timeout(Some(Duration::from_secs(20)));
 			let client = HyperClient::builder()
-				.pool_idle_timeout(Duration::from_secs(120))
+				.pool_idle_timeout(Duration::from_secs(300))
 				.build::<_, Body>(connector);
 			Ok( (Some(client), None) )
 		} else {
@@ -139,10 +139,10 @@ impl Client {
 			};
 			let mut connector = TimeoutConnector::new(socks);
 			connector.set_connect_timeout(Some(Duration::from_secs(10)));
-			connector.set_read_timeout(Some(Duration::from_secs(20)));
-			connector.set_write_timeout(Some(Duration::from_secs(20)));
+			connector.set_read_timeout(Some(Duration::from_secs(120))); // For TOR the timeout need to be pretty long. It takes time to builkd a route
+			connector.set_write_timeout(Some(Duration::from_secs(120)));
 			let client = HyperClient::builder()
-				.pool_idle_timeout(Duration::from_secs(120))
+				.pool_idle_timeout(Duration::from_secs(300))
 				.build::<_, Body>(connector);
 			Ok((None, Some(client) ))
 		}
