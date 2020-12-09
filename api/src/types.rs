@@ -104,7 +104,7 @@ impl EncryptedBody {
 		}
 
 		Ok(EncryptedBody {
-			nonce: to_hex(nonce.to_vec()),
+			nonce: to_hex(&nonce),
 			body_enc: base64::encode(&to_encrypt),
 		})
 	}
@@ -429,16 +429,8 @@ impl TxLogEntryAPI {
 			kernel_excess: tle.kernel_excess.clone(),
 			kernel_lookup_min_height: tle.kernel_lookup_min_height.clone(),
 			payment_proof: tle.payment_proof.clone(),
-			input_commits: tle
-				.input_commits
-				.iter()
-				.map(|c| to_hex(c.0.to_vec()))
-				.collect(),
-			output_commits: tle
-				.output_commits
-				.iter()
-				.map(|c| to_hex(c.0.to_vec()))
-				.collect(),
+			input_commits: tle.input_commits.iter().map(|c| to_hex(&c.0)).collect(),
+			output_commits: tle.output_commits.iter().map(|c| to_hex(&c.0)).collect(),
 		}
 	}
 

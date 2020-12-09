@@ -297,10 +297,7 @@ pub fn parse_global_args(
 	};
 
 	let chain_type = match config.chain_type.clone() {
-		None => {
-			let param_ref = global::CHAIN_TYPE.read();
-			param_ref.clone()
-		}
+		None => global::get_chain_type(),
 		Some(c) => c,
 	};
 
@@ -1124,7 +1121,7 @@ where
 	),
 {
 	if let Some(t) = wallet_config.chain_type.clone() {
-		core::global::set_mining_mode(t);
+		core::global::set_local_chain_type(t);
 	}
 
 	if wallet_args.is_present("external") {

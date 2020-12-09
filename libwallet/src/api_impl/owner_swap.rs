@@ -34,6 +34,7 @@ use crate::{
 use grin_core::core;
 use grin_keychain::ExtKeychainPath;
 use grin_util::to_hex;
+use grin_wallet_util::grin_core::core::Committed;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fs::File;
@@ -104,8 +105,8 @@ where
 			if swap.posted_lock.is_none() {
 				// So funds are not posted, transaction doesn't exist and outpuyts are not locked.
 				// We have to exclude those outputs
-				for inp in swap.lock_slate.tx.body.inputs {
-					let in_commit = to_hex(inp.commit.0.to_vec());
+				for inp in swap.lock_slate.tx.inputs_committed() {
+					let in_commit = to_hex(&inp.0);
 					if let Some(amount) = outs.remove(&in_commit) {
 						swap_reserved_amount += amount;
 					}
@@ -1115,13 +1116,7 @@ where
 	t.amount_credited = slate.amount;
 	t.address = Some(tx_name);
 	t.num_outputs = 1;
-	t.output_commits = slate
-		.tx
-		.body
-		.outputs
-		.iter()
-		.map(|o| o.commit.clone())
-		.collect();
+	t.output_commits = slate.tx.outputs_committed();
 	t.messages = None;
 	t.ttl_cutoff_height = None;
 	// when invoicing, this will be invalid
@@ -1138,7 +1133,7 @@ where
 		key_id: output_key_id.clone(),
 		mmr_index: None,
 		n_child: output_key_id.to_path().last_path_index(),
-		commit: Some(to_hex(slate.tx.body.outputs[0].commit.0.to_vec())),
+		commit: Some(to_hex(&slate.tx.outputs_committed()[0].0)),
 		value: slate.amount,
 		status: OutputStatus::Unconfirmed,
 		height: slate.height,

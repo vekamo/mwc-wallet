@@ -115,6 +115,9 @@ macro_rules! setup_proxy {
 
 		// Set the wallet proxy listener running
 		thread::spawn(move || {
+			grin_wallet_util::grin_core::global::set_local_chain_type(
+				grin_wallet_util::grin_core::global::ChainTypes::AutomatedTesting,
+				);
 			if let Err(e) = wallet_proxy.run() {
 				error!("Wallet Proxy error: {}", e);
 				}
@@ -131,7 +134,7 @@ pub fn clean_output_dir(test_dir: &str) {
 pub fn setup(test_dir: &str) {
 	util::init_test_logger();
 	clean_output_dir(test_dir);
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	global::set_local_chain_type(ChainTypes::AutomatedTesting);
 }
 
 /// Create a wallet config file in the given current directory

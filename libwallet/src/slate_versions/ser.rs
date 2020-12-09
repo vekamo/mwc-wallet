@@ -86,7 +86,7 @@ pub mod dalek_pubkey_serde {
 	where
 		S: Serializer,
 	{
-		serializer.serialize_str(&to_hex(key.to_bytes().to_vec()))
+		serializer.serialize_str(&to_hex(&key.to_bytes()))
 	}
 
 	///
@@ -126,7 +126,7 @@ pub mod option_dalek_pubkey_serde {
 		S: Serializer,
 	{
 		match key {
-			Some(key) => serializer.serialize_str(&to_hex(key.to_bytes().to_vec())),
+			Some(key) => serializer.serialize_str(&to_hex(&key.to_bytes())),
 			None => serializer.serialize_none(),
 		}
 	}
@@ -170,7 +170,7 @@ pub mod dalek_sig_serde {
 	where
 		S: Serializer,
 	{
-		serializer.serialize_str(&to_hex(key.to_bytes().to_vec()))
+		serializer.serialize_str(&to_hex(&key.to_bytes()))
 	}
 
 	///
@@ -203,7 +203,7 @@ pub mod option_dalek_sig_serde {
 		S: Serializer,
 	{
 		match key {
-			Some(key) => serializer.serialize_str(&to_hex(key.to_bytes().to_vec())),
+			Some(key) => serializer.serialize_str(&to_hex(&key.to_bytes())),
 			None => serializer.serialize_none(),
 		}
 	}

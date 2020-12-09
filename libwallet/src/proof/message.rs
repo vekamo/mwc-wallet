@@ -81,9 +81,9 @@ impl EncryptedMessage {
 
 		Ok(EncryptedMessage {
 			destination: destination.clone(),
-			encrypted_message: util::to_hex(enc_bytes),
-			salt: util::to_hex(salt.to_vec()),
-			nonce: util::to_hex(nonce.to_vec()),
+			encrypted_message: util::to_hex(&enc_bytes),
+			salt: util::to_hex(&salt),
+			nonce: util::to_hex(&nonce),
 		})
 	}
 

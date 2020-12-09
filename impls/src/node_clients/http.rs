@@ -190,7 +190,7 @@ impl HTTPNodeClient {
 		counter: i32,
 	) -> Result<Option<(TxKernel, u64, u64)>, libwallet::Error> {
 		let method = "get_kernel";
-		let params = json!([to_hex(excess.0.to_vec()), min_height, max_height]);
+		let params = json!([to_hex(&excess.0), min_height, max_height]);
 		// have to handle this manually since the error needs to be parsed
 		let url = format!("{}{}", self.node_url(), ENDPOINT);
 		let req = build_request(method, &params);
@@ -240,7 +240,7 @@ impl HTTPNodeClient {
 		// build vec of commits for inclusion in query
 		let query_params: Vec<String> = wallet_outputs
 			.iter()
-			.map(|commit| format!("{}", util::to_hex(commit.as_ref().to_vec())))
+			.map(|commit| format!("{}", util::to_hex(&commit.0)))
 			.collect();
 
 		// going to leave this here even though we're moving
@@ -350,7 +350,7 @@ impl HTTPNodeClient {
 			};
 			api_outputs.insert(
 				out.commit,
-				(util::to_hex(out.commit.0.to_vec()), height, out.mmr_index),
+				(util::to_hex(&out.commit.0), height, out.mmr_index),
 			);
 		}
 		Ok(api_outputs)
@@ -647,7 +647,7 @@ mod tests {
 	#[test]
 	#[ignore]
 	fn run_node_stress_test() -> Result<(), libwallet::Error> {
-		global::set_mining_mode(global::ChainTypes::Floonet);
+		global::set_local_chain_type(global::ChainTypes::Floonet);
 
 		let threads_number = 40;
 		let iterations_per_thread = 5;

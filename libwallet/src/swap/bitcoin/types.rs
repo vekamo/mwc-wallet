@@ -730,7 +730,7 @@ mod tests {
 
 	#[test]
 	fn test_redeem_script() {
-		global::set_mining_mode(ChainTypes::Floonet);
+		global::set_local_chain_type(ChainTypes::Floonet);
 		let network = Network::Floonet;
 		swap::set_testing_cur_time(1567632152);
 

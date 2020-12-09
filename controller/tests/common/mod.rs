@@ -21,7 +21,6 @@ use grin_wallet_util::grin_keychain as keychain;
 use grin_wallet_util::grin_util as util;
 
 use self::core::global;
-use self::core::global::ChainTypes;
 use self::keychain::ExtKeychain;
 use self::libwallet::WalletInst;
 use impls::test_framework::{LocalWalletClient, WalletProxy};
@@ -81,7 +80,7 @@ pub fn clean_output_dir(test_dir: &str) {
 pub fn setup(test_dir: &str) {
 	util::init_test_logger();
 	clean_output_dir(test_dir);
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 }
 
 pub fn create_wallet_proxy(

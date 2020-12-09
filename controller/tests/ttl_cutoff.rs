@@ -19,6 +19,7 @@ extern crate grin_wallet_impls as impls;
 extern crate grin_wallet_util;
 
 use grin_wallet_libwallet as libwallet;
+use grin_wallet_util::grin_core::global;
 use impls::test_framework::{self, LocalWalletClient};
 use libwallet::{InitTxArgs, Slate, TxLogEntryType};
 use std::thread;
@@ -30,6 +31,7 @@ use common::{clean_output_dir, create_wallet_proxy, setup};
 
 /// Test cutoff block times
 fn ttl_cutoff_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 	// Create a new proxy to simulate server and wallet responses
 	let mut wallet_proxy = create_wallet_proxy(test_dir);
 	let chain = wallet_proxy.chain.clone();
@@ -62,6 +64,7 @@ fn ttl_cutoff_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		if let Err(e) = wallet_proxy.run() {
 			error!("Wallet Proxy error: {}", e);
 		}

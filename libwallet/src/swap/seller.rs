@@ -707,7 +707,7 @@ impl SellApi {
 		redeem_slate: &mut Slate,
 	) -> Result<Commitment, ErrorKind> {
 		let excess = redeem_slate.calc_excess(keychain)?;
-		redeem_slate.tx.kernels_mut()[0].excess = excess.clone();
+		redeem_slate.tx.body.kernels[0].excess = excess.clone();
 		Ok(excess)
 	}
 

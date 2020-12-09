@@ -31,6 +31,7 @@ use grin_wallet_libwallet::{InitTxArgs, Slate, SlateVersion, VersionedSlate};
 use grin_wallet_util::grin_keychain::ExtKeychain;
 use serde_json;
 
+use grin_wallet_util::grin_core::global;
 use grin_wallet_util::grin_util::Mutex;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -53,6 +54,9 @@ fn owner_v3_lifecycle() -> Result<(), grin_wallet_controller::Error> {
 
 	let test_dir = "target/test_output/owner_v3_lifecycle";
 	setup(test_dir);
+	// Need setup global because testing owner API that runs in a separate thread
+	global::init_global_chain_type(global::ChainTypes::AutomatedTesting);
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 
 	let yml = load_yaml!("../src/bin/mwc-wallet.yml");
 	let app = App::from_yaml(yml);
@@ -101,6 +105,7 @@ fn owner_v3_lifecycle() -> Result<(), grin_wallet_controller::Error> {
 		let p = wallet_proxy_a.clone();
 
 		thread::spawn(move || {
+			global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 			let yml = load_yaml!("../src/bin/mwc-wallet.yml");
 			let app = App::from_yaml(yml);
 			execute_command_no_setup(
@@ -130,6 +135,7 @@ fn owner_v3_lifecycle() -> Result<(), grin_wallet_controller::Error> {
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		let mut p = wallet_proxy.lock();
 		if let Err(e) = p.run() {
 			error!("Wallet Proxy error: {}", e);

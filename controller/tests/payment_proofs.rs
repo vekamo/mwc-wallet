@@ -28,10 +28,12 @@ use std::time::Duration;
 mod common;
 use common::{clean_output_dir, create_wallet_proxy, setup};
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
+use grin_wallet_util::grin_core::global;
 
 /// Various tests on accounts within the same wallet
 fn payment_proofs_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	// Create a new proxy to simulate server and wallet responses
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 	let mut wallet_proxy = create_wallet_proxy(test_dir);
 	let chain = wallet_proxy.chain.clone();
 
@@ -63,6 +65,7 @@ fn payment_proofs_test_impl(test_dir: &'static str) -> Result<(), wallet::Error>
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		if let Err(e) = wallet_proxy.run() {
 			error!("Wallet Proxy error: {}", e);
 		}

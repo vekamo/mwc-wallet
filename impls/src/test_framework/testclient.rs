@@ -21,7 +21,7 @@ use crate::chain::types::NoopAdapter;
 use crate::chain::Chain;
 use crate::core::core::verifier_cache::LruVerifierCache;
 use crate::core::core::{Transaction, TxKernel};
-use crate::core::global::{set_mining_mode, ChainTypes};
+use crate::core::global::{set_local_chain_type, ChainTypes};
 use crate::core::pow;
 use crate::keychain::Keychain;
 use crate::libwallet;
@@ -37,6 +37,7 @@ use crate::util::secp::pedersen::Commitment;
 use crate::util::{Mutex, RwLock};
 use grin_core::core::hash::Hashed;
 use grin_core::core::BlockHeader;
+use grin_util::ToHex;
 use serde_json;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -96,7 +97,7 @@ where
 {
 	/// Create a new client that will communicate with the given grin node
 	pub fn new(chain_dir: &str) -> Self {
-		set_mining_mode(ChainTypes::AutomatedTesting);
+		set_local_chain_type(ChainTypes::AutomatedTesting);
 		let genesis_block = pow::mine_genesis_block().unwrap();
 		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 		let dir_name = format!("{}/.grin", chain_dir);
@@ -257,7 +258,7 @@ where
 		m: WalletProxyMessage,
 	) -> Result<WalletProxyMessage, libwallet::Error> {
 		let height = self.chain.head().unwrap().height;
-		let hash = util::to_hex(self.chain.head().unwrap().last_block_h.to_vec());
+		let hash = util::to_hex(&self.chain.head().unwrap().last_block_h.to_vec());
 
 		Ok(WalletProxyMessage {
 			sender_id: "node".to_owned(),
@@ -580,7 +581,7 @@ impl NodeClient for LocalWalletClient {
 	) -> Result<HashMap<pedersen::Commitment, (String, u64, u64)>, libwallet::Error> {
 		let query_params: Vec<String> = wallet_outputs
 			.iter()
-			.map(|commit| util::to_hex(commit.as_ref().to_vec()))
+			.map(|commit| util::to_hex(&commit.0))
 			.collect();
 		let query_str = query_params.join(",");
 		let m = WalletProxyMessage {
@@ -602,7 +603,11 @@ impl NodeClient for LocalWalletClient {
 		for out in outputs {
 			api_outputs.insert(
 				out.commit.commit(),
-				(util::to_hex(out.commit.to_vec()), out.height, out.mmr_index),
+				(
+					util::to_hex(&out.commit.to_vec()),
+					out.height,
+					out.mmr_index,
+				),
 			);
 		}
 		Ok(api_outputs)
@@ -614,7 +619,7 @@ impl NodeClient for LocalWalletClient {
 		min_height: Option<u64>,
 		max_height: Option<u64>,
 	) -> Result<Option<(TxKernel, u64, u64)>, libwallet::Error> {
-		let mut query = format!("{},", util::to_hex(excess.0.to_vec()));
+		let mut query = format!("{},", util::to_hex(&excess.0));
 		if let Some(h) = min_height {
 			query += &format!("{},", h);
 		} else {

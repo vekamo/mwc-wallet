@@ -27,6 +27,7 @@ use std::thread;
 use std::time::Duration;
 
 use grin_wallet_impls::DefaultLCProvider;
+use grin_wallet_util::grin_core::global;
 use grin_wallet_util::grin_keychain::ExtKeychain;
 
 mod common;
@@ -35,6 +36,7 @@ use common::{clean_output_dir, execute_command, initial_setup_wallet, instantiat
 /// command line tests
 fn command_line_test_impl(test_dir: &str) -> Result<(), grin_wallet_controller::Error> {
 	setup(test_dir);
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 	// Create a new proxy to simulate server and wallet responses
 	let mut wallet_proxy: WalletProxy<
 		DefaultLCProvider<LocalWalletClient, ExtKeychain>,
@@ -95,6 +97,7 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), grin_wallet_controller::
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		if let Err(e) = wallet_proxy.run() {
 			error!("Wallet Proxy error: {}", e);
 		}

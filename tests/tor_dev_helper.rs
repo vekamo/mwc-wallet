@@ -40,7 +40,7 @@ use common::{execute_command, initial_setup_wallet, instantiate_wallet};
 
 fn setup_no_clean() {
 	util::init_test_logger();
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	global::set_local_chain_type(ChainTypes::AutomatedTesting);
 }
 
 #[ignore]
@@ -56,6 +56,7 @@ fn socks_tor() -> Result<(), grin_wallet_controller::Error> {
 	let yml = load_yaml!("../src/bin/mwc-wallet.yml");
 	let app = App::from_yaml(yml);
 	setup_no_clean();
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 
 	setup_proxy!(test_dir, chain, wallet1, client1, mask1, wallet2, client2, _mask2);
 
@@ -76,6 +77,7 @@ fn socks_tor() -> Result<(), grin_wallet_controller::Error> {
 	let arg_vec = vec!["mwc-wallet", "-p", "password", "listen"];
 	// Set owner listener running
 	thread::spawn(move || {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		let yml = load_yaml!("../src/bin/mwc-wallet.yml");
 		let app = App::from_yaml(yml);
 		execute_command(&app, test_dir, "wallet2", &client2, arg_vec.clone()).unwrap();

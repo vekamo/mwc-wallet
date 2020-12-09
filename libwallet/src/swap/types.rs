@@ -438,7 +438,7 @@ impl ser::Writeable for Context {
 }
 
 impl ser::Readable for Context {
-	fn read(reader: &mut dyn ser::Reader) -> Result<Context, ser::Error> {
+	fn read<R: ser::Reader>(reader: &mut R) -> Result<Context, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
 		serde_json::from_slice(&data[..]).map_err(|e| {
 			ser::Error::CorruptedData(format!("Json to OutputData conversion failed, {}", e))
@@ -939,7 +939,7 @@ mod tests {
 
 	#[test]
 	fn test_bch_address_parsers() {
-		global::set_mining_mode(ChainTypes::Floonet);
+		global::set_local_chain_type(ChainTypes::Floonet);
 
 		let bch_q_address = "bchtest:qr972p5km7a9rdwtsnuqjfnm8epm48mhkgcgt6dprl".to_string();
 		let bch_legacy = "mz73pyxw6hpnyb8HHnPrTe5DikC2xYrfPX".to_string();

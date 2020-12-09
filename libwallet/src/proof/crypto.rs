@@ -91,7 +91,7 @@ impl Hex<PublicKey> for PublicKey {
 	}
 
 	fn to_hex(&self) -> String {
-		util::to_hex(base58::serialize_public_key(self))
+		util::to_hex(&base58::serialize_public_key(self))
 	}
 }
 
@@ -109,7 +109,7 @@ impl Hex<Signature> for Signature {
 	fn to_hex(&self) -> String {
 		let secp = Secp256k1::new();
 		let signature = self.serialize_der(&secp);
-		util::to_hex(signature)
+		util::to_hex(&signature)
 	}
 }
 
@@ -123,7 +123,7 @@ impl Hex<SecretKey> for SecretKey {
 	}
 
 	fn to_hex(&self) -> String {
-		util::to_hex(self.0.to_vec())
+		util::to_hex(&self.0)
 	}
 }
 
@@ -136,6 +136,6 @@ impl Hex<Commitment> for Commitment {
 	}
 
 	fn to_hex(&self) -> String {
-		util::to_hex(self.0.to_vec())
+		util::to_hex(&self.0)
 	}
 }

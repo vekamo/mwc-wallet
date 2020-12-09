@@ -26,6 +26,7 @@ use std::thread;
 use std::time::Duration;
 
 use grin_wallet_impls::DefaultLCProvider;
+use grin_wallet_util::grin_core::global;
 use grin_wallet_util::grin_keychain::ExtKeychain;
 
 #[macro_use]
@@ -46,6 +47,9 @@ fn owner_v2_sanity() -> Result<(), grin_wallet_controller::Error> {
 
 	let test_dir = "target/test_output/owner_v2_sanity";
 	setup(test_dir);
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+	// Running update thread, we can't set local to it...
+	global::init_global_chain_type(global::ChainTypes::AutomatedTesting);
 
 	setup_proxy!(test_dir, chain, wallet1, client1, mask1, wallet2, client2, _mask2);
 
@@ -59,6 +63,7 @@ fn owner_v2_sanity() -> Result<(), grin_wallet_controller::Error> {
 	let arg_vec = vec!["mwc-wallet", "-p", "password", "owner_api"];
 	// Set running
 	thread::spawn(move || {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		let yml = load_yaml!("../src/bin/mwc-wallet.yml");
 		let app = App::from_yaml(yml);
 		execute_command(&app, test_dir, "wallet1", &client1, arg_vec.clone()).unwrap();
@@ -76,6 +81,7 @@ fn owner_v2_sanity() -> Result<(), grin_wallet_controller::Error> {
 	];
 	// Set owner listener running
 	thread::spawn(move || {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		let yml = load_yaml!("../src/bin/mwc-wallet.yml");
 		let app = App::from_yaml(yml);
 		execute_command(&app, test_dir, "wallet2", &client2, arg_vec.clone()).unwrap();

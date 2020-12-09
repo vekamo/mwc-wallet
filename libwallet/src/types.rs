@@ -31,6 +31,8 @@ use crate::proof::proofaddress::ProvableAddress;
 use crate::slate::ParticipantMessages;
 use crate::Slate;
 use chrono::prelude::*;
+use grin_util::ToHex;
+use grin_wallet_util::grin_core::core::Committed;
 use serde;
 use serde_json;
 use std::collections::HashMap;
@@ -495,7 +497,7 @@ impl ser::Writeable for OutputData {
 }
 
 impl ser::Readable for OutputData {
-	fn read(reader: &mut dyn ser::Reader) -> Result<OutputData, ser::Error> {
+	fn read<R: ser::Reader>(reader: &mut R) -> Result<OutputData, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
 		serde_json::from_slice(&data[..])
 			.map_err(|e| ser::Error::CorruptedData(format!("json to OutputData failed, {}", e)))
@@ -675,8 +677,8 @@ impl Context {
 			fee: slate.fee,
 			participant_id,
 			payment_proof_derivation_index: None,
-			output_commits: slate.tx.body.outputs.iter().map(|o| o.commit).collect(),
-			input_commits: slate.tx.body.inputs.iter().map(|i| i.commit).collect(),
+			output_commits: slate.tx.body.outputs_committed(),
+			input_commits: slate.tx.body.inputs_committed(),
 		})
 	}
 }
@@ -736,7 +738,7 @@ impl ser::Writeable for Context {
 }
 
 impl ser::Readable for Context {
-	fn read(reader: &mut dyn ser::Reader) -> Result<Context, ser::Error> {
+	fn read<R: ser::Reader>(reader: &mut R) -> Result<Context, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
 		serde_json::from_slice(&data[..]).map_err(|e| {
 			ser::Error::CorruptedData(format!("json to Context conversion failed, {}", e))
@@ -943,7 +945,7 @@ impl ser::Writeable for TxLogEntry {
 }
 
 impl ser::Readable for TxLogEntry {
-	fn read(reader: &mut dyn ser::Reader) -> Result<TxLogEntry, ser::Error> {
+	fn read<R: ser::Reader>(reader: &mut R) -> Result<TxLogEntry, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
 		serde_json::from_slice(&data[..]).map_err(|e| {
 			ser::Error::CorruptedData(format!("json to TxLogEntry conversion failed, {}", e))
@@ -1123,7 +1125,7 @@ impl ser::Writeable for StoredProofInfo {
 }
 
 impl ser::Readable for StoredProofInfo {
-	fn read(reader: &mut dyn ser::Reader) -> Result<StoredProofInfo, ser::Error> {
+	fn read<R: ser::Reader>(reader: &mut R) -> Result<StoredProofInfo, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
 		serde_json::from_slice(&data[..]).map_err(|e| {
 			ser::Error::CorruptedData(format!("json to StoredProofInfo conversion failed, {}", e))
@@ -1156,7 +1158,7 @@ impl ser::Writeable for AcctPathMapping {
 }
 
 impl ser::Readable for AcctPathMapping {
-	fn read(reader: &mut dyn ser::Reader) -> Result<AcctPathMapping, ser::Error> {
+	fn read<R: ser::Reader>(reader: &mut R) -> Result<AcctPathMapping, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
 		serde_json::from_slice(&data[..]).map_err(|e| {
 			ser::Error::CorruptedData(format!("json to AcctPathMapping conversion failed, {}", e))
@@ -1203,7 +1205,7 @@ impl ser::Writeable for ScannedBlockInfo {
 }
 
 impl ser::Readable for ScannedBlockInfo {
-	fn read(reader: &mut dyn ser::Reader) -> Result<ScannedBlockInfo, ser::Error> {
+	fn read<R: ser::Reader>(reader: &mut R) -> Result<ScannedBlockInfo, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
 		serde_json::from_slice(&data[..]).map_err(|e| {
 			ser::Error::CorruptedData(format!("json to ScannedBlockInfo conversion failed, {}", e))

@@ -660,7 +660,7 @@ pub fn run_doctest_foreign(
 
 	util::init_test_logger();
 	let _ = fs::remove_dir_all(test_dir);
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	global::set_local_chain_type(ChainTypes::AutomatedTesting);
 
 	let mut wallet_proxy: WalletProxy<
 		DefaultLCProvider<LocalWalletClient, ExtKeychain>,
@@ -752,6 +752,7 @@ pub fn run_doctest_foreign(
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		if let Err(e) = wallet_proxy.run() {
 			error!("Wallet Proxy error: {}", e);
 		}

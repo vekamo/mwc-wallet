@@ -202,7 +202,7 @@ impl ScriptHashParams {
 		let mut hash = Sha256::digest(script_pubkey.as_bytes())[..].to_vec();
 		hash.reverse();
 		Self {
-			scripthash: to_hex(hash),
+			scripthash: to_hex(&hash),
 		}
 	}
 }
@@ -229,7 +229,9 @@ struct BroadcastParams {
 
 impl BroadcastParams {
 	pub fn new(tx: Vec<u8>) -> Self {
-		Self { raw_tx: to_hex(tx) }
+		Self {
+			raw_tx: to_hex(&tx),
+		}
 	}
 }
 

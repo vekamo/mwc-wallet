@@ -155,6 +155,8 @@ where
 	/// use impls::{DefaultWalletImpl, DefaultLCProvider, HTTPNodeClient};
 	/// use libwallet::WalletInst;
 	///
+	/// grin_wallet_util::grin_core::global::set_local_chain_type(grin_wallet_util::grin_core::global::ChainTypes::AutomatedTesting);
+	///
 	/// let mut wallet_config = WalletConfig::default();
 	/// # let dir = tempdir().map_err(|e| format!("{:#?}", e)).unwrap();
 	/// # let dir = dir
@@ -2508,6 +2510,10 @@ macro_rules! doctest_helper_setup_doc_env {
 		use libwallet::{BlockFees, InitTxArgs, IssueInvoiceTxArgs, Slate, WalletInst};
 
 		use uuid::Uuid;
+
+		grin_wallet_util::grin_core::global::set_local_chain_type(
+			grin_wallet_util::grin_core::global::ChainTypes::AutomatedTesting,
+			);
 
 		let dir = tempdir().map_err(|e| format!("{:#?}", e)).unwrap();
 		let dir = dir

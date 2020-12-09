@@ -29,6 +29,7 @@ use grin_keychain::{BlindSum, BlindingFactor, SwitchCommitmentType};
 use grin_util::secp::aggsig;
 use grin_util::secp::key::{PublicKey, SecretKey};
 use grin_util::secp::pedersen::RangeProof;
+use grin_wallet_util::grin_core::core::Committed;
 use rand::thread_rng;
 use std::mem;
 use uuid::Uuid;
@@ -127,8 +128,7 @@ impl BuyApi {
 				"Lock Slate empty inputs".to_string(),
 			));
 		}
-		let res = node_client
-			.get_outputs_from_node(&lock_slate.tx.body.inputs.iter().map(|i| i.commit).collect())?;
+		let res = node_client.get_outputs_from_node(&lock_slate.tx.inputs_committed())?;
 		if res.len() != lock_slate.tx.body.inputs.len() {
 			return Err(ErrorKind::InvalidMessageData(
 				"Lock Slate inputs are not found at the chain".to_string(),

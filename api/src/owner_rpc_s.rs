@@ -462,7 +462,7 @@ pub trait OwnerRpcS {
 				"offset": "d202964900000000d302964900000000d402964900000000d502964900000000"
 			  },
 			  "version_info": {
-				"block_header_version": 1,
+				"block_header_version": 2,
 				"orig_version": 3,
 				"version": 3
 			  }
@@ -541,7 +541,7 @@ pub trait OwnerRpcS {
 				"offset": "d202964900000000d302964900000000d402964900000000d502964900000000"
 			  },
 			  "version_info": {
-				"block_header_version": 1,
+				"block_header_version": 2,
 				"orig_version": 3,
 				"version": 2
 			  }
@@ -622,7 +622,7 @@ pub trait OwnerRpcS {
 				"offset": "d202964900000000d302964900000000d402964900000000d502964900000000"
 			  },
 			  "version_info": {
-				"block_header_version": 1,
+				"block_header_version": 2,
 				"orig_version": 3,
 				"version": 2
 			  }
@@ -698,7 +698,7 @@ pub trait OwnerRpcS {
 				"offset": "d202964900000000d302964900000000d402964900000000d502964900000000"
 			  },
 			  "version_info": {
-				"block_header_version": 1,
+				"block_header_version": 2,
 				"orig_version": 3,
 				"version": 2
 			  }
@@ -769,7 +769,7 @@ pub trait OwnerRpcS {
 						"offset": "d202964900000000d302964900000000d402964900000000d502964900000000"
 					  },
 					  "version_info": {
-						"block_header_version": 1,
+						"block_header_version": 2,
 						"orig_version": 3,
 						"version": 2
 					  }
@@ -857,7 +857,7 @@ pub trait OwnerRpcS {
 				"offset": "d202964900000000d302964900000000d402964900000000d502964900000000"
 			  },
 			  "version_info": {
-				"block_header_version": 1,
+				"block_header_version": 2,
 				"orig_version": 3,
 				"version": 2
 			  }

@@ -28,7 +28,7 @@ use crate::util::secp::key::SecretKey;
 use crate::util::secp::pedersen;
 use crate::util::Mutex;
 use chrono::Duration;
-use grin_core::core::hash::{Hash, Hashed};
+use grin_core::core::hash::Hashed;
 use std::sync::Arc;
 use std::thread;
 
@@ -44,8 +44,8 @@ fn get_output_local(chain: &chain::Chain, commit: &pedersen::Commitment) -> Opti
 	];
 
 	for x in outputs.iter() {
-		if chain.is_unspent(&x).is_ok() {
-			let block_height = chain.get_header_for_output(&x).unwrap().height;
+		if chain.get_unspent(x.commit).is_ok() {
+			let block_height = chain.get_header_for_output(x.commit).unwrap().height;
 			let output_pos = chain.get_output_pos(&x.commit).unwrap_or(0);
 			return Some(api::Output::new(&commit, block_height, output_pos));
 		}
@@ -86,9 +86,7 @@ fn get_outputs_by_pmmr_index_local(
 		outputs: outputs
 			.2
 			.iter()
-			.map(|x| {
-				api::OutputPrintable::from_output(x, chain.clone(), None, true, false).unwrap()
-			})
+			.map(|x| api::OutputPrintable::from_output(x, &chain, None, true, false).unwrap())
 			.collect(),
 	}
 }
@@ -120,7 +118,7 @@ fn get_blocks_by_height_local(
 	for height in start_index..=end_index {
 		let hash = chain.get_header_by_height(height).unwrap().hash();
 		let block = chain.get_block(&hash).unwrap();
-		res.push(grin_api::BlockPrintable::from_block(&block, chain.clone(), true, false).unwrap());
+		res.push(grin_api::BlockPrintable::from_block(&block, &chain, true, false).unwrap());
 	}
 	res
 }
@@ -134,9 +132,10 @@ pub fn add_block_with_reward(
 ) {
 	let prev = chain.head_header().unwrap();
 	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
+	let txs_cloned: Vec<Transaction> = txs.into_iter().cloned().collect();
 	let mut b = core::core::Block::new(
 		&prev,
-		txs.into_iter().cloned().collect(),
+		&txs_cloned,
 		next_header_info.clone().difficulty,
 		(reward_output, reward_kernel),
 	)
@@ -151,9 +150,7 @@ pub fn add_block_with_reward(
 		global::min_edge_bits(),
 	)
 	.unwrap();
-	chain
-		.process_block(b, chain::Options::MINE, Vec::<Hash>::new())
-		.unwrap();
+	chain.process_block(b, chain::Options::MINE).unwrap();
 	chain.validate(false).unwrap();
 }
 

@@ -33,6 +33,7 @@ use failure::_core::marker::PhantomData;
 use grin_keychain::{Identifier, Keychain, SwitchCommitmentType};
 use grin_util::secp;
 use grin_util::secp::aggsig::export_secnonce_single as generate_nonce;
+use grin_wallet_util::grin_core::core::Committed;
 use std::sync::Arc;
 
 /// SwapApi trait implementaiton for BTC
@@ -298,12 +299,7 @@ where
 			} else {
 				if outputs_ok {
 					// kernel is not valid, still can use outputs.
-					let wallet_outputs: Vec<pedersen::Commitment> = slate
-						.tx
-						.outputs()
-						.iter()
-						.map(|o| o.commit.clone())
-						.collect();
+					let wallet_outputs: Vec<pedersen::Commitment> = slate.tx.outputs_committed();
 					let res = self.node_client.get_outputs_from_node(&wallet_outputs)?;
 					let height = res.values().map(|v| v.1).max();
 					match height {

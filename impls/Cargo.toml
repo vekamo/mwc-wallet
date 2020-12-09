@@ -1,6 +1,6 @@
 [package]
 name = "grin_wallet_impls"
-version = "3.3.0"
+version = "4.0.0"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 description = "Concrete types derived from libwallet traits"
 license = "Apache-2.0"
@@ -44,23 +44,23 @@ regex = "1.3"
 timer = "0.2"
 sysinfo = "0.9"
 
-grin_wallet_util = { path = "../util", version = "3.3.0" }
-grin_wallet_config = { path = "../config", version = "3.3.0" }
-grin_wallet_libwallet = { path = "../libwallet", version = "3.3.0" }
+grin_wallet_util = { path = "../util", version = "4.0.0" }
+grin_wallet_config = { path = "../config", version = "4.0.0" }
+grin_wallet_libwallet = { path = "../libwallet", version = "4.0.0" }
 
 # Release
-grin_p2p = { git = "https://github.com/mwcproject/mwc-node", tag = "prerebase_to_v5" }
-grin_core = { git = "https://github.com/mwcproject/mwc-node", tag = "prerebase_to_v5" }
-grin_api = { git = "https://github.com/mwcproject/mwc-node", tag = "prerebase_to_v5" }
-grin_util = { git = "https://github.com/mwcproject/mwc-node", tag = "prerebase_to_v5"  }
-grin_keychain = { git = "https://github.com/mwcproject/mwc-node", tag = "prerebase_to_v5" }
+grin_p2p = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.1" }
+grin_core = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.1" }
+grin_api = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.1" }
+grin_util = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.1"  }
+grin_keychain = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.1" }
 
 # For bleeding edge
-#grin_p2p = { git = "https://github.com/mwcproject/mwc-node", branch = "master", tag = "prerebase_to_v5" }
-#grin_core = { git = "https://github.com/mwcproject/mwc-node", branch = "master", tag = "prerebase_to_v5" }
-#grin_api = { git = "https://github.com/mwcproject/mwc-node", branch = "master", tag = "prerebase_to_v5" }
-#grin_util = { git = "https://github.com/mwcproject/mwc-node", branch = "master", tag = "prerebase_to_v5"  }
-#grin_keychain = { git = "https://github.com/mwcproject/mwc-node", branch = "master", tag = "prerebase_to_v5" }
+#grin_p2p = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
+#grin_core = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
+#grin_api = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
+#grin_util = { git = "https://github.com/mwcproject/mwc-node", branch = "master"  }
+#grin_keychain = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
 
 # For local testing
 #grin_p2p = { path = "../../mwc-node/p2p"}
@@ -69,7 +69,7 @@ grin_keychain = { git = "https://github.com/mwcproject/mwc-node", tag = "prereba
 #grin_util = { path = "../../mwc-node/util"}
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
-hyper-rustls = { version = "0.20", default-features = false}
+hyper-rustls = { version = "0.21", default-features = false}
 
 [target.'cfg(target_os = "android")'.dependencies]
-hyper-rustls = { version = "0.20", default-features = false,  features = ["webpki-tokio"] }
+hyper-rustls = { version = "0.21", default-features = false,  features = ["webpki-tokio"] }

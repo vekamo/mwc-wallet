@@ -37,6 +37,7 @@ use util::Mutex;
 use colored::*;
 use grin_core::core::amount_to_hr_string;
 use grin_core::global;
+use grin_wallet_util::grin_core::core::Committed;
 use std::collections::HashSet;
 
 /// Dir name with proof files
@@ -631,10 +632,10 @@ fn verify_tx_proof(
 
 	let mut inputs: Vec<pedersen::Commitment> = slate
 		.tx
-		.inputs()
+		.inputs_committed()
 		.iter()
-		.map(|i| i.commitment())
 		.filter(|c| !inputs_ex.contains(c))
+		.map(|c| c.clone())
 		.collect();
 
 	let outputs_ex = tx_proof.outputs.iter().collect::<HashSet<_>>();
@@ -670,11 +671,8 @@ fn verify_tx_proof(
 		);
 	}
 
-	let mut input_com: Vec<pedersen::Commitment> =
-		slate.tx.inputs().iter().map(|i| i.commitment()).collect();
-
-	let mut output_com: Vec<pedersen::Commitment> =
-		slate.tx.outputs().iter().map(|o| o.commitment()).collect();
+	let mut input_com: Vec<pedersen::Commitment> = slate.tx.inputs_committed();
+	let mut output_com: Vec<pedersen::Commitment> = slate.tx.outputs_committed();
 
 	input_com.push(secp.commit(0, slate.tx.offset.secret_key(secp)?)?);
 
@@ -701,10 +699,7 @@ pub fn verify_tx_proof_wrapper(
 ) -> Result<(Option<String>, String, u64, Vec<String>, String), Error> {
 	let (sender, receiver, amount, outputs, excess_sum) = verify_tx_proof(tx_proof)?;
 
-	let outputs = outputs
-		.iter()
-		.map(|o| grin_util::to_hex(o.0.to_vec()))
-		.collect();
+	let outputs = outputs.iter().map(|o| grin_util::to_hex(&o.0)).collect();
 
 	Ok((
 		sender.map(|a| a.public_key.clone()),

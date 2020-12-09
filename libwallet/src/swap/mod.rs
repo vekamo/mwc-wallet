@@ -103,7 +103,7 @@ mod tests {
 	use bitcoin_lib::{Address, Transaction as BtcTransaction, TxOut};
 	use grin_core::core::transaction::Weighting;
 	use grin_core::core::verifier_cache::LruVerifierCache;
-	use grin_core::core::{KernelFeatures, Transaction, TxKernel};
+	use grin_core::core::{Inputs, KernelFeatures, Transaction, TxKernel};
 	use grin_keychain::{ExtKeychain, Identifier, Keychain, SwitchCommitmentType};
 	use grin_util::secp::key::{PublicKey, SecretKey};
 	use grin_util::secp::pedersen::{Commitment, RangeProof};
@@ -125,6 +125,7 @@ mod tests {
 	use crate::swap::message::{SecondaryUpdate, Update};
 	use grin_core::global;
 	use grin_core::global::ChainTypes;
+	use grin_wallet_util::grin_core::core::Committed;
 
 	const GRIN_UNIT: u64 = 1_000_000_000;
 
@@ -235,11 +236,11 @@ mod tests {
 
 			let pending = mem::replace(&mut state.pending, Vec::new());
 			for tx in pending {
-				for input in tx.body.inputs {
-					state.outputs.remove(&input.commit);
+				for input in tx.inputs_committed() {
+					state.outputs.remove(&input);
 				}
-				for output in tx.body.outputs {
-					state.outputs.insert(output.commit, height);
+				for output in tx.outputs_committed() {
+					state.outputs.insert(output, height);
 				}
 				for kernel in tx.body.kernels {
 					state
@@ -330,30 +331,30 @@ mod tests {
 			.map_err(|e| crate::ErrorKind::Node(format!("Node failure, {}", e)))?;
 
 			let mut state = self.state.lock();
-			for input in tx.inputs() {
+			for input in tx.inputs_committed() {
 				// Output not unspent
-				if !state.outputs.contains_key(&input.commit) {
+				if !state.outputs.contains_key(&input) {
 					return Err(crate::ErrorKind::Node("Node failure".to_string()).into());
 				}
 
 				// Double spend attempt
 				for tx_pending in state.pending.iter() {
-					for in_pending in tx_pending.inputs() {
-						if in_pending.commit == input.commit {
+					for in_pending in tx_pending.inputs_committed() {
+						if in_pending == input {
 							return Err(crate::ErrorKind::Node("Node failure".to_string()).into());
 						}
 					}
 				}
 			}
 			// Check for duplicate output
-			for output in tx.outputs() {
-				if state.outputs.contains_key(&output.commit) {
+			for output in tx.outputs_committed() {
+				if state.outputs.contains_key(&output) {
 					return Err(crate::ErrorKind::Node("Node failure".to_string()).into());
 				}
 
 				for tx_pending in state.pending.iter() {
-					for out_pending in tx_pending.outputs() {
-						if out_pending.commit == output.commit {
+					for out_pending in tx_pending.outputs_committed() {
+						if out_pending == output {
 							return Err(crate::ErrorKind::Node("Node failure".to_string()).into());
 						}
 					}
@@ -389,7 +390,7 @@ mod tests {
 			let state = self.state.lock();
 			for output in wallet_outputs {
 				if let Some(height) = state.outputs.get(&output) {
-					map.insert(output.clone(), (to_hex(output.0.to_vec()), *height, 0));
+					map.insert(output.clone(), (to_hex(&output.0), *height, 0));
 				}
 			}
 			Ok(map)
@@ -421,6 +422,7 @@ mod tests {
 	#[serial]
 	fn test_refund_tx_lock() {
 		set_test_mode(true);
+		global::set_local_chain_type(global::ChainTypes::Floonet);
 		swap::set_testing_cur_time(1567632152);
 
 		let kc_sell = keychain(1);
@@ -489,7 +491,7 @@ mod tests {
 	fn test_btc_swap() {
 		set_test_mode(true);
 		swap::set_testing_cur_time(1567632152);
-		global::set_mining_mode(ChainTypes::Floonet);
+		global::set_local_chain_type(ChainTypes::Floonet);
 		let write_json = false;
 
 		let kc_sell = keychain(1);
@@ -588,8 +590,8 @@ mod tests {
 
 		// Add inputs to utxo set
 		nc.mine_blocks(2);
-		for input in swap_sell.lock_slate.tx.inputs() {
-			nc.push_output(input.commit.clone());
+		for input in swap_sell.lock_slate.tx.inputs_committed() {
+			nc.push_output(input);
 		}
 
 		let kc_buy = keychain(2);
@@ -1546,7 +1548,7 @@ mod tests {
 		activate_test_response(true);
 		set_test_mode(true);
 		swap::set_testing_cur_time(START_TIME);
-		global::set_mining_mode(ChainTypes::Floonet);
+		global::set_local_chain_type(ChainTypes::Floonet);
 
 		let nc = TestNodeClient::new(300_000);
 		let btc_nc = TestBtcNodeClient::new(500_000);
@@ -1718,8 +1720,8 @@ mod tests {
 
 		// Add inputs to utxo set
 		nc.mine_blocks(2);
-		for input in seller.swap.lock_slate.tx.inputs() {
-			nc.push_output(input.commit.clone());
+		for input in seller.swap.lock_slate.tx.inputs_committed() {
+			nc.push_output(input);
 		}
 
 		{
@@ -1934,7 +1936,7 @@ mod tests {
 			// No inputs at lock
 			let (id, mut offer, secondary_update) = message1.clone().unwrap_offer().unwrap();
 			let mut lock_slate: Slate = offer.lock_slate.into();
-			lock_slate.tx.body.inputs.clear();
+			lock_slate.tx.body.inputs = Inputs::CommitOnly(vec![]);
 			offer.lock_slate = VersionedSlate::into_version(lock_slate, SlateVersion::V3);
 			assert_eq!(
 				BuyApi::accept_swap_offer(

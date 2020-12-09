@@ -268,10 +268,10 @@ where
 			Ok(None)
 		} else {*/
 		Ok(Some(util::to_hex(
-			self.keychain(keychain_mask)?
+			&self
+				.keychain(keychain_mask)?
 				.commit(amount, &id, SwitchCommitmentType::Regular)?
-				.0
-				.to_vec(), // TODO: proper support for different switch commitment schemes
+				.0, // TODO: proper support for different switch commitment schemes
 		)))
 		/*}*/
 	}
@@ -366,7 +366,7 @@ where
 			.join(filename);
 		let path_buf = Path::new(&path).to_path_buf();
 		let mut stored_tx = File::create(path_buf)?;
-		let tx_hex = util::to_hex(ser::ser_vec(tx, ser::ProtocolVersion(1))?);
+		let tx_hex = util::to_hex(&ser::ser_vec(tx, ser::ProtocolVersion(1))?);
 		stored_tx.write_all(&tx_hex.as_bytes())?;
 		stored_tx.sync_all()?;
 		Ok(())
@@ -418,14 +418,9 @@ where
 			ErrorKind::StoredTransactionError(format!("Unable to decode the data, {}", e))
 		})?;
 		Ok(
-			ser::deserialize::<Transaction>(&mut &tx_bin[..], ser::ProtocolVersion(1)).map_err(
-				|e| {
-					ErrorKind::StoredTransactionError(format!(
-						"Unable to deserialize the data, {}",
-						e
-					))
-				},
-			)?,
+			ser::deserialize(&mut &tx_bin[..], ser::ProtocolVersion(1)).map_err(|e| {
+				ErrorKind::StoredTransactionError(format!("Unable to deserialize the data, {}", e))
+			})?,
 		)
 	}
 

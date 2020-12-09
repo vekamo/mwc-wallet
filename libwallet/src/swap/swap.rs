@@ -21,7 +21,9 @@ use crate::swap::fsm::state::StateId;
 use crate::{NodeClient, Slate};
 use chrono::{DateTime, Utc};
 use grin_core::core::verifier_cache::LruVerifierCache;
-use grin_core::core::{transaction as tx, KernelFeatures, TxKernel, Weighting};
+use grin_core::core::{
+	transaction as tx, CommitWrapper, Inputs, KernelFeatures, OutputIdentifier, TxKernel, Weighting,
+};
 use grin_core::libtx::secp_ser;
 use grin_core::ser;
 use grin_keychain::{Identifier, SwitchCommitmentType};
@@ -482,7 +484,7 @@ impl ser::Writeable for Swap {
 }
 
 impl ser::Readable for Swap {
-	fn read(reader: &mut dyn ser::Reader) -> Result<Swap, ser::Error> {
+	fn read<R: ser::Reader>(reader: &mut R) -> Result<Swap, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
 		serde_json::from_slice(&data[..]).map_err(|e| {
 			ser::Error::CorruptedData(format!("Json to outputData conversion failed, {}", e))
@@ -492,25 +494,37 @@ impl ser::Readable for Swap {
 
 /// Add an input to a tx at the appropriate position
 pub fn tx_add_input(slate: &mut Slate, commit: Commitment) {
-	let input = tx::Input {
-		features: tx::OutputFeatures::Plain,
-		commit,
-	};
-	let inputs = slate.tx.inputs_mut();
-	inputs
-		.binary_search(&input)
-		.err()
-		.map(|e| inputs.insert(e, input));
+	match &mut slate.tx.body.inputs {
+		Inputs::FeaturesAndCommit(inputs) => {
+			let input = tx::Input {
+				features: tx::OutputFeatures::Plain,
+				commit,
+			};
+			inputs
+				.binary_search(&input)
+				.err()
+				.map(|e| inputs.insert(e, input));
+		}
+		Inputs::CommitOnly(commits) => {
+			let cmt = CommitWrapper::from(commit);
+			commits
+				.binary_search(&cmt)
+				.err()
+				.map(|e| commits.insert(e, cmt));
+		}
+	}
 }
 
 /// Add an output to a tx at the appropriate position
 pub fn tx_add_output(slate: &mut Slate, commit: Commitment, proof: RangeProof) {
 	let output = tx::Output {
-		features: tx::OutputFeatures::Plain,
-		commit,
+		identifier: OutputIdentifier {
+			features: tx::OutputFeatures::Plain,
+			commit,
+		},
 		proof,
 	};
-	let outputs = slate.tx.outputs_mut();
+	let outputs = &mut slate.tx.body.outputs;
 	outputs
 		.binary_search(&output)
 		.err()

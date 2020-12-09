@@ -951,7 +951,8 @@ fn check_mwc_redeem<C: NodeClient>(swap: &mut Swap, node_client: &C) -> Result<b
 		let _ = std::mem::replace(
 			swap.redeem_slate
 				.tx
-				.kernels_mut()
+				.body
+				.kernels
 				.get_mut(0)
 				.ok_or(ErrorKind::UnexpectedAction(
 					"Seller Fn required_action() redeem slate not initialized, kernels are empty"

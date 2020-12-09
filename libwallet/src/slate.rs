@@ -20,7 +20,8 @@ use crate::error::{Error, ErrorKind};
 use crate::grin_core::core::amount_to_hr_string;
 use crate::grin_core::core::committed::Committed;
 use crate::grin_core::core::transaction::{
-	Input, KernelFeatures, Output, Transaction, TransactionBody, TxKernel, Weighting,
+	Input, KernelFeatures, Output, OutputFeatures, Transaction, TransactionBody, TxKernel,
+	Weighting,
 };
 use crate::grin_core::core::verifier_cache::LruVerifierCache;
 use crate::grin_core::libtx::{aggsig, build, proof::ProofBuild, secp_ser, tx_fee};
@@ -51,6 +52,7 @@ use crate::proof::proofaddress;
 use crate::proof::proofaddress::ProvableAddress;
 use crate::types::CbData;
 use crate::{SlateVersion, CURRENT_SLATE_VERSION};
+use grin_core::core::{Inputs, NRDRelativeHeight, OutputIdentifier};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PaymentInfo {
@@ -149,7 +151,7 @@ impl fmt::Display for ParticipantMessageData {
 		writeln!(
 			f,
 			"Public Key: {}",
-			&grin_util::to_hex(self.public_key.serialize_vec(&static_secp, true).to_vec())
+			&grin_util::to_hex(&self.public_key.serialize_vec(&static_secp, true))
 		)?;
 		let message = match self.message.clone() {
 			None => "None".to_owned(),
@@ -158,7 +160,7 @@ impl fmt::Display for ParticipantMessageData {
 		writeln!(f, "Message: {}", message)?;
 		let message_sig = match self.message_sig {
 			None => "None".to_owned(),
-			Some(m) => grin_util::to_hex(m.to_raw_data().to_vec()),
+			Some(m) => grin_util::to_hex(&m.to_raw_data()),
 		};
 		writeln!(f, "Message Signature: {}", message_sig)
 	}
@@ -287,7 +289,7 @@ impl Slate {
 
 	/// Create a new slate
 	pub fn blank(num_participants: usize) -> Slate {
-		Slate {
+		let mut slate = Slate {
 			num_participants: num_participants,
 			id: Uuid::new_v4(),
 			tx: Transaction::empty(),
@@ -305,7 +307,10 @@ impl Slate {
 				block_header_version: 1, // GRIN_BLOCK_HEADER_VERSION,
 			},
 			payment_proof: None,
-		}
+		};
+		// The transaction inputs type need need to be Commit and feature. So let's fix that now while it is empty.
+		slate.tx.body.inputs = Inputs::FeaturesAndCommit(vec![]);
+		slate
 	}
 
 	/// Compare two slates for send: sended and responded. Just want to check if sender didn't mess with slate
@@ -411,7 +416,7 @@ impl Slate {
 		B: ProofBuild,
 	{
 		self.update_kernel();
-		let (tx, blind) = build::partial_transaction(self.tx.clone(), elems, keychain, builder)?;
+		let (tx, blind) = build::partial_transaction(self.tx.clone(), &elems, keychain, builder)?;
 		self.tx = tx;
 		Ok(blind)
 	}
@@ -840,8 +845,8 @@ impl Slate {
 
 		// update the tx kernel to reflect the offset excess and sig
 		assert_eq!(final_tx.kernels().len(), 1);
-		final_tx.kernels_mut()[0].excess = final_excess.clone();
-		final_tx.kernels_mut()[0].excess_sig = final_sig.clone();
+		final_tx.body.kernels[0].excess = final_excess.clone();
+		final_tx.body.kernels[0].excess_sig = final_sig.clone();
 
 		// confirm the kernel verifies successfully before proceeding
 		debug!("Validating final transaction");
@@ -1098,7 +1103,22 @@ impl From<&TransactionBody> for TransactionBodyV3 {
 			kernels,
 		} = body;
 
-		let inputs = map_vec!(inputs, |inp| InputV3::from(inp));
+		let inputs = match inputs {
+			Inputs::CommitOnly(commits) => {
+				error!("Transaction Body has type Inputs::CommitOnly, some data is lost");
+				map_vec!(commits, |c| InputV3 {
+					features: OutputFeatures::Plain,
+					commit: c.commitment(),
+				})
+			}
+			Inputs::FeaturesAndCommit(inputs) => {
+				map_vec!(inputs, |inp| InputV3 {
+					features: inp.features,
+					commit: inp.commit,
+				})
+			}
+		};
+
 		let outputs = map_vec!(outputs, |out| OutputV3::from(out));
 		let kernels = map_vec!(kernels, |kern| TxKernelV3::from(kern));
 		TransactionBodyV3 {
@@ -1119,8 +1139,7 @@ impl From<&Input> for InputV3 {
 impl From<&Output> for OutputV3 {
 	fn from(output: &Output) -> OutputV3 {
 		let Output {
-			features,
-			commit,
+			identifier: OutputIdentifier { features, commit },
 			proof,
 		} = *output;
 		OutputV3 {
@@ -1138,6 +1157,13 @@ impl From<&TxKernel> for TxKernelV3 {
 			KernelFeatures::Coinbase => (CompatKernelFeatures::Coinbase, 0, 0),
 			KernelFeatures::HeightLocked { fee, lock_height } => {
 				(CompatKernelFeatures::HeightLocked, fee, lock_height)
+			}
+			KernelFeatures::NoRecentDuplicate {
+				fee,
+				relative_height: _,
+			} => {
+				error!("NRD kernel not supported well. Wrong height. Fix me");
+				(CompatKernelFeatures::NoRecentDuplicate, fee, 0)
 			}
 		};
 		TxKernelV3 {
@@ -1276,7 +1302,7 @@ impl From<&TransactionBodyV3> for TransactionBody {
 		let outputs = map_vec!(outputs, |out| Output::from(out));
 		let kernels = map_vec!(kernels, |kern| TxKernel::from(kern));
 		TransactionBody {
-			inputs,
+			inputs: Inputs::FeaturesAndCommit(inputs),
 			outputs,
 			kernels,
 		}
@@ -1298,8 +1324,7 @@ impl From<&OutputV3> for Output {
 			proof,
 		} = *output;
 		Output {
-			features,
-			commit,
+			identifier: OutputIdentifier { features, commit },
 			proof,
 		}
 	}
@@ -1312,6 +1337,10 @@ impl From<&TxKernelV3> for TxKernel {
 			CompatKernelFeatures::Plain => KernelFeatures::Plain { fee },
 			CompatKernelFeatures::Coinbase => KernelFeatures::Coinbase,
 			CompatKernelFeatures::HeightLocked => KernelFeatures::HeightLocked { fee, lock_height },
+			CompatKernelFeatures::NoRecentDuplicate => KernelFeatures::NoRecentDuplicate {
+				fee,
+				relative_height: NRDRelativeHeight::new(lock_height).unwrap(),
+			},
 		};
 		TxKernel {
 			features,
@@ -1326,4 +1355,5 @@ pub enum CompatKernelFeatures {
 	Plain,
 	Coinbase,
 	HeightLocked,
+	NoRecentDuplicate,
 }

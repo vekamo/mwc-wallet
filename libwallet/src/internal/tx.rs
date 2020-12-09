@@ -493,7 +493,7 @@ pub fn payment_proof_message(
 	let mut message = String::new();
 	debug!("the kernel excess is {:?}", kernel_commitment.0.to_vec());
 	debug!("the sender public key is {}", &sender_address_publickey);
-	message.push_str(&util::to_hex(kernel_commitment.0.to_vec()));
+	message.push_str(&util::to_hex(&kernel_commitment.0));
 	message.push_str(&sender_address_publickey);
 	message.push_str(&amount.to_string());
 	Ok(message)
@@ -555,7 +555,7 @@ pub fn create_payment_proof_signature(
 		let signature = keypair.sign(&message_ser.as_bytes());
 		//let signature_string = util::to_hex(signature.to_bytes());
 		let signature_vec = signature.to_bytes().to_vec();
-		Ok(util::to_hex(signature_vec))
+		Ok(util::to_hex(&signature_vec))
 	}
 }
 
@@ -743,6 +743,7 @@ where
 
 #[cfg(test)]
 mod test {
+	use crate::grin_core::core::committed::Committed;
 	use crate::grin_core::core::KernelFeatures;
 	use crate::grin_core::libtx::{build, ProofBuilder};
 	use crate::grin_keychain::{ExtKeychain, ExtKeychainPath, Keychain};
@@ -757,21 +758,20 @@ mod test {
 
 		let tx1 = build::transaction(
 			KernelFeatures::Plain { fee: 0 },
-			vec![build::output(105, key_id1.clone())],
+			&vec![build::output(105, key_id1.clone())],
 			&keychain,
 			&builder,
 		)
 		.unwrap();
 		let tx2 = build::transaction(
 			KernelFeatures::Plain { fee: 0 },
-			vec![build::input(105, key_id1.clone())],
+			&vec![build::input(105, key_id1.clone())],
 			&keychain,
 			&builder,
 		)
 		.unwrap();
 
-		assert_eq!(tx1.outputs()[0].features, tx2.inputs()[0].features);
-		assert_eq!(tx1.outputs()[0].commitment(), tx2.inputs()[0].commitment());
+		assert_eq!(tx1.outputs_committed()[0], tx2.inputs_committed()[0]);
 	}
 
 	/*

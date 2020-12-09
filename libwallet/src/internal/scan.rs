@@ -28,6 +28,7 @@ use crate::internal::tx;
 use crate::types::*;
 use crate::{wallet_lock, Error, ErrorKind};
 use grin_core::core::Transaction;
+use grin_wallet_util::grin_core::core::Committed;
 use grin_wallet_util::grin_util as util;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
@@ -355,12 +356,12 @@ impl WalletTxInfo {
 			input_commit: tx_log
 				.input_commits
 				.iter()
-				.map(|c| util::to_hex(c.0.to_vec()))
+				.map(|c| util::to_hex(&c.0))
 				.collect(),
 			output_commit: tx_log
 				.output_commits
 				.iter()
-				.map(|c| util::to_hex(c.0.to_vec()))
+				.map(|c| util::to_hex(&c.0))
 				.collect(),
 			tx_log,
 			kernel_validation: None,
@@ -369,14 +370,12 @@ impl WalletTxInfo {
 
 	// read all commit from the transaction tx.
 	pub fn add_transaction(&mut self, tx: Transaction) {
-		for input in &tx.body.inputs {
-			self.input_commit
-				.insert(util::to_hex(input.commit.0.to_vec()));
+		for input in &tx.inputs_committed() {
+			self.input_commit.insert(util::to_hex(&input.0));
 		}
 
-		for output in tx.body.outputs {
-			self.output_commit
-				.insert(util::to_hex(output.commit.0.to_vec()));
+		for output in tx.outputs_committed() {
+			self.output_commit.insert(util::to_hex(&output.0));
 		}
 
 		// We have !tx_log.confirmed here because of Account to account transfer issue
@@ -486,7 +485,12 @@ where
 
 		// uuid must include tx uuid, id for transaction to handle self send with same account,
 		//    parent_key_id  to handle senf send to different accounts
-		let uuid_str = format!("{}/{}/{}", tx_uuid_str, tx.id, tx.parent_key_id.to_hex());
+		let uuid_str = format!(
+			"{}/{}/{}",
+			tx_uuid_str,
+			tx.id,
+			util::to_hex(&tx.parent_key_id.to_bytes())
+		);
 
 		let mut wtx = WalletTxInfo::new(uuid_str, tx.clone());
 
@@ -494,7 +498,7 @@ where
 			wtx.add_transaction(transaction);
 		};
 		transactions_id2uuid.insert(
-			format!("{}/{}", tx.id, tx.parent_key_id.to_hex()),
+			format!("{}/{}", tx.id, util::to_hex(&tx.parent_key_id.to_bytes())),
 			wtx.tx_uuid.clone(),
 		);
 
@@ -554,7 +558,7 @@ where
 
 				if !tx.tx_log.confirmed {
 					tx.kernel_validation = Some(false);
-					let kernel = util::to_hex(tx.tx_log.kernel_excess.clone().unwrap().0.to_vec());
+					let kernel = util::to_hex(&tx.tx_log.kernel_excess.clone().unwrap().0);
 
 					if let Some(v) = txkernel_to_txuuid.get_mut(&kernel) {
 						v.push(tx_uuid.clone());
@@ -677,7 +681,7 @@ where
 			);
 			let mut cnt = 8;
 			for ch_out in &chain_outs {
-				msg.push_str(&util::to_hex(ch_out.commit.0.to_vec()));
+				msg.push_str(&util::to_hex(&ch_out.commit.0));
 				msg.push_str(",");
 				cnt -= 1;
 				if cnt == 0 {
@@ -731,7 +735,7 @@ where
 				chain_outs.len(),
 			);
 			for ch_out in &chain_outs {
-				msg.push_str(&util::to_hex(ch_out.commit.0.to_vec()));
+				msg.push_str(&util::to_hex(&ch_out.commit.0));
 				msg.push_str(",");
 			}
 			if !chain_outs.is_empty() {
@@ -1144,7 +1148,7 @@ where
 	// Update wallet outputs with found at the chain outputs
 	// Check how sync they are
 	for ch_out in chain_outs {
-		let commit = util::to_hex(ch_out.commit.0.to_vec());
+		let commit = util::to_hex(&ch_out.commit.0);
 
 		match outputs.get_mut(&commit) {
 			Some(w_out) => {

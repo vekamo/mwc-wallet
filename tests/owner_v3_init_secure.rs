@@ -27,6 +27,7 @@ use std::thread;
 use std::time::Duration;
 
 use grin_wallet_impls::DefaultLCProvider;
+use grin_wallet_util::grin_core::global;
 use grin_wallet_util::grin_keychain::ExtKeychain;
 use grin_wallet_util::grin_util::secp::key::SecretKey;
 use grin_wallet_util::grin_util::{from_hex, static_secp_instance};
@@ -49,6 +50,9 @@ fn owner_v3_init_secure() -> Result<(), grin_wallet_controller::Error> {
 
 	let test_dir = "target/test_output/owner_v3_init_secure";
 	setup(test_dir);
+	// Setup global because We are using owner API that runs in separate thread
+	global::init_global_chain_type(global::ChainTypes::AutomatedTesting);
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 
 	// Create a new proxy to simulate server and wallet responses
 	setup_proxy!(test_dir, chain, wallet1, client1, mask1, wallet2, client2, _mask2);
@@ -61,6 +65,7 @@ fn owner_v3_init_secure() -> Result<(), grin_wallet_controller::Error> {
 	// run a wallet owner listener
 	let arg_vec = vec!["mwc-wallet", "-p", "password", "owner_api", "-l", "33420"];
 	thread::spawn(move || {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		let yml = load_yaml!("../src/bin/mwc-wallet.yml");
 		let app = App::from_yaml(yml);
 		execute_command(&app, test_dir, "wallet1", &client1, arg_vec.clone()).unwrap();

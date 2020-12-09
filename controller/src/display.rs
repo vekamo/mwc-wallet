@@ -62,7 +62,7 @@ pub fn outputs(
 	]);
 
 	for m in outputs {
-		let commit = format!("{}", util::to_hex(m.commit.as_ref().to_vec()));
+		let commit = format!("{}", util::to_hex(&m.commit.0));
 		let index = match m.output.mmr_index {
 			None => "None".to_owned(),
 			Some(t) => t.to_string(),
@@ -193,7 +193,7 @@ pub fn txs(
 		};
 		// mwc713 (short) representation of ID
 		let short_slate_id = match t.tx_slate_id {
-			Some(m) => util::to_hex(m.as_bytes()[..4].to_vec()),
+			Some(m) => util::to_hex(&m.as_bytes()[..4]),
 			None => String::from(""),
 		};
 
@@ -238,7 +238,7 @@ pub fn txs(
 			None => "None".to_owned(),
 		};
 		let kernel_excess = match t.kernel_excess {
-			Some(e) => util::to_hex(e.0.to_vec()),
+			Some(e) => util::to_hex(&e.0),
 			None => "None".to_owned(),
 		};
 		let payment_proof = if has_proof(t) {
@@ -530,14 +530,14 @@ pub fn tx_messages(tx: &TxLogEntry, dark_background_color_scheme: bool) -> Resul
 		let id = format!("{}", m.id);
 		let public_key = format!(
 			"{}",
-			util::to_hex(m.public_key.serialize_vec(&secp_lock, true).to_vec())
+			util::to_hex(&m.public_key.serialize_vec(&secp_lock, true))
 		);
 		let message = match m.message {
 			Some(m) => format!("{}", m),
 			None => "None".to_owned(),
 		};
 		let message_sig = match m.message_sig {
-			Some(s) => format!("{}", util::to_hex(s.serialize_der(&secp_lock))),
+			Some(s) => format!("{}", util::to_hex(&s.serialize_der(&secp_lock))),
 			None => "None".to_owned(),
 		};
 		if dark_background_color_scheme {
@@ -582,7 +582,7 @@ pub fn payment_proof(tx: &TxLogEntry) -> Result<(), Error> {
 
 	println!();
 	let receiver_signature = match pp.receiver_signature {
-		Some(s) => util::to_hex(s.as_bytes().to_vec()),
+		Some(s) => util::to_hex(s.as_bytes()),
 		None => "None".to_owned(),
 	};
 	let fee = match tx.fee {
@@ -599,11 +599,11 @@ pub fn payment_proof(tx: &TxLogEntry) -> Result<(), Error> {
 	};
 
 	let sender_signature = match pp.sender_signature {
-		Some(s) => util::to_hex(s.as_bytes().to_vec()),
+		Some(s) => util::to_hex(s.as_bytes()),
 		None => "None".to_owned(),
 	};
 	let kernel_excess = match tx.kernel_excess {
-		Some(e) => util::to_hex(e.0.to_vec()),
+		Some(e) => util::to_hex(&e.0),
 		None => "None".to_owned(),
 	};
 

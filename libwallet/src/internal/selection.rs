@@ -658,7 +658,7 @@ where
 
 		for tx in &txs {
 			for o in &tx.output_commits {
-				let commit = format!("{}", util::to_hex((*o).as_ref().to_vec()));
+				let commit = format!("{}", util::to_hex(&o.0));
 				change_outputs.insert(commit, 1);
 			}
 		}

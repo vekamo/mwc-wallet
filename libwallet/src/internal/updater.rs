@@ -59,8 +59,8 @@ where
 	if let Some(tx) = tx {
 		let mut tx_commits: HashSet<String> = HashSet::new();
 
-		tx_commits.extend(tx.input_commits.iter().map(|c| util::to_hex(c.0.to_vec())));
-		tx_commits.extend(tx.output_commits.iter().map(|c| util::to_hex(c.0.to_vec())));
+		tx_commits.extend(tx.input_commits.iter().map(|c| util::to_hex(&c.0)));
+		tx_commits.extend(tx.output_commits.iter().map(|c| util::to_hex(&c.0)));
 
 		outputs = outputs
 			.into_iter()

@@ -22,6 +22,7 @@ extern crate grin_wallet_libwallet as libwallet;
 // use crate::libwallet::api_impl::owner_updater::{start_updater_log_thread, StatusMessage};
 // use grin_wallet_util::grin_core as core;
 
+use grin_wallet_util::grin_core::global;
 use impls::test_framework::{self, LocalWalletClient};
 use std::thread;
 use std::time::Duration;
@@ -32,6 +33,7 @@ use common::{clean_output_dir, create_wallet_proxy, setup};
 
 /// updater thread test impl
 fn updater_thread_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 	// Create a new proxy to simulate server and wallet responses
 	let mut wallet_proxy = create_wallet_proxy(test_dir);
 	let chain = wallet_proxy.chain.clone();
@@ -63,6 +65,7 @@ fn updater_thread_test_impl(test_dir: &'static str) -> Result<(), wallet::Error>
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		if let Err(e) = wallet_proxy.run() {
 			error!("Wallet Proxy error: {}", e);
 		}
@@ -90,6 +93,9 @@ fn updater_thread_test_impl(test_dir: &'static str) -> Result<(), wallet::Error>
 	let bh = 10u64;
 	let _ =
 		test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), mask1, bh as usize, false);
+
+	// Update runs in a separate thread, so we can't do the local chain type
+	global::init_global_chain_type(global::ChainTypes::AutomatedTesting);
 
 	let owner_api = api::Owner::new(wallet1, None, None);
 	owner_api.start_updater(mask1, Duration::from_secs(5))?;

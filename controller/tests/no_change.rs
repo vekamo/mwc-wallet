@@ -18,6 +18,7 @@ extern crate grin_wallet_controller as wallet;
 extern crate grin_wallet_impls as impls;
 
 use grin_wallet_util::grin_core as core;
+use grin_wallet_util::grin_core::global;
 
 use grin_wallet_libwallet as libwallet;
 use impls::test_framework::{self, LocalWalletClient};
@@ -30,6 +31,7 @@ mod common;
 use common::{clean_output_dir, create_wallet_proxy, setup};
 
 fn no_change_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 	let mut wallet_proxy = create_wallet_proxy(test_dir);
 	let chain = wallet_proxy.chain.clone();
 
@@ -61,6 +63,7 @@ fn no_change_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		if let Err(e) = wallet_proxy.run() {
 			error!("Wallet Proxy error: {}", e);
 		}

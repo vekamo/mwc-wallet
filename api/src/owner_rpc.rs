@@ -485,7 +485,7 @@ pub trait OwnerRpc: Sync + Send {
 					"offset": "d202964900000000d302964900000000d402964900000000d502964900000000"
 				  },
 				  "version_info": {
-					"block_header_version": 1,
+					"block_header_version": 2,
 					"orig_version": 3,
 					"version": 3
 				  }
@@ -565,7 +565,7 @@ pub trait OwnerRpc: Sync + Send {
 				"offset": "d202964900000000d302964900000000d402964900000000d502964900000000"
 			  },
 			  "version_info": {
-				"block_header_version": 1,
+				"block_header_version": 2,
 				"orig_version": 3,
 				"version": 2
 			  }
@@ -641,7 +641,7 @@ pub trait OwnerRpc: Sync + Send {
 				"offset": "d202964900000000d302964900000000d402964900000000d502964900000000"
 			  },
 			  "version_info": {
-				"block_header_version": 1,
+				"block_header_version": 2,
 				"orig_version": 2,
 				"version": 2
 			  }
@@ -706,7 +706,7 @@ pub trait OwnerRpc: Sync + Send {
 						"offset": "d202964900000000d302964900000000d402964900000000d502964900000000"
 					  },
 					  "version_info": {
-						"block_header_version": 1,
+						"block_header_version": 2,
 						"orig_version": 3,
 						"version": 2
 					  }
@@ -786,7 +786,7 @@ pub trait OwnerRpc: Sync + Send {
 				"offset": "d202964900000000d302964900000000d402964900000000d502964900000000"
 			  },
 			  "version_info": {
-				"block_header_version": 1,
+				"block_header_version": 2,
 				"orig_version": 3,
 				"version": 2
 			  }
@@ -818,7 +818,7 @@ pub trait OwnerRpc: Sync + Send {
 			  "version_info": {
 				"version": 2,
 				"orig_version": 3,
-				"block_header_version": 1
+				"block_header_version": 2
 			  },
 			  "num_participants": 2,
 			  "id": "0436430c-2b02-624c-2032-570501212b00",
@@ -907,7 +907,7 @@ pub trait OwnerRpc: Sync + Send {
 		  "version_info": {
 			"version": 2,
 			"orig_version": 3,
-			"block_header_version": 1
+			"block_header_version": 2
 		  },
 		  "num_participants": 2,
 		  "id": "0436430c-2b02-624c-2032-570501212b00",
@@ -1045,7 +1045,7 @@ pub trait OwnerRpc: Sync + Send {
 			"offset": "d202964900000000d302964900000000d402964900000000d502964900000000"
 		  },
 		  "version_info": {
-			"block_header_version": 1,
+			"block_header_version": 2,
 			"orig_version": 3,
 			"version": 2
 		  }
@@ -1577,7 +1577,7 @@ pub fn run_doctest_owner(
 
 	util::init_test_logger();
 	let _ = fs::remove_dir_all(test_dir);
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	global::set_local_chain_type(ChainTypes::AutomatedTesting);
 
 	let mut wallet_proxy: WalletProxy<
 		DefaultLCProvider<LocalWalletClient, ExtKeychain>,
@@ -1676,6 +1676,7 @@ pub fn run_doctest_owner(
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
+		global::set_local_chain_type(ChainTypes::AutomatedTesting);
 		if let Err(e) = wallet_proxy.run() {
 			error!("Wallet Proxy error: {}", e);
 		}
@@ -1855,4 +1856,150 @@ macro_rules! doctest_helper_json_rpc_owner_assert_response {
 				}
 			}
 	};
+}
+
+#[test]
+fn test() {
+	use crate as grin_wallet_api;
+
+	grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
+		r#"
+		{
+			"jsonrpc": "2.0",
+			"method": "init_send_tx",
+			"params": {
+				"args": {
+					"amount": "200000000"
+
+				}
+			},
+			"id": 1
+		}
+		"#,
+		r#"
+		{
+		  "id": 1,
+		  "jsonrpc": "2.0",
+		  "result": {
+			"Err": {
+			  "NotEnoughFunds": {
+				"available": 0,
+				"available_disp": "0.0",
+				"needed": 209000000,
+				"needed_disp": "0.209"
+			  }
+			}
+		  }
+		}
+		"#,
+		false,
+		4,
+		false,
+		false,
+		false,
+		false
+	);
+
+	grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
+		r#"
+			{
+				"jsonrpc": "2.0",
+				"method": "init_send_tx",
+				"params": {
+					"args": {
+						"src_acct_name": "default",
+						"amount": "200000000",
+						"minimum_confirmations": 2,
+						"max_outputs": 500,
+						"num_change_outputs": 2,
+						"selection_strategy_is_use_all": false,
+						"message": "my message",
+						"target_slate_version": 3,
+						"payment_proof_recipient_address": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2",
+						"ttl_blocks": 3,
+						"outputs": null,
+						"send_args": null
+					}
+				},
+				"id": 1
+			}
+			"#,
+		r#"
+			{
+			  "id": 1,
+			  "jsonrpc": "2.0",
+			  "result": {
+				"Ok": {
+				  "amount": "200000000",
+				  "fee": "12000000",
+				  "height": "4",
+				  "id": "0436430c-2b02-624c-2032-570501212b01",
+				  "lock_height": "0",
+				  "num_participants": 2,
+				  "participant_data": [
+					{
+					  "id": "0",
+					  "message": "my message",
+					  "message_sig": "8f07ddd5e9f5179cff19486034181ed76505baaad53e5d994064127b56c5841ba3566c0013d1990238520857ef3fef423ca5b162a9f252f7e7e886bb403ba011",
+					  "part_sig": null,
+					  "public_blind_excess": "021f8d31340ce1230d2ddd2562dfc39bb487c6086bb8ec2d59230c491cfe5c25f1",
+					  "public_nonce": "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f"
+					}
+				  ],
+				  "payment_proof": {
+					"receiver_address": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2",
+					"receiver_signature": null,
+					"sender_address": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5"
+				  },
+				  "ttl_cutoff_height": "7",
+				  "coin_type": "mwc",
+				  "network_type": "mainnet",
+				  "tx": {
+					"body": {
+					  "inputs": [
+						{
+						  "commit": "0910c1752100733bae49e877286835aab76d5856ef8139b6c6e3f51798aa461b03",
+						  "features": "Coinbase"
+						}
+					  ],
+					  "kernels": [
+						{
+						  "excess": "000000000000000000000000000000000000000000000000000000000000000000",
+						  "excess_sig": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+						  "features": "Plain",
+						  "fee": "12000000",
+						  "lock_height": "0"
+						}
+					  ],
+					  "outputs": [
+						{
+						  "commit": "08fdf5a2ea8ccd62e11f752c2dd8c0c7a96524181ebf9525be5fd376b74aa4f8d5",
+						  "features": "Plain",
+						  "proof": "e29d4f503199c188cde73f7e485bd90cf2128612dbc5fb31eed9573aacd9339a1b50d68d169ee58cf4adca417fbfa35a689857a341a330d280f31415b75ea682082f38347203a25d984791be37b5c6ce17304ebb99fa1c6ce3b4489608513bb90f4b3a868a5d000e9e39df876b6716d42d5027afe413333f4e75e13c06a52d4a0c9e17cd061931d65a2bc40c9ba487cd1e96109529342c6670d9c04b9cb98a0ca411652700633acdad6c118d46654a3c6b9f54d8aeccecd3abea48710443415579877ec62daf1604d80c8c65eaf232fec4398394ee94f915b5fd9844ffa49843d38d6ca29ff641b8ab447514e0dcf8e97d744e4d615ea8a67922e43d6d71475154193bc21ca975e7452e1f548acd54550af8ff781ca6df264cc243fc629ce4cbcbdc36b9f9b17a4f922c9402fd6d1a1bdb0f2647e9dd237e0c7e26f96998057ad1dc31e62af460e0c456b0d18d3b0c718ad60684fc8f4050b3e9a9c6d09d6b98d5e40234e325dfa017442208f5074e412f220bfeb8b14c1338ce0006bff98000539362aeb5695a56000e673725e54144ca8f4c7b0762157d62f49c870b6526d5d1a54062de2881b22d78448e0fcc2370d49fd0f03e7bd1a3dd7706350a2849ac2a85c166f5ebb3d6f7082c45cd8fa22a7c05a7e9ce50bfe151fb87035bcae8c5bf9aa90ec1b47c2d9c0dd8adee8ad95d6969361091cc6a57c142b077f7bc81bdac6972d9556521c3fecab449834fba30df250340c9547864f7b735a330b96fa9558af5f37fbcb801c505adc61a30740510ad8326f6f6dbc01cfab93618c12b71493992c1ae3cfa36e247f9483e1346835f48b02aa7bbba70412d26a70418ebbef45c7f214bcd27d500e32eb05c880ea19370bede577eb443943de8af302ef691877b902f73b31145780e8a2c05bf33184998fe03fb550ddbcf458879999b80b1e860bf"
+						},
+						{
+						  "commit": "091ccfefabdd674c57e26da0dd6ba6738cffdd0ab01f3ff4f7498497e734284ee3",
+						  "features": "Plain",
+						  "proof": "451449f1f89e4fb42b788e7deece52f0826768f66e3f769b48df6ac2e05e38e369b5733aa5de3ba20698166575afd0d46546a14dd480ecb355f54f7aadd3d2f409c92b6d3087682c39bfd279612747a3e883357cc05b22609c2df8e5fd43fbcdf78cad76bc6ad7bf0d28c2ff7e530621189e96c29da048bc844ebeef74a6e66879ff67fa67e38962c3652b409ad7a41993adf5ce2b3eda77dd3b02db207877712096650c418bcae09ee3a73917069e933d521e78c2ed130c19151995d80bc69538ffff469b3a966c63467363d855a6577cc4f2b05e66f9bbc8b0fa46633c3acbfcb534fd55e3daaf35adbaa3c59d8c033778de20664c36b92360ecdc6304f78a9b794ac960691e01976b5ebf943d7345c77e40926a9c779a38a33783e6fb2cdd578650136f05f345e4028f7f635254cb7442342916f1a44b37e9b7c78ce4a5d84a02e512a2658afe9f452cfc4b919cf38c3e2446307010864651f43c9e7a345064190357934e53663b0df84b05d6d9c3e9f5ad66c46b8e754183bd1111fa6abde38bb22b928dbc74a8c254efbffb5407bf75438ef000fe2c16bc8fe533526923911aa8bdbe61ea6e5955ef4480520e54af1e9d5c33dd600015c43e642147da44afc8855ffd463326f1a0b993255faa98fb9c044a9a5ffb663c126c4ca0f62f94feb0c44bc5f440d18600b1e7bcb41f3f7fe78e93459082ee15012ac82b16bc21aae1e3cd0506bb27b367be006aa2389e0cf99e07e55a9dde2b5e92e89c7375c387351267b7340cc90d8c3c027b6294bc62e247825692ef776e5a815496f30cb0b3de399820e836e37389058985c1751ca770acd242aa8a871544d26ab2722f1568a505731ecb09f3508e6b5bd24ed6ec169b9d0ad1fc28f55364c68655c242004d22eb5609466f8d15d993121015e559084e409f569681b7029590b28caf1c657ee90e"
+						}
+					  ]
+					},
+					"offset": "d202964900000000d302964900000000d402964900000000d502964900000000"
+				  },
+				  "version_info": {
+					"block_header_version": 2,
+					"orig_version": 3,
+					"version": 3
+				  }
+				}
+			  }
+			}
+			"#,
+		false,
+		4,
+		false,
+		false,
+		false,
+		false
+	);
 }

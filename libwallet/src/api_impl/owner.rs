@@ -45,6 +45,7 @@ const USER_MESSAGE_MAX_LEN: usize = 256;
 use crate::proof::crypto;
 use crate::proof::proofaddress;
 use grin_core::global;
+use grin_wallet_util::grin_core::core::Committed;
 
 /// List of accounts
 pub fn accounts<'a, T: ?Sized, C, K>(w: &mut T) -> Result<Vec<AcctPathMapping>, Error>
@@ -471,12 +472,10 @@ where
 	}
 
 	// mwc713 payment proof support.
-	for input in slate.tx.inputs() {
-		context.input_commits.push(input.commit.clone());
-	}
+	context.input_commits = slate.tx.inputs_committed();
 
 	for output in slate.tx.outputs() {
-		context.output_commits.push(output.commit.clone());
+		context.output_commits.push(output.commitment());
 	}
 
 	// Save the aggsig context in our DB for when we

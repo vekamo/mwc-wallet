@@ -448,7 +448,7 @@ impl EncryptedSwap {
 		}
 
 		Ok(EncryptedSwap {
-			nonce: to_hex(nonce.to_vec()),
+			nonce: to_hex(&nonce),
 			body_enc: base64::encode(&to_encrypt),
 		})
 	}
