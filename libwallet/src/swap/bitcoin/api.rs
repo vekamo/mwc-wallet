@@ -31,7 +31,6 @@ use bitcoin::Script;
 use bitcoin_hashes::sha256d;
 use failure::_core::marker::PhantomData;
 use grin_keychain::{Identifier, Keychain, SwitchCommitmentType};
-use grin_util::secp;
 use grin_util::secp::aggsig::export_secnonce_single as generate_nonce;
 use grin_wallet_util::grin_core::core::Committed;
 use std::sync::Arc;
@@ -101,9 +100,7 @@ where
 	/// Update swap.secondary_data with a roll back script.
 	pub(crate) fn script(&self, swap: &Swap) -> Result<Script, ErrorKind> {
 		let btc_data = swap.secondary_data.unwrap_btc()?;
-		let sekp = secp::Secp256k1::new();
 		Ok(btc_data.script(
-			&sekp,
 			swap.redeem_public
 				.as_ref()
 				.ok_or(ErrorKind::UnexpectedAction(

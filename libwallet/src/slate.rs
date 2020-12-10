@@ -146,12 +146,10 @@ impl fmt::Display for ParticipantMessageData {
 			writeln!(f, "(Recipient)")?;
 		}
 		writeln!(f, "---------------------")?;
-		let static_secp = grin_util::static_secp_instance();
-		let static_secp = static_secp.lock();
 		writeln!(
 			f,
 			"Public Key: {}",
-			&grin_util::to_hex(&self.public_key.serialize_vec(&static_secp, true))
+			&grin_util::to_hex(&self.public_key.serialize_vec(true))
 		)?;
 		let message = match self.message.clone() {
 			None => "None".to_owned(),
@@ -498,8 +496,8 @@ impl Slate {
 			keychain.secp(),
 			sec_key,
 			sec_nonce,
-			&self.pub_nonce_sum(keychain.secp())?,
-			Some(&self.pub_blind_sum(keychain.secp())?),
+			&self.pub_nonce_sum()?,
+			Some(&self.pub_blind_sum()?),
 			&self.msg_to_sign()?,
 		)?;
 		for i in 0..self.num_participants {
@@ -532,26 +530,26 @@ impl Slate {
 	}
 
 	/// Return the sum of public nonces
-	fn pub_nonce_sum(&self, secp: &secp::Secp256k1) -> Result<PublicKey, Error> {
+	fn pub_nonce_sum(&self) -> Result<PublicKey, Error> {
 		let pub_nonces = self
 			.participant_data
 			.iter()
 			.map(|p| &p.public_nonce)
 			.collect();
-		match PublicKey::from_combination(secp, pub_nonces) {
+		match PublicKey::from_combination(pub_nonces) {
 			Ok(k) => Ok(k),
 			Err(e) => Err(Error::from(e)),
 		}
 	}
 
 	/// Return the sum of public blinding factors
-	fn pub_blind_sum(&self, secp: &secp::Secp256k1) -> Result<PublicKey, Error> {
+	fn pub_blind_sum(&self) -> Result<PublicKey, Error> {
 		let pub_blinds = self
 			.participant_data
 			.iter()
 			.map(|p| &p.public_blind_excess)
 			.collect();
-		match PublicKey::from_combination(secp, pub_blinds) {
+		match PublicKey::from_combination(pub_blinds) {
 			Ok(k) => Ok(k),
 			Err(e) => Err(Error::from(e)),
 		}
@@ -590,7 +588,7 @@ impl Slate {
 		let pub_key = PublicKey::from_secret_key(keychain.secp(), &sec_key)?;
 		let pub_nonce = PublicKey::from_secret_key(keychain.secp(), &sec_nonce)?;
 
-		let test_message_nonce = SecretKey::from_slice(&keychain.secp(), &[1; 32])?;
+		let test_message_nonce = SecretKey::from_slice(&[1; 32])?;
 		let message_nonce = match use_test_rng {
 			false => None,
 			true => Some(&test_message_nonce),
@@ -651,13 +649,11 @@ impl Slate {
 		// and subtract it from the blind_sum so we create
 		// the aggsig context with the "split" key
 		self.tx.offset = match use_test_rng {
-			false => {
-				BlindingFactor::from_secret_key(SecretKey::new(&keychain.secp(), &mut thread_rng()))
-			}
+			false => BlindingFactor::from_secret_key(SecretKey::new(&mut thread_rng())),
 			true => {
 				// allow for consistent test results
 				let mut test_rng = StepRng::new(1_234_567_890_u64, 1);
-				BlindingFactor::from_secret_key(SecretKey::new(&keychain.secp(), &mut test_rng))
+				BlindingFactor::from_secret_key(SecretKey::new(&mut test_rng))
 			}
 		};
 
@@ -666,7 +662,7 @@ impl Slate {
 				.add_blinding_factor(BlindingFactor::from_secret_key(sec_key.clone()))
 				.sub_blinding_factor(self.tx.offset.clone()),
 		)?;
-		*sec_key = blind_offset.secret_key(&keychain.secp())?;
+		*sec_key = blind_offset.secret_key()?;
 		Ok(())
 	}
 
@@ -710,9 +706,9 @@ impl Slate {
 				aggsig::verify_partial_sig(
 					secp,
 					p.part_sig.as_ref().unwrap(),
-					&self.pub_nonce_sum(secp)?,
+					&self.pub_nonce_sum()?,
 					&p.public_blind_excess,
-					Some(&self.pub_blind_sum(secp)?),
+					Some(&self.pub_blind_sum()?),
 					&self.msg_to_sign()?,
 				)?;
 			}
@@ -788,8 +784,8 @@ impl Slate {
 		self.verify_part_sigs(keychain.secp())?;
 
 		let part_sigs = self.part_sigs();
-		let pub_nonce_sum = self.pub_nonce_sum(keychain.secp())?;
-		let final_pubkey = self.pub_blind_sum(keychain.secp())?;
+		let pub_nonce_sum = self.pub_nonce_sum()?;
+		let final_pubkey = self.pub_blind_sum()?;
 		// get the final signature
 		let final_sig = aggsig::add_signatures(&keychain.secp(), part_sigs, &pub_nonce_sum)?;
 
@@ -818,12 +814,11 @@ impl Slate {
 		let tx_excess = tx.sum_commitments(overage)?;
 
 		// subtract the kernel_excess (built from kernel_offset)
-		let offset_excess = keychain
-			.secp()
-			.commit(0, kernel_offset.secret_key(&keychain.secp())?)?;
-		Ok(keychain
-			.secp()
-			.commit_sum(vec![tx_excess], vec![offset_excess])?)
+		let offset_excess = keychain.secp().commit(0, kernel_offset.secret_key()?)?;
+		Ok(secp::Secp256k1::commit_sum(
+			vec![tx_excess],
+			vec![offset_excess],
+		)?)
 	}
 
 	/// builds a final transaction after the aggregated sig exchange

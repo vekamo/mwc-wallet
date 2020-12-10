@@ -205,9 +205,9 @@ where
 					let mask_value = match use_test_rng {
 						true => {
 							let mut test_rng = StepRng::new(1_234_567_890_u64, 1);
-							secp::key::SecretKey::new(&k.secp(), &mut test_rng)
+							secp::key::SecretKey::new(&mut test_rng)
 						}
-						false => secp::key::SecretKey::new(&k.secp(), &mut thread_rng()),
+						false => secp::key::SecretKey::new(&mut thread_rng()),
 					};
 					k.mask_master_key(&mask_value)?;
 					Some(mask_value)

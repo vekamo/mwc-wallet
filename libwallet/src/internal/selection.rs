@@ -81,7 +81,7 @@ where
 	// Create our own private context
 	let mut context = Context::new(
 		keychain.secp(),
-		blinding.secret_key(&keychain.secp())?,
+		blinding.secret_key()?,
 		&parent_key_id,
 		use_test_nonce,
 		0,
@@ -321,7 +321,7 @@ where
 	// Add blinding sum to our context
 	let mut context = Context::new(
 		keychain.secp(),
-		blinding.secret_key(wallet.keychain(keychain_mask)?.secp())?,
+		blinding.secret_key()?,
 		&parent_key_id,
 		use_test_rng,
 		participant_id,

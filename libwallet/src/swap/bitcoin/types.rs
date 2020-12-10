@@ -122,12 +122,7 @@ impl BtcData {
 	}
 
 	/// Generate the multisig-with-timelocked-refund script
-	pub fn script(
-		&self,
-		secp: &Secp256k1,
-		redeem: &PublicKey,
-		btc_lock_time: u64,
-	) -> Result<Script, ErrorKind> {
+	pub fn script(&self, redeem: &PublicKey, btc_lock_time: u64) -> Result<Script, ErrorKind> {
 		// Don't lock for more than 4 weeks. 4 weeks + 2 day, because max locking is expecting 2 weeks and 1 day to do the swap and 1 extra day for Byer
 		if btc_lock_time > (swap::get_cur_time() + 3600 * 24 * (7 * 4 + 2)) as u64 {
 			return Err(ErrorKind::Generic(
@@ -151,9 +146,9 @@ impl BtcData {
 		let refund = self
 			.refund
 			.ok_or(ErrorKind::SecondaryDataIncomplete)?
-			.serialize_vec(secp, true);
-		let cosign = self.cosign.serialize_vec(secp, true);
-		let redeem = redeem.serialize_vec(secp, true);
+			.serialize_vec(true);
+		let cosign = self.cosign.serialize_vec(true);
+		let redeem = redeem.serialize_vec(true);
 
 		let builder = Builder::new()
 			.push_opcode(OP_IF) // Refund path
@@ -327,7 +322,6 @@ impl BtcData {
 						.ok_or(ErrorKind::Generic("Not found expected input".to_string()))?
 						.script_sig = self.redeem_script_sig(
 						currency,
-						secp,
 						input_script,
 						&mut secp.sign(&msg, cosign_secret)?,
 						&mut secp.sign(&msg, redeem_secret)?,
@@ -361,7 +355,6 @@ impl BtcData {
 						.ok_or(ErrorKind::Generic("Not found expected input".to_string()))?
 						.script_sig = self.redeem_script_sig(
 						currency,
-						secp,
 						input_script,
 						&mut secp.sign(&msg, cosign_secret)?,
 						&mut secp.sign(&msg, redeem_secret)?,
@@ -389,28 +382,27 @@ impl BtcData {
 	fn redeem_script_sig(
 		&self,
 		currency: &Currency,
-		secp: &Secp256k1,
 		input_script: &Script,
 		cosign_signature: &mut Signature,
 		redeem_signature: &mut Signature,
 	) -> Result<Script, ErrorKind> {
 		let (cosign_ser, redeem_ser) = match currency {
 			Currency::Btc => {
-				let mut cosign_ser = cosign_signature.serialize_der(secp);
+				let mut cosign_ser = cosign_signature.serialize_der();
 				cosign_ser.push(0x01); // SIGHASH_ALL
 
-				let mut redeem_ser = redeem_signature.serialize_der(secp);
+				let mut redeem_ser = redeem_signature.serialize_der();
 				redeem_ser.push(0x01); // SIGHASH_ALL
 
 				(cosign_ser, redeem_ser)
 			}
 			Currency::Bch => {
-				cosign_signature.normalize_s(&secp);
-				let mut cosign_ser = cosign_signature.serialize_der(secp);
+				cosign_signature.normalize_s();
+				let mut cosign_ser = cosign_signature.serialize_der();
 				cosign_ser.push(0x41); // SIGHASH_ALL
 
-				redeem_signature.normalize_s(&secp);
-				let mut redeem_ser = redeem_signature.serialize_der(secp);
+				redeem_signature.normalize_s();
+				let mut redeem_ser = redeem_signature.serialize_der();
 				redeem_ser.push(0x41); // SIGHASH_ALL
 
 				(cosign_ser, redeem_ser)
@@ -473,7 +465,6 @@ impl BtcData {
 						.ok_or(ErrorKind::Generic("Not found expected input".to_string()))?
 						.script_sig = self.refund_script_sig(
 						currency,
-						secp,
 						&mut secp.sign(&msg, buyer_btc_secret)?,
 						input_script,
 					)?;
@@ -506,7 +497,6 @@ impl BtcData {
 						.ok_or(ErrorKind::Generic("Not found expected input".to_string()))?
 						.script_sig = self.refund_script_sig(
 						currency,
-						secp,
 						&mut secp.sign(&msg, buyer_btc_secret)?,
 						input_script,
 					)?;
@@ -532,19 +522,18 @@ impl BtcData {
 	fn refund_script_sig(
 		&self,
 		currency: &Currency,
-		secp: &Secp256k1,
 		signature: &mut Signature,
 		input_script: &Script,
 	) -> Result<Script, ErrorKind> {
 		let sign_ser = match currency {
 			Currency::Bch => {
-				signature.normalize_s(&secp);
-				let mut sign_ser = signature.serialize_der(secp);
+				signature.normalize_s();
+				let mut sign_ser = signature.serialize_der();
 				sign_ser.push(0x41); // SIGHASH_ALL
 				sign_ser
 			}
 			Currency::Btc => {
-				let mut sign_ser = signature.serialize_der(secp);
+				let mut sign_ser = signature.serialize_der();
 				sign_ser.push(0x01); // SIGHASH_ALL
 				sign_ser
 			}
@@ -674,12 +663,10 @@ mod tests {
 	#[test]
 	/// Test vector from the PoC
 	fn test_lock_script() {
-		let secp = Secp256k1::with_caps(ContextFlag::Commit);
 		let lock_time = 1541355813;
 
 		let data = BtcData {
 			cosign: PublicKey::from_slice(
-				&secp,
 				&from_hex(
 					"02b4e59070d367a364a31981a71fc5ab6c5034d0e279eecec19287f3c95db84aef".into(),
 				)
@@ -688,7 +675,6 @@ mod tests {
 			.unwrap(),
 			refund: Some(
 				PublicKey::from_slice(
-					&secp,
 					&from_hex(
 						"022fd8c0455bede249ad3b9a9fb8159829e8cfb2c360863896e5309ea133d122f2".into(),
 					)
@@ -703,9 +689,7 @@ mod tests {
 
 		let input_script = data
 			.script(
-				&secp,
 				&PublicKey::from_slice(
-					&secp,
 					&from_hex(
 						"03cf15041579b5fb7accbac2997fb2f3e1001e9a522a19c83ceabe5ae51a596c7c".into(),
 					)
@@ -737,9 +721,9 @@ mod tests {
 		let secp = Secp256k1::with_caps(ContextFlag::Commit);
 		let rng = &mut thread_rng();
 
-		let cosign = SecretKey::new(&secp, rng);
-		let refund = SecretKey::new(&secp, rng);
-		let redeem = SecretKey::new(&secp, rng);
+		let cosign = SecretKey::new(rng);
+		let refund = SecretKey::new(rng);
+		let redeem = SecretKey::new(rng);
 
 		let lock_time = swap::get_cur_time() as u64;
 
@@ -752,7 +736,6 @@ mod tests {
 		};
 		let input_script = data
 			.script(
-				&secp,
 				&PublicKey::from_secret_key(&secp, &redeem).unwrap(),
 				lock_time,
 			)
@@ -816,7 +799,7 @@ mod tests {
 		let redeem_address = Address::p2pkh(
 			&BTCPublicKey {
 				compressed: true,
-				key: PublicKey::from_secret_key(&secp, &SecretKey::new(&secp, rng)).unwrap(),
+				key: PublicKey::from_secret_key(&secp, &SecretKey::new(rng)).unwrap(),
 			},
 			btc_network(network),
 		);

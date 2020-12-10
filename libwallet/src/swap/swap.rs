@@ -257,7 +257,6 @@ impl Swap {
 
 	pub(super) fn redeem_tx_fields(
 		&self,
-		secp: &Secp256k1,
 		redeem_slate: &Slate,
 	) -> Result<(PublicKey, PublicKey, SecpMessage), ErrorKind> {
 		let pub_nonces = redeem_slate
@@ -265,13 +264,13 @@ impl Swap {
 			.iter()
 			.map(|p| &p.public_nonce)
 			.collect();
-		let pub_nonce_sum = PublicKey::from_combination(secp, pub_nonces)?;
+		let pub_nonce_sum = PublicKey::from_combination(pub_nonces)?;
 		let pub_blinds = redeem_slate
 			.participant_data
 			.iter()
 			.map(|p| &p.public_blind_excess)
 			.collect();
-		let pub_blind_sum = PublicKey::from_combination(secp, pub_blinds)?;
+		let pub_blind_sum = PublicKey::from_combination(pub_blinds)?;
 
 		let features = KernelFeatures::Plain {
 			fee: redeem_slate.fee,
@@ -310,19 +309,19 @@ impl Swap {
 	}
 
 	/// Common nonce for the BulletProof is sum_i H(C_i) where C_i is the commitment of participant i
-	pub(super) fn common_nonce(&self, secp: &Secp256k1) -> Result<SecretKey, ErrorKind> {
+	pub(super) fn common_nonce(&self) -> Result<SecretKey, ErrorKind> {
 		let hashed_nonces: Vec<SecretKey> = self
 			.multisig
 			.participants
 			.iter()
 			.filter_map(|p| p.partial_commitment.as_ref().map(|c| c.hash()))
-			.filter_map(|h| h.ok().map(|h| h.to_secret_key(secp)))
+			.filter_map(|h| h.ok().map(|h| h.to_secret_key()))
 			.filter_map(|s| s.ok())
 			.collect();
 		if hashed_nonces.len() != 2 {
 			return Err(super::multisig::ErrorKind::MultiSigIncomplete.into());
 		}
-		let sec_key = secp.blind_sum(hashed_nonces, Vec::new())?;
+		let sec_key = Secp256k1::blind_sum(hashed_nonces, Vec::new())?;
 
 		Ok(sec_key)
 	}
@@ -532,12 +531,9 @@ pub fn tx_add_output(slate: &mut Slate, commit: Commitment, proof: RangeProof) {
 }
 
 /// Interpret the final 32 bytes of the signature as a secret key
-pub fn signature_as_secret(
-	secp: &Secp256k1,
-	signature: &Signature,
-) -> Result<SecretKey, ErrorKind> {
+pub fn signature_as_secret(signature: &Signature) -> Result<SecretKey, ErrorKind> {
 	let ser = signature.to_raw_data();
-	let key = SecretKey::from_slice(secp, &ser[32..])?;
+	let key = SecretKey::from_slice(&ser[32..])?;
 	Ok(key)
 }
 

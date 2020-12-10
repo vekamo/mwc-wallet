@@ -20,7 +20,7 @@ use crate::libwallet::{
 	GRIN_BLOCK_HEADER_VERSION,
 };
 use crate::util::secp::key::SecretKey;
-use crate::util::{from_hex, static_secp_instance, to_base64, Mutex};
+use crate::util::{from_hex, to_base64, Mutex};
 use crate::{Error, ErrorKind};
 use grin_wallet_api::JsonId;
 use grin_wallet_util::OnionV3Address;
@@ -1043,9 +1043,7 @@ impl OwnerV3Helpers {
 				Ok(k) => k,
 				Err(_) => return,
 			};
-			let secp_inst = static_secp_instance();
-			let secp = secp_inst.lock();
-			let sk = match SecretKey::from_slice(&secp, &key_bytes) {
+			let sk = match SecretKey::from_slice(&key_bytes) {
 				Ok(s) => s,
 				Err(_) => return,
 			};

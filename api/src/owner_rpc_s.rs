@@ -2418,15 +2418,15 @@ where
 	fn init_secure_api(&self, ecdh_pubkey: ECDHPubkey) -> Result<ECDHPubkey, ErrorKind> {
 		let secp_inst = static_secp_instance();
 		let secp = secp_inst.lock();
-		let sec_key = SecretKey::new(&secp, &mut thread_rng());
+		let sec_key = SecretKey::new(&mut thread_rng());
 
 		let mut shared_pubkey = ecdh_pubkey.ecdh_pubkey;
 		shared_pubkey
 			.mul_assign(&secp, &sec_key)
 			.map_err(|e| ErrorKind::Secp(format!("{}", e.description())))?;
 
-		let x_coord = shared_pubkey.serialize_vec(&secp, true);
-		let shared_key = SecretKey::from_slice(&secp, &x_coord[1..])
+		let x_coord = shared_pubkey.serialize_vec(true);
+		let shared_key = SecretKey::from_slice(&x_coord[1..])
 			.map_err(|e| ErrorKind::Secp(format!("{}", e.description())))?;
 		{
 			let mut s = self.shared_key.lock();

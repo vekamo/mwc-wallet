@@ -444,15 +444,12 @@ impl TxLogEntryAPI {
 
 #[test]
 fn encrypted_request() -> Result<(), Error> {
-	use crate::util::{from_hex, static_secp_instance};
+	use crate::util::from_hex;
 
 	let sec_key_str = "e00dcc4a009e3427c6b1e1a550c538179d46f3827a13ed74c759c860761caf1e";
 	let shared_key = {
-		let secp_inst = static_secp_instance();
-		let secp = secp_inst.lock();
-
 		let sec_key_bytes = from_hex(sec_key_str).unwrap();
-		SecretKey::from_slice(&secp, &sec_key_bytes)?
+		SecretKey::from_slice(&sec_key_bytes)?
 	};
 	let req = serde_json::json!({
 		"jsonrpc": "2.0",

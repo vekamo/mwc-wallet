@@ -239,7 +239,7 @@ mod test {
 	use super::*;
 	use rand::rngs::mock::StepRng;
 
-	use crate::grin_util::{secp, static_secp_instance};
+	use crate::grin_util::secp;
 	use ed25519_dalek::Keypair;
 	use ed25519_dalek::PublicKey as DalekPublicKey;
 	use ed25519_dalek::SecretKey as DalekSecretKey;
@@ -263,10 +263,8 @@ mod test {
 
 	impl SerTest {
 		pub fn random() -> SerTest {
-			let secp_inst = static_secp_instance();
-			let secp = secp_inst.lock();
 			let mut test_rng = StepRng::new(1234567890u64, 1);
-			let sec_key = secp::key::SecretKey::new(&secp, &mut test_rng);
+			let sec_key = secp::key::SecretKey::new(&mut test_rng);
 			let d_skey = DalekSecretKey::from_bytes(&sec_key.0).unwrap();
 			let d_pub_key: DalekPublicKey = (&d_skey).into();
 

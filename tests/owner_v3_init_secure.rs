@@ -29,8 +29,8 @@ use std::time::Duration;
 use grin_wallet_impls::DefaultLCProvider;
 use grin_wallet_util::grin_core::global;
 use grin_wallet_util::grin_keychain::ExtKeychain;
+use grin_wallet_util::grin_util::from_hex;
 use grin_wallet_util::grin_util::secp::key::SecretKey;
-use grin_wallet_util::grin_util::{from_hex, static_secp_instance};
 use serde_json;
 
 #[macro_use]
@@ -77,11 +77,7 @@ fn owner_v3_init_secure() -> Result<(), grin_wallet_controller::Error> {
 	let _pub_key_str = "03b3c18c9a38783d105e238953b1638b021ba7456d87a5c085b3bdb75777b4c490";
 
 	let sec_key_bytes = from_hex(sec_key_str).unwrap();
-	let sec_key = {
-		let secp_inst = static_secp_instance();
-		let secp = secp_inst.lock();
-		SecretKey::from_slice(&secp, &sec_key_bytes).unwrap()
-	};
+	let sec_key = { SecretKey::from_slice(&sec_key_bytes).unwrap() };
 
 	// 1) Attempt to send an encrypted request before calling `init_secure_api`
 	let req = include_str!("data/v3_reqs/retrieve_info.req.json");

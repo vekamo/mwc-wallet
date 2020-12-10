@@ -28,6 +28,7 @@ use crate::internal::tx;
 use crate::types::*;
 use crate::{wallet_lock, Error, ErrorKind};
 use grin_core::core::Transaction;
+use grin_util::secp::Secp256k1;
 use grin_wallet_util::grin_core::core::Committed;
 use grin_wallet_util::grin_util as util;
 use std::cmp;
@@ -1697,7 +1698,7 @@ where
 					})?,
 				);
 				t.output_commits = vec![commit.clone()];
-				let excess = secp.commit_sum(vec![commit], vec![over_commit])?;
+				let excess = Secp256k1::commit_sum(vec![commit], vec![over_commit])?;
 				t.kernel_excess = Some(excess);
 				t.kernel_lookup_min_height = Some(w_out.output.height);
 			}

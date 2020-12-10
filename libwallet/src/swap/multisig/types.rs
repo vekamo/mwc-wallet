@@ -206,11 +206,11 @@ impl Builder {
 		let mut t_1 = PublicKey::new();
 		let mut t_2 = PublicKey::new();
 		// Round 1 doesnt require knowledge of total commit or common nonce, we should allow NULL argument in libsecp
-		let commit = secp.commit(0, SecretKey::new(secp, &mut thread_rng()))?;
+		let commit = secp.commit(0, SecretKey::new(&mut thread_rng()))?;
 		let common_nonce = self
 			.common_nonce
 			.clone()
-			.unwrap_or(SecretKey::new(secp, &mut thread_rng()));
+			.unwrap_or(SecretKey::new(&mut thread_rng()));
 		secp.bullet_proof_multisig(
 			self.amount,
 			blind.clone(),
@@ -231,8 +231,8 @@ impl Builder {
 
 	/// Mulisig buiding round 2
 	pub fn round_2(&mut self, secp: &Secp256k1, blind: &SecretKey) -> Result<(), ErrorKind> {
-		let mut t_1 = self.sum_t_1(secp)?;
-		let mut t_2 = self.sum_t_2(secp)?;
+		let mut t_1 = self.sum_t_1()?;
+		let mut t_2 = self.sum_t_2()?;
 		let mut tau_x = SecretKey([0; SECRET_KEY_SIZE]);
 		let commit = self.commit(secp)?;
 		secp.bullet_proof_multisig(
@@ -254,9 +254,9 @@ impl Builder {
 
 	/// Finalize building multisig
 	pub fn finalize(&self, secp: &Secp256k1, blind: &SecretKey) -> Result<RangeProof, ErrorKind> {
-		let mut t_1 = self.sum_t_1(secp)?;
-		let mut t_2 = self.sum_t_2(secp)?;
-		let mut tau_x = self.sum_tau_x(secp)?;
+		let mut t_1 = self.sum_t_1()?;
+		let mut t_2 = self.sum_t_2()?;
+		let mut tau_x = self.sum_tau_x()?;
 		let commit = self.commit(secp)?;
 		let proof = secp
 			.bullet_proof_multisig(
@@ -310,7 +310,7 @@ impl Builder {
 
 		let commitment_value = secp.commit_value(self.amount)?;
 		partial_commitments.push(commitment_value);
-		let commitment = secp.commit_sum(partial_commitments, vec![])?;
+		let commitment = Secp256k1::commit_sum(partial_commitments, vec![])?;
 		Ok(commitment)
 	}
 
@@ -320,7 +320,7 @@ impl Builder {
 			.ok_or(ErrorKind::CommonNonceMissing)
 	}
 
-	fn sum_t_1(&self, secp: &Secp256k1) -> Result<PublicKey, ErrorKind> {
+	fn sum_t_1(&self) -> Result<PublicKey, ErrorKind> {
 		let t_1s: Vec<&PublicKey> = self
 			.participants
 			.iter()
@@ -331,11 +331,11 @@ impl Builder {
 			return Err(ErrorKind::MultiSigIncomplete);
 		}
 
-		let t_1 = PublicKey::from_combination(secp, t_1s)?;
+		let t_1 = PublicKey::from_combination(t_1s)?;
 		Ok(t_1)
 	}
 
-	fn sum_t_2(&self, secp: &Secp256k1) -> Result<PublicKey, ErrorKind> {
+	fn sum_t_2(&self) -> Result<PublicKey, ErrorKind> {
 		let t_2s: Vec<&PublicKey> = self
 			.participants
 			.iter()
@@ -346,11 +346,11 @@ impl Builder {
 			return Err(ErrorKind::MultiSigIncomplete);
 		}
 
-		let t_2 = PublicKey::from_combination(secp, t_2s)?;
+		let t_2 = PublicKey::from_combination(t_2s)?;
 		Ok(t_2)
 	}
 
-	fn sum_tau_x(&self, secp: &Secp256k1) -> Result<SecretKey, ErrorKind> {
+	fn sum_tau_x(&self) -> Result<SecretKey, ErrorKind> {
 		let mut sum_tau_x = SecretKey([0; SECRET_KEY_SIZE]);
 		let tau_xs: Vec<&SecretKey> = self
 			.participants
@@ -364,7 +364,7 @@ impl Builder {
 
 		tau_xs
 			.iter()
-			.for_each(|x| sum_tau_x.add_assign(&secp, *x).unwrap());
+			.for_each(|x| sum_tau_x.add_assign(*x).unwrap());
 		Ok(sum_tau_x)
 	}
 }
@@ -493,8 +493,8 @@ impl Hash {
 	}
 
 	/// Init secret from the hash
-	pub fn to_secret_key(&self, secp: &Secp256k1) -> Result<SecretKey, ErrorKind> {
-		let key = SecretKey::from_slice(secp, &self.inner)?;
+	pub fn to_secret_key(&self) -> Result<SecretKey, ErrorKind> {
+		let key = SecretKey::from_slice(&self.inner)?;
 		Ok(key)
 	}
 }
@@ -660,12 +660,12 @@ mod tests {
 		//// Set up phase: parties agree on the participants (and an ordering), amount and a common nonce
 		let num_participants: usize = 2;
 		let amount: u64 = 42_000_000;
-		let common_nonce = SecretKey::new(&secp, &mut thread_rng());
+		let common_nonce = SecretKey::new(&mut thread_rng());
 
 		// A: round 1
 		let id_a = 0;
-		let secret_a = SecretKey::new(&secp, &mut thread_rng());
-		let nonce_a = SecretKey::new(&secp, &mut thread_rng());
+		let secret_a = SecretKey::new(&mut thread_rng());
+		let nonce_a = SecretKey::new(&mut thread_rng());
 		let mut builder_a = Builder::new(
 			num_participants,
 			amount,
@@ -680,8 +680,8 @@ mod tests {
 
 		// B: round 1 + round 2
 		let id_b = 1;
-		let secret_b = SecretKey::new(&secp, &mut thread_rng());
-		let nonce_b = SecretKey::new(&secp, &mut thread_rng());
+		let secret_b = SecretKey::new(&mut thread_rng());
+		let nonce_b = SecretKey::new(&mut thread_rng());
 		let mut builder_b = Builder::new(
 			num_participants,
 			amount,

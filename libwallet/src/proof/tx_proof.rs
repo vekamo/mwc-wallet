@@ -242,14 +242,13 @@ impl TxProof {
 	) -> Result<(Slate, TxProof), ErrorKind> {
 		let address = from;
 
-		let secp = Secp256k1::new();
 		let signature = util::from_hex(&signature).map_err(|e| {
 			ErrorKind::TxProofGenericError(format!(
 				"Unable to build signature from HEX {}, {}",
 				signature, e
 			))
 		})?;
-		let signature = Signature::from_der(&secp, &signature).map_err(|e| {
+		let signature = Signature::from_der(&signature).map_err(|e| {
 			ErrorKind::TxProofGenericError(format!("Unable to build signature, {}", e))
 		})?;
 
@@ -379,14 +378,13 @@ impl TxProof {
 					Ok(proof)
 				} else {
 					let address = p.receiver_address;
-					let secp = Secp256k1::new();
 					let signature = util::from_hex(&signature).map_err(|e| {
 						ErrorKind::TxProofGenericError(format!(
 							"Unable to build signature from HEX {}, {}",
 							signature, e
 						))
 					})?;
-					let signature = Signature::from_der(&secp, &signature).map_err(|e| {
+					let signature = Signature::from_der(&signature).map_err(|e| {
 						ErrorKind::TxProofGenericError(format!("Unable to build signature, {}", e))
 					})?;
 
@@ -655,15 +653,15 @@ fn verify_tx_proof(
 		.iter()
 		.map(|p| &p.public_blind_excess)
 		.collect();
-	let excess_sum = PublicKey::from_combination(secp, excess_parts).map_err(|e| {
+	let excess_sum = PublicKey::from_combination(excess_parts).map_err(|e| {
 		ErrorKind::TxProofGenericError(format!("Unable to combine public keys, {}", e))
 	})?;
 
 	let commit_amount = secp.commit_value(tx_proof.amount)?;
 	inputs.push(commit_amount);
 
-	let commit_excess = secp.commit_sum(outputs.clone(), inputs)?;
-	let pubkey_excess = commit_excess.to_pubkey(secp)?;
+	let commit_excess = Secp256k1::commit_sum(outputs.clone(), inputs)?;
+	let pubkey_excess = commit_excess.to_pubkey()?;
 
 	if excess != &pubkey_excess {
 		return Err(
@@ -674,13 +672,13 @@ fn verify_tx_proof(
 	let mut input_com: Vec<pedersen::Commitment> = slate.tx.inputs_committed();
 	let mut output_com: Vec<pedersen::Commitment> = slate.tx.outputs_committed();
 
-	input_com.push(secp.commit(0, slate.tx.offset.secret_key(secp)?)?);
+	input_com.push(secp.commit(0, slate.tx.offset.secret_key()?)?);
 
 	output_com.push(secp.commit_value(slate.fee)?);
 
-	let excess_sum_com = secp.commit_sum(output_com, input_com)?;
+	let excess_sum_com = Secp256k1::commit_sum(output_com, input_com)?;
 
-	if excess_sum_com.to_pubkey(secp)? != excess_sum {
+	if excess_sum_com.to_pubkey()? != excess_sum {
 		return Err(ErrorKind::TxProofGenericError("Excess sum mismatch".to_string()).into());
 	}
 

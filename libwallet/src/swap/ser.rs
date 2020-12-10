@@ -16,7 +16,7 @@ use crate::{Slate, VersionedSlate};
 use failure::Error;
 use grin_util::secp::key::{PublicKey, SecretKey};
 use grin_util::secp::pedersen::Commitment;
-use grin_util::secp::{ContextFlag, Secp256k1, Signature};
+use grin_util::secp::Signature;
 use hex::{self, FromHex};
 use serde::{Deserialize, Deserializer, Serializer};
 
@@ -92,14 +92,12 @@ pub fn pubkey_to_hex<S>(key: &PublicKey, serializer: S) -> Result<S::Ok, S::Erro
 where
 	S: Serializer,
 {
-	let s = Secp256k1::with_caps(ContextFlag::None);
-	serializer.serialize_str(&hex::encode(key.serialize_vec(&s, true)))
+	serializer.serialize_str(&hex::encode(key.serialize_vec(true)))
 }
 
 fn pubkey_from_hex_string(s: String) -> Result<PublicKey, Error> {
 	let v = Vec::from_hex(&s)?;
-	let s = Secp256k1::with_caps(ContextFlag::None);
-	let p = PublicKey::from_slice(&s, &v[..])?;
+	let p = PublicKey::from_slice(&v[..])?;
 	Ok(p)
 }
 
@@ -149,8 +147,7 @@ where
 
 fn seckey_from_hex_string(s: String) -> Result<SecretKey, Error> {
 	let v = Vec::from_hex(&s)?;
-	let s = Secp256k1::with_caps(ContextFlag::None);
-	let sk = SecretKey::from_slice(&s, &v[..])?;
+	let sk = SecretKey::from_slice(&v[..])?;
 	Ok(sk)
 }
 
@@ -195,14 +192,12 @@ pub fn sig_to_hex<S>(sig: &Signature, serializer: S) -> Result<S::Ok, S::Error>
 where
 	S: Serializer,
 {
-	let s = Secp256k1::with_caps(ContextFlag::None);
-	serializer.serialize_str(&hex::encode(sig.serialize_compact(&s).to_vec()))
+	serializer.serialize_str(&hex::encode(sig.serialize_compact().to_vec()))
 }
 
 fn sig_from_hex_string(s: String) -> Result<Signature, Error> {
 	let v = Vec::from_hex(&s)?;
-	let s = Secp256k1::with_caps(ContextFlag::None);
-	let sig = Signature::from_compact(&s, &v[..])?;
+	let sig = Signature::from_compact(&v[..])?;
 	Ok(sig)
 }
 

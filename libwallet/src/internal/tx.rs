@@ -21,7 +21,7 @@ use crate::grin_core::core::HeaderVersion;
 use crate::grin_keychain::{Identifier, Keychain};
 use crate::grin_util as util;
 use crate::grin_util::secp::key::SecretKey;
-use crate::grin_util::secp::{pedersen, Secp256k1, Signature};
+use crate::grin_util::secp::{pedersen, Signature};
 use crate::grin_util::Mutex;
 use crate::internal::{selection, updater};
 use crate::proof::crypto;
@@ -658,14 +658,13 @@ where
 		};
 		//verify the proof signature
 		if p.receiver_address.public_key.len() == 52 {
-			let secp = Secp256k1::new();
 			let signature_ser = util::from_hex(&sig).map_err(|e| {
 				ErrorKind::TxProofGenericError(format!(
 					"Unable to build signature from HEX {}, {}",
 					&sig, e
 				))
 			})?;
-			let signature = Signature::from_der(&secp, &signature_ser).map_err(|e| {
+			let signature = Signature::from_der(&signature_ser).map_err(|e| {
 				ErrorKind::TxProofGenericError(format!("Unable to build signature, {}", e))
 			})?;
 			debug!(

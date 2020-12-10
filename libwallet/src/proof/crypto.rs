@@ -53,14 +53,13 @@ pub fn sign_challenge(challenge: &str, secret_key: &SecretKey) -> Result<Signatu
 
 /// convert to a signature from string
 pub fn signature_from_string(sig_str: &str) -> Result<Signature, Error> {
-	let secp = Secp256k1::new();
 	let signature_ser = util::from_hex(sig_str).map_err(|e| {
 		ErrorKind::TxProofGenericError(format!(
 			"Unable to build signature from HEX {}, {}",
 			sig_str, e
 		))
 	})?;
-	let signature = Signature::from_der(&secp, &signature_ser)
+	let signature = Signature::from_der(&signature_ser)
 		.map_err(|e| ErrorKind::TxProofGenericError(format!("Unable to build signature, {}", e)))?;
 	Ok(signature)
 }
@@ -77,11 +76,10 @@ pub trait Hex<T> {
 
 impl Hex<PublicKey> for PublicKey {
 	fn from_hex(str: &str) -> Result<PublicKey, Error> {
-		let secp = Secp256k1::new();
 		let hex = util::from_hex(str).map_err(|e| {
 			ErrorKind::HexError(format!("Unable convert Publi Key HEX {}, {}", str, e))
 		})?;
-		PublicKey::from_slice(&secp, &hex).map_err(|e| {
+		PublicKey::from_slice(&hex).map_err(|e| {
 			ErrorKind::HexError(format!(
 				"Unable to build public key from HEX {}, {}",
 				str, e
@@ -97,28 +95,25 @@ impl Hex<PublicKey> for PublicKey {
 
 impl Hex<Signature> for Signature {
 	fn from_hex(str: &str) -> Result<Signature, Error> {
-		let secp = Secp256k1::new();
 		let hex = util::from_hex(str).map_err(|e| {
 			ErrorKind::HexError(format!("Unable convert Signature HEX {}, {}", str, e))
 		})?;
-		Signature::from_der(&secp, &hex).map_err(|e| {
+		Signature::from_der(&hex).map_err(|e| {
 			ErrorKind::HexError(format!("Unable to build Signature from HEX {}, {}", str, e)).into()
 		})
 	}
 
 	fn to_hex(&self) -> String {
-		let secp = Secp256k1::new();
-		let signature = self.serialize_der(&secp);
+		let signature = self.serialize_der();
 		util::to_hex(&signature)
 	}
 }
 
 impl Hex<SecretKey> for SecretKey {
 	fn from_hex(str: &str) -> Result<SecretKey, Error> {
-		let secp = Secp256k1::new();
 		let data = util::from_hex(str)
 			.map_err(|e| ErrorKind::HexError(format!("Unable convert key HEX, {}", e)))?;
-		SecretKey::from_slice(&secp, &data)
+		SecretKey::from_slice(&data)
 			.map_err(|e| ErrorKind::HexError(format!("Unable to build Key from HEX, {}", e)).into())
 	}
 

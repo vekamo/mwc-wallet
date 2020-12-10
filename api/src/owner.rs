@@ -36,7 +36,7 @@ use crate::libwallet::{
 };
 use crate::util::logger::LoggingConfig;
 use crate::util::secp::key::SecretKey;
-use crate::util::{from_hex, static_secp_instance, Mutex, ZeroingString};
+use crate::util::{from_hex, Mutex, ZeroingString};
 use grin_wallet_util::grin_util::secp::key::PublicKey;
 use grin_wallet_util::OnionV3Address;
 use std::convert::TryFrom;
@@ -1747,10 +1747,7 @@ where
 	) -> Result<Option<SecretKey>, Error> {
 		// just return a representative string for doctest mode
 		if self.doctest_mode {
-			let secp_inst = static_secp_instance();
-			let secp = secp_inst.lock();
 			return Ok(Some(SecretKey::from_slice(
-				&secp,
 				&from_hex("d096b3cb75986b3b13f80b8f5243a9edf0af4c74ac37578c5a12cfb5b59b1868")
 					.unwrap(),
 			)?));

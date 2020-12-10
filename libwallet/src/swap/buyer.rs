@@ -362,7 +362,7 @@ impl BuyApi {
 
 		// Round 1 + round 2
 		multisig.round_1(keychain.secp(), &multisig_secret)?;
-		let common_nonce = swap.common_nonce(keychain.secp())?;
+		let common_nonce = swap.common_nonce()?;
 		let multisig = &mut swap.multisig;
 		multisig.common_nonce = Some(common_nonce);
 		multisig.round_2(keychain.secp(), &multisig_secret)?;
@@ -380,7 +380,7 @@ impl BuyApi {
 		let sum = BlindSum::new().add_blinding_factor(BlindingFactor::from_secret_key(
 			swap.multisig_secret(keychain, context)?,
 		));
-		let sec_key = keychain.blind_sum(&sum)?.secret_key(keychain.secp())?;
+		let sec_key = keychain.blind_sum(&sum)?.secret_key()?;
 
 		Ok(sec_key)
 	}
@@ -432,7 +432,7 @@ impl BuyApi {
 		let sum = BlindSum::new().sub_blinding_factor(BlindingFactor::from_secret_key(
 			swap.multisig_secret(keychain, context)?,
 		));
-		let sec_key = keychain.blind_sum(&sum)?.secret_key(keychain.secp())?;
+		let sec_key = keychain.blind_sum(&sum)?.secret_key()?;
 
 		Ok(sec_key)
 	}
@@ -488,7 +488,7 @@ impl BuyApi {
 				swap.multisig_secret(keychain, context)?,
 			))
 			.sub_blinding_factor(swap.redeem_slate.tx.offset.clone());
-		let sec_key = keychain.blind_sum(&sum)?.secret_key(keychain.secp())?;
+		let sec_key = keychain.blind_sum(&sum)?.secret_key()?;
 
 		Ok(sec_key)
 	}
@@ -516,7 +516,7 @@ impl BuyApi {
 		elems.push(build::output(slate.amount, bcontext.output.clone()));
 		slate
 			.add_transaction_elements(keychain, &proof::ProofBuilder::new(keychain), elems)?
-			.secret_key(keychain.secp())?;
+			.secret_key()?;
 
 		#[cfg(test)]
 		{
@@ -526,15 +526,14 @@ impl BuyApi {
 				)
 				.unwrap()
 			} else {
-				BlindingFactor::from_secret_key(SecretKey::new(keychain.secp(), &mut thread_rng()))
+				BlindingFactor::from_secret_key(SecretKey::new(&mut thread_rng()))
 			};
 		}
 
 		// Release Doesn't have any tweaking
 		#[cfg(not(test))]
 		{
-			slate.tx.offset =
-				BlindingFactor::from_secret_key(SecretKey::new(keychain.secp(), &mut thread_rng()));
+			slate.tx.offset = BlindingFactor::from_secret_key(SecretKey::new(&mut thread_rng()));
 		}
 
 		// Add multisig input to slate
@@ -612,8 +611,7 @@ impl BuyApi {
 		}
 
 		let sec_key = Self::redeem_tx_secret(keychain, swap, context)?;
-		let (pub_nonce_sum, pub_blind_sum, message) =
-			swap.redeem_tx_fields(keychain.secp(), &swap.redeem_slate)?;
+		let (pub_nonce_sum, pub_blind_sum, message) = swap.redeem_tx_fields(&swap.redeem_slate)?;
 
 		let adaptor_signature = aggsig::sign_single(
 			keychain.secp(),

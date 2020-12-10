@@ -20,6 +20,7 @@ use super::swap;
 use super::swap::{signature_as_secret, tx_add_input, tx_add_output, Swap};
 use super::types::*;
 use super::{ErrorKind, Keychain, CURRENT_VERSION};
+use crate::grin_util::secp::Secp256k1;
 use crate::swap::fsm::state::StateId;
 use crate::{ParticipantData as TxParticipant, Slate, SlateVersion, VersionedSlate};
 use chrono::{DateTime, NaiveDateTime, Utc};
@@ -273,11 +274,10 @@ impl SellApi {
 		let mut redeem_slate: Slate = init_redeem.redeem_slate.into();
 
 		// Validate adaptor signature
-		let (pub_nonce_sum, _, message) = swap.redeem_tx_fields(keychain.secp(), &redeem_slate)?;
+		let (pub_nonce_sum, _, message) = swap.redeem_tx_fields(&redeem_slate)?;
 		// Calculate sum of blinding factors from in- and outputs so we know we can use this excess
 		// later to find the on-chain signature and calculate the redeem secret
-		let pub_blind_sum =
-			Self::redeem_excess(keychain, &mut redeem_slate)?.to_pubkey(keychain.secp())?;
+		let pub_blind_sum = Self::redeem_excess(keychain, &mut redeem_slate)?.to_pubkey()?;
 		if !aggsig::verify_single(
 			keychain.secp(),
 			&init_redeem.adaptor_signature,
@@ -307,16 +307,11 @@ impl SellApi {
 		keychain: &K,
 		swap: &Swap,
 	) -> Result<SecretKey, ErrorKind> {
-		let secp = keychain.secp();
-
-		let adaptor_signature = signature_as_secret(
-			secp,
-			&swap.adaptor_signature.ok_or(ErrorKind::UnexpectedAction(
+		let adaptor_signature =
+			signature_as_secret(&swap.adaptor_signature.ok_or(ErrorKind::UnexpectedAction(
 				"Seller Fn calculate_redeem_secret() multisig is empty".to_string(),
-			))?,
-		)?;
+			))?)?;
 		let signature = signature_as_secret(
-			secp,
 			&swap
 				.redeem_slate
 				.tx
@@ -326,7 +321,6 @@ impl SellApi {
 				.excess_sig,
 		)?;
 		let seller_signature = signature_as_secret(
-			secp,
 			&swap
 				.redeem_slate
 				.participant_data
@@ -336,7 +330,8 @@ impl SellApi {
 				.ok_or(ErrorKind::UnexpectedAction("Seller Fn calculate_redeem_secret() redeem slate is not initialized, participant signature not found".to_string()))?,
 		)?;
 
-		let redeem = secp.blind_sum(vec![adaptor_signature, seller_signature], vec![signature])?;
+		let redeem =
+			Secp256k1::blind_sum(vec![adaptor_signature, seller_signature], vec![signature])?;
 		let redeem_pub = PublicKey::from_secret_key(keychain.secp(), &redeem)?;
 		if swap.redeem_public != Some(redeem_pub) {
 			// If this happens - mean that swap is broken, somewhere there is a security flaw. Probably didn't check something.
@@ -431,7 +426,7 @@ impl SellApi {
 		multisig.round_2_participant(1, &part)?;
 
 		// Round 2 + finalize
-		let common_nonce = swap.common_nonce(secp)?;
+		let common_nonce = swap.common_nonce()?;
 		let multisig = &mut swap.multisig;
 		multisig.common_nonce = Some(common_nonce);
 		multisig.round_2(secp, &sec_key)?;
@@ -462,7 +457,7 @@ impl SellApi {
 				swap.multisig_secret(keychain, context)?,
 			))
 			.sub_blinding_factor(swap.lock_slate.tx.offset.clone());
-		let sec_key = keychain.blind_sum(&sum)?.secret_key(keychain.secp())?;
+		let sec_key = keychain.blind_sum(&sum)?.secret_key()?;
 
 		Ok(sec_key)
 	}
@@ -492,8 +487,7 @@ impl SellApi {
 		}
 		elems.push(build::output(change, scontext.change_output.clone()));
 		slate.add_transaction_elements(keychain, &proof::ProofBuilder::new(keychain), elems)?;
-		slate.tx.offset =
-			BlindingFactor::from_secret_key(SecretKey::new(keychain.secp(), &mut thread_rng()));
+		slate.tx.offset = BlindingFactor::from_secret_key(SecretKey::new(&mut thread_rng()));
 
 		#[cfg(test)]
 		if is_test_mode() {
@@ -566,7 +560,7 @@ impl SellApi {
 			))
 			.add_key_id(scontext.refund_output.to_value_path(swap.refund_amount()))
 			.sub_blinding_factor(swap.refund_slate.tx.offset.clone());
-		let sec_key = keychain.blind_sum(&sum)?.secret_key(keychain.secp())?;
+		let sec_key = keychain.blind_sum(&sum)?.secret_key()?;
 
 		Ok(sec_key)
 	}
@@ -593,9 +587,8 @@ impl SellApi {
 		elems.push(build::output(refund_amount, scontext.refund_output.clone()));
 		slate
 			.add_transaction_elements(keychain, &proof::ProofBuilder::new(keychain), elems)?
-			.secret_key(keychain.secp())?;
-		slate.tx.offset =
-			BlindingFactor::from_secret_key(SecretKey::new(keychain.secp(), &mut thread_rng()));
+			.secret_key()?;
+		slate.tx.offset = BlindingFactor::from_secret_key(SecretKey::new(&mut thread_rng()));
 
 		#[cfg(test)]
 		if is_test_mode() {
@@ -667,7 +660,7 @@ impl SellApi {
 		let sum = BlindSum::new().sub_blinding_factor(BlindingFactor::from_secret_key(
 			swap.multisig_secret(keychain, context)?,
 		));
-		let sec_key = keychain.blind_sum(&sum)?.secret_key(keychain.secp())?;
+		let sec_key = keychain.blind_sum(&sum)?.secret_key()?;
 
 		Ok(sec_key)
 	}
