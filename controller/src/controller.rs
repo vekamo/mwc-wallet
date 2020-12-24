@@ -390,9 +390,13 @@ impl<L, C, K> Controller<L, C, K>
 					/// transaction to a destination and optionally finalize the result
 					send_args: None,
 					outputs: None,
+					// Lack later flag. Require compact slate workflow
+					late_lock: Some(false),
+					// other waller recipient for encrypted slatepack.
+					slatepack_recipient: None,
 				};
 
-				*slate = owner_api.process_invoice_tx((&mask).as_ref(), slate, params)?;
+				*slate = owner_api.process_invoice_tx((&mask).as_ref(), slate, &params)?;
 
 				owner_api.tx_lock_outputs((&mask).as_ref(), slate, Some(from.get_full_name()), 1)?;
 			} else {

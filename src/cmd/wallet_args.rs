@@ -22,6 +22,7 @@ use crate::util::{Mutex, ZeroingString};
 
 /// Argument parsing and error handling for wallet commands
 use clap::ArgMatches;
+use ed25519_dalek::SecretKey as DalekSecretKey;
 use failure::Fail;
 use grin_wallet_api::Owner;
 use grin_wallet_config::{MQSConfig, TorConfig, WalletConfig};
@@ -29,7 +30,7 @@ use grin_wallet_controller::command;
 use grin_wallet_controller::{Error, ErrorKind};
 use grin_wallet_impls::tor::config::is_tor_address;
 use grin_wallet_impls::{DefaultLCProvider, DefaultWalletImpl};
-use grin_wallet_impls::{PathToSlate, SlateGetter as _};
+use grin_wallet_impls::{PathToSlateGetter, SlateGetter};
 use grin_wallet_libwallet::proof::proofaddress;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::Slate;
@@ -448,6 +449,8 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 	// estimate_selection_strategies
 	let estimate_selection_strategies = args.is_present("estimate_selection_strategies");
 
+	let late_lock = args.is_present("late_lock");
+
 	// method
 	let method = parse_required(args, "method")?;
 	let address = {
@@ -565,6 +568,23 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 		false => None,
 	};
 
+	let slatepack_recipient: Option<ProvableAddress> = match args.value_of("slatepack_recipient") {
+		Some(s) => {
+			let addr = ProvableAddress::from_str(s).map_err(|e| {
+				ParseError::ArgumentError(format!("Unable to parse slatepack_recipient, {}", e))
+			})?;
+
+			if addr.tor_public_key().is_err() {
+				return Err(ParseError::ArgumentError(
+					"Expecting tor PK address as a slatepack recipient value".to_string(),
+				)
+				.into());
+			}
+			Some(addr)
+		}
+		None => None,
+	};
+
 	if minimum_confirmations_change_outputs_is_present && !exclude_change_outputs {
 		Err(ArgumentError("minimum_confirmations_change_outputs may only be specified if exclude_change_outputs is set".to_string()))
 	} else {
@@ -587,6 +607,8 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 			minimum_confirmations_change_outputs: minimum_confirmations_change_outputs,
 			address: address,
 			outputs,
+			slatepack_recipient,
+			late_lock,
 		})
 	}
 }
@@ -666,6 +688,24 @@ pub fn parse_issue_invoice_args(
 			false => None,
 		}
 	};
+
+	let slatepack_recipient: Option<ProvableAddress> = match args.value_of("slatepack_recipient") {
+		Some(s) => {
+			let addr = ProvableAddress::from_str(s).map_err(|e| {
+				ParseError::ArgumentError(format!("Unable to parse slatepack_recipient, {}", e))
+			})?;
+
+			if addr.tor_public_key().is_err() {
+				return Err(ParseError::ArgumentError(
+					"Expecting tor PK address as a slatepack recipient value".to_string(),
+				)
+				.into());
+			}
+			Some(addr)
+		}
+		None => None,
+	};
+
 	// dest (output file)
 	let dest = parse_required(args, "dest")?;
 	Ok(command::IssueInvoiceArgs {
@@ -676,6 +716,7 @@ pub fn parse_issue_invoice_args(
 			amount,
 			message,
 			target_slate_version,
+			slatepack_recipient,
 		},
 	})
 }
@@ -683,6 +724,7 @@ pub fn parse_issue_invoice_args(
 pub fn parse_process_invoice_args(
 	args: &ArgMatches,
 	prompt: bool,
+	slatepack_secret: &DalekSecretKey,
 ) -> Result<command::ProcessInvoiceArgs, ParseError> {
 	// TODO: display and prompt for confirmation of what we're doing
 	// message
@@ -743,11 +785,15 @@ pub fn parse_process_invoice_args(
 	if prompt {
 		// Now we need to prompt the user whether they want to do this,
 		// which requires reading the slate
-
-		let slate = match PathToSlate((&tx_file).into()).get_tx() {
+		let slate = match PathToSlateGetter::build((&tx_file).into()).get_tx(Some(slatepack_secret))
+		{
 			Ok(s) => s,
 			Err(e) => return Err(ParseError::ArgumentError(format!("{}", e))),
 		};
+		let slate = slate
+			.to_slate()
+			.map_err(|e| ParseError::ArgumentError(format!("Unable to read the slate, {}", e)))?
+			.0;
 
 		prompt_pay_invoice(&slate, method, dest)?;
 	}
@@ -1367,7 +1413,23 @@ where
 			command::issue_invoice_tx(owner_api, km, a)
 		}
 		("pay", Some(args)) => {
-			let a = arg_parse!(parse_process_invoice_args(&args, !test_mode));
+			let slatepack_secret = {
+				let mut w_lock = owner_api.wallet_inst.lock();
+				let w = w_lock.lc_provider()?.wallet_inst()?;
+				let keychain = w.keychain(km)?;
+				let slatepack_secret = proofaddress::payment_proof_address_secret(&keychain)?;
+				let slatepack_secret =
+					DalekSecretKey::from_bytes(&slatepack_secret.0).map_err(|e| {
+						ErrorKind::GenericError(format!("Unable to build secret, {}", e))
+					})?;
+				slatepack_secret
+			};
+
+			let a = arg_parse!(parse_process_invoice_args(
+				&args,
+				!test_mode,
+				&slatepack_secret
+			));
 			command::process_invoice(
 				owner_api,
 				km,

@@ -26,6 +26,10 @@ use std::path::MAIN_SEPARATOR;
 
 use crate::tor::config as tor_config;
 use crate::tor::process as tor_process;
+use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
+use grin_wallet_libwallet::proof::proofaddress;
+use grin_wallet_libwallet::slatepack::SlatePurpose;
+use x25519_dalek::PublicKey as xDalekPublicKey;
 
 const TOR_CONFIG_PATH: &str = "tor/sender";
 
@@ -378,14 +382,52 @@ impl HttpDataSender {
 }
 
 impl SlateSender for HttpDataSender {
-	fn send_tx(&self, slate: &Slate) -> Result<Slate, Error> {
+	fn send_tx(
+		&self,
+		slate: &Slate,
+		slate_content: SlatePurpose,
+		slatepack_secret: &DalekSecretKey,
+		recipients: &Vec<xDalekPublicKey>,
+	) -> Result<Slate, Error> {
 		// we need to keep _tor in scope so that the process is not killed by drop.
 		let (url_str, _tor) = self.set_up_tor_send_process()?;
 
 		let slate_send = match self.check_other_version(&url_str, None)? {
-			SlateVersion::V3B => VersionedSlate::into_version(slate.clone(), SlateVersion::V3),
+			SlateVersion::SP => {
+				if recipients.is_empty() {
+					return Err(ErrorKind::GenericError(
+						"Not provided expected recipient address for Slate Pack".to_string(),
+					)
+					.into());
+				}
+				let tor_pk = DalekPublicKey::from(slatepack_secret);
+				let slatepack_pk = proofaddress::tor_pub_2_slatepack_pub(&tor_pk)?;
+
+				VersionedSlate::into_version(
+					&slate,
+					SlateVersion::SP,
+					slate_content,
+					&Some(slatepack_pk),
+					recipients,
+				)?
+			}
+			SlateVersion::V3B => {
+				if slate.compact_slate {
+					return Err(ErrorKind::ClientCallback(
+						"Other wallet doesn't support slatepack compact model".into(),
+					)
+					.into());
+				}
+				VersionedSlate::into_version_plain(slate.clone(), SlateVersion::V3B)?
+			}
 			SlateVersion::V2 | SlateVersion::V3 => {
 				let mut slate = slate.clone();
+				if slate.compact_slate {
+					return Err(ErrorKind::ClientCallback(
+						"Other wallet doesn't support slatepack compact model".into(),
+					)
+					.into());
+				}
 				if slate.payment_proof.is_some() {
 					return Err(ErrorKind::ClientCallback("Payment proof requested, but other wallet does not support payment proofs or tor payment proof. Please urge other user to upgrade, or re-send tx without a payment proof".into()).into());
 				}
@@ -393,8 +435,7 @@ impl SlateSender for HttpDataSender {
 					warn!("Slate TTL value will be ignored and removed by other wallet, as other wallet does not support this feature. Please urge other user to upgrade");
 				}
 				slate.version_info.version = 2;
-				slate.version_info.orig_version = 2;
-				VersionedSlate::into_version(slate, SlateVersion::V2)
+				VersionedSlate::into_version_plain(slate.clone(), SlateVersion::V2)?
 			}
 		};
 
@@ -478,27 +519,24 @@ impl SlateSender for HttpDataSender {
 		{
 			res["result"]["Ok"]["ttl_cutoff_height"] = json!(u64::MAX);
 		}
-		let slate =
-			Slate::deserialize_upgrade(&serde_json::to_string(&slate_value).map_err(|e| {
-				ErrorKind::GenericError(format!("Unable to build slate from values, {}", e))
-			})?)
-			.map_err(|e| {
-				ErrorKind::GenericError(format!("Unable to build slate from response {}, {}", res_str, e))
-			})?;
 
-		// //compare the listening wallet proof address retrieved earlier to the returned slate. If they don't match, return error
-		// if let Some(ref p) = slate.payment_proof {
-		// 	let receiver_a = p.clone().receiver_address;
-		// 	if receiver_a.public_key != receiver_proof_address {
-		// 		return Err(ErrorKind::ProofAddressMismatch(
-		// 			receiver_a.public_key,
-		// 			receiver_proof_address,
-		// 		)
-		// 		.into());
-		// 	}
-		// }
+		let slate_str = serde_json::to_string(&slate_value).map_err(|e| {
+			ErrorKind::GenericError(format!("Unable to build slate from values, {}", e))
+		})?;
 
-		Ok(slate)
+		let res_slate = if Slate::deserialize_is_plain(&slate_str) {
+			Slate::deserialize_upgrade_plain(&slate_str).map_err(|e| {
+				ErrorKind::GenericError(format!(
+					"Unable to build slate from response {}, {}",
+					res_str, e
+				))
+			})?
+		} else {
+			let sp = Slate::deserialize_upgrade_slatepack(&slate_str, Some(slatepack_secret))?;
+			sp.to_result_slate()
+		};
+
+		Ok(res_slate)
 	}
 }
 

@@ -77,7 +77,7 @@ fn no_change_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	let fee = core::libtx::tx_fee(1, 1, 1, None);
 
 	// send a single block's worth of transactions with minimal strategy
-	let mut slate = Slate::blank(2);
+	let mut slate = Slate::blank(2, false);
 	wallet::controller::owner_single_use(Some(wallet1.clone()), mask1, None, |api, m| {
 		let args = InitTxArgs {
 			src_acct_name: None,
@@ -88,7 +88,7 @@ fn no_change_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 			selection_strategy_is_use_all: false,
 			..Default::default()
 		};
-		slate = api.init_send_tx(m, args, 1)?;
+		slate = api.init_send_tx(m, &args, 1)?;
 		slate = client1.send_tx_slate_direct("wallet2", &slate)?;
 		api.tx_lock_outputs(m, &slate, None, 0)?;
 		slate = api.finalize_tx(m, &slate)?;
@@ -113,7 +113,7 @@ fn no_change_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 			amount: reward - fee,
 			..Default::default()
 		};
-		slate = api.issue_invoice_tx(m, args)?;
+		slate = api.issue_invoice_tx(m, &args)?;
 		Ok(())
 	})?;
 
@@ -128,7 +128,7 @@ fn no_change_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 			selection_strategy_is_use_all: false,
 			..Default::default()
 		};
-		slate = api.process_invoice_tx(m, &slate, args)?;
+		slate = api.process_invoice_tx(m, &slate, &args)?;
 		api.tx_lock_outputs(m, &slate, None, 1)?;
 		Ok(())
 	})?;

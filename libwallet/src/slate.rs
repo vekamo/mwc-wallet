@@ -26,13 +26,12 @@ use crate::grin_core::core::transaction::{
 use crate::grin_core::core::verifier_cache::LruVerifierCache;
 use crate::grin_core::libtx::{aggsig, build, proof::ProofBuild, secp_ser, tx_fee};
 use crate::grin_core::map_vec;
-use crate::grin_keychain::{BlindSum, BlindingFactor, Keychain};
+use crate::grin_keychain::{BlindSum, BlindingFactor, Keychain, SwitchCommitmentType};
 use crate::grin_util::secp::key::{PublicKey, SecretKey};
 use crate::grin_util::secp::pedersen::Commitment;
 use crate::grin_util::secp::Signature;
 use crate::grin_util::{self, secp, RwLock};
-use rand::rngs::mock::StepRng;
-use rand::thread_rng;
+use crate::Context;
 use serde::ser::{Serialize, Serializer};
 use serde_json;
 use std::fmt;
@@ -51,8 +50,11 @@ use crate::slate_versions::v3::{
 use crate::proof::proofaddress;
 use crate::proof::proofaddress::ProvableAddress;
 use crate::types::CbData;
-use crate::{SlateVersion, CURRENT_SLATE_VERSION};
+use crate::{SlateVersion, Slatepacker, CURRENT_SLATE_VERSION};
+use ed25519_dalek::SecretKey as DalekSecretKey;
 use grin_core::core::{Inputs, NRDRelativeHeight, OutputIdentifier};
+use rand::rngs::mock::StepRng;
+use rand::thread_rng;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PaymentInfo {
@@ -171,6 +173,8 @@ impl fmt::Display for ParticipantMessageData {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Slate {
+	/// True is created from slatepack data.
+	pub compact_slate: bool,
 	/// Versioning info
 	pub version_info: VersionCompatInfo,
 	/// The number of participants intended to take part in this transaction
@@ -209,6 +213,13 @@ pub struct Slate {
 	/// Payment Proof
 	#[serde(default = "default_payment_none")]
 	pub payment_proof: Option<PaymentInfo>,
+	/// Offset, needed when posting of transaction is deferred.
+	#[serde(default = "zero_bf")]
+	pub offset: BlindingFactor,
+}
+
+fn zero_bf() -> BlindingFactor {
+	BlindingFactor::zero()
 }
 
 fn default_payment_none() -> Option<PaymentInfo> {
@@ -219,8 +230,6 @@ fn default_payment_none() -> Option<PaymentInfo> {
 pub struct VersionCompatInfo {
 	/// The current version of the slate format
 	pub version: u16,
-	/// Original version this slate was converted from
-	pub orig_version: u16,
 	/// The grin block header version this slate is intended for
 	pub block_header_version: u16,
 }
@@ -244,8 +253,22 @@ impl Slate {
 		Ok(probe.version())
 	}
 
+	/// Check if this text slate is plain
+	pub fn deserialize_is_plain(slate_str: &str) -> bool {
+		slate_str.len() > 0 && slate_str.as_bytes()[0] == '{' as u8
+	}
+
 	/// Recieve a slate, upgrade it to the latest version internally
-	pub fn deserialize_upgrade(slate_json: &str) -> Result<Slate, Error> {
+	pub fn deserialize_upgrade_slatepack(
+		slate_str: &str,
+		dec_key: Option<&DalekSecretKey>,
+	) -> Result<Slatepacker, Error> {
+		let sp = Slatepacker::decrypt_slatepack(slate_str.as_bytes(), dec_key)?;
+		Ok(sp)
+	}
+
+	/// Recieve a slate, upgrade it to the latest version internally
+	pub fn deserialize_upgrade_plain(slate_json: &str) -> Result<Slate, Error> {
 		let version = Slate::parse_slate_version(slate_json)?;
 
 		//I don't think we need to do this for coin_type and network_type, the slate containing these two
@@ -286,9 +309,16 @@ impl Slate {
 	}
 
 	/// Create a new slate
-	pub fn blank(num_participants: usize) -> Slate {
+	/// slatepack also mean 'compact slate'. Please note the slates are build different way, so for the compact
+	/// slates we have defferent method of building it.
+	pub fn blank(num_participants: usize, compact_slate: bool) -> Slate {
+		let np = match num_participants {
+			0 => 2,
+			n => n,
+		};
 		let mut slate = Slate {
-			num_participants: num_participants,
+			compact_slate,
+			num_participants: np, // assume 2 if not present
 			id: Uuid::new_v4(),
 			tx: Transaction::empty(),
 			amount: 0,
@@ -301,10 +331,10 @@ impl Slate {
 			participant_data: vec![],
 			version_info: VersionCompatInfo {
 				version: CURRENT_SLATE_VERSION,
-				orig_version: CURRENT_SLATE_VERSION,
 				block_header_version: 1, // GRIN_BLOCK_HEADER_VERSION,
 			},
 			payment_proof: None,
+			offset: BlindingFactor::zero(),
 		};
 		// The transaction inputs type need need to be Commit and feature. So let's fix that now while it is empty.
 		slate.tx.body.inputs = Inputs::FeaturesAndCommit(vec![]);
@@ -391,10 +421,10 @@ impl Slate {
 		Ok(())
 	}
 
-	/// Calculate minimal Slate version. For exchange we want to keep the varsion as low as possible
+	/// Calculate minimal plain Slate version. For exchange we want to keep the varsion as low as possible
 	/// because there are might be many non upgraded wallets and we want ot be friendly to them.
 	pub fn lowest_version(&self) -> SlateVersion {
-		if self.payment_proof.is_some() || self.ttl_cutoff_height.is_some() {
+		if self.payment_proof.is_some() || self.ttl_cutoff_height.is_some() || self.compact_slate {
 			SlateVersion::V3
 		} else {
 			SlateVersion::V2
@@ -414,6 +444,9 @@ impl Slate {
 		B: ProofBuild,
 	{
 		self.update_kernel();
+		if elems.is_empty() {
+			return Ok(BlindingFactor::zero());
+		}
 		let (tx, blind) = build::partial_transaction(self.tx.clone(), &elems, keychain, builder)?;
 		self.tx = tx;
 		Ok(blind)
@@ -443,12 +476,12 @@ impl Slate {
 	where
 		K: Keychain,
 	{
-		// Whoever does this first generates the offset
+		// Generating offset for backward compability. Offset ONLY for the TX, the slate copy is kept the same.
 		if self.tx.offset == BlindingFactor::zero() {
-			self.generate_offset(keychain, sec_key, use_test_rng)?;
+			self.generate_legacy_offset(keychain, sec_key, use_test_rng)?;
 		}
 		self.add_participant_info(
-			keychain,
+			keychain.secp(),
 			&sec_key,
 			&sec_nonce,
 			participant_id,
@@ -459,9 +492,9 @@ impl Slate {
 		Ok(())
 	}
 
-	// Construct the appropriate kernel features based on our fee and lock_height.
-	// If lock_height is 0 then its a plain kernel, otherwise its a height locked kernel.
-	fn kernel_features(&self) -> KernelFeatures {
+	/// Construct the appropriate kernel features based on our fee and lock_height.
+	/// If lock_height is 0 then its a plain kernel, otherwise its a height locked kernel.
+	pub fn kernel_features(&self) -> KernelFeatures {
 		match self.lock_height {
 			0 => KernelFeatures::Plain { fee: self.fee },
 			_ => KernelFeatures::HeightLocked {
@@ -479,21 +512,21 @@ impl Slate {
 	}
 
 	/// Completes caller's part of round 2, completing signatures
-	pub fn fill_round_2<K>(
+	pub fn fill_round_2(
 		&mut self,
-		keychain: &K,
+		secp: &secp::Secp256k1,
 		sec_key: &SecretKey,
 		sec_nonce: &SecretKey,
 		participant_id: usize,
-	) -> Result<(), Error>
-	where
-		K: Keychain,
-	{
-		self.check_fees()?;
+	) -> Result<(), Error> {
+		// TODO: Note we're unable to verify fees in this instance because of the slatepacks
+		// Inputs are not transferred.
+		// Also with lock later feature, fees and inputs can be adjusted before finalizing by the send init party
+		// self.check_fees()?;
 
-		self.verify_part_sigs(keychain.secp())?;
+		self.verify_part_sigs(secp)?;
 		let sig_part = aggsig::calculate_partial_sig(
-			keychain.secp(),
+			secp,
 			sec_key,
 			sec_nonce,
 			&self.pub_nonce_sum()?,
@@ -515,7 +548,7 @@ impl Slate {
 	where
 		K: Keychain,
 	{
-		let final_sig = self.finalize_signature(keychain)?;
+		let final_sig = self.finalize_signature(keychain.secp())?;
 		self.finalize_transaction(keychain, &final_sig)
 	}
 
@@ -531,11 +564,16 @@ impl Slate {
 
 	/// Return the sum of public nonces
 	fn pub_nonce_sum(&self) -> Result<PublicKey, Error> {
-		let pub_nonces = self
+		let pub_nonces: Vec<&PublicKey> = self
 			.participant_data
 			.iter()
 			.map(|p| &p.public_nonce)
 			.collect();
+		if pub_nonces.len() == 0 {
+			return Err(
+				ErrorKind::GenericError(format!("Participant nonces cannot be empty")).into(),
+			);
+		}
 		match PublicKey::from_combination(pub_nonces) {
 			Ok(k) => Ok(k),
 			Err(e) => Err(Error::from(e)),
@@ -544,11 +582,16 @@ impl Slate {
 
 	/// Return the sum of public blinding factors
 	fn pub_blind_sum(&self) -> Result<PublicKey, Error> {
-		let pub_blinds = self
+		let pub_blinds: Vec<&PublicKey> = self
 			.participant_data
 			.iter()
 			.map(|p| &p.public_blind_excess)
 			.collect();
+		if pub_blinds.len() == 0 {
+			return Err(
+				ErrorKind::GenericError(format!("Participant Blind sums cannot be empty")).into(),
+			);
+		}
 		match PublicKey::from_combination(pub_blinds) {
 			Ok(k) => Ok(k),
 			Err(e) => Err(Error::from(e)),
@@ -559,10 +602,7 @@ impl Slate {
 	fn part_sigs(&self) -> Vec<&Signature> {
 		self.participant_data
 			.iter()
-			.filter(|p| {
-				debug_assert!(p.part_sig.is_some());
-				p.part_sig.is_some()
-			})
+			.filter(|p| p.part_sig.is_some())
 			.map(|p| p.part_sig.as_ref().unwrap())
 			.collect()
 	}
@@ -571,22 +611,19 @@ impl Slate {
 	/// and saves participant's transaction context
 	/// sec_key can be overridden to replace the blinding
 	/// factor (by whoever split the offset)
-	fn add_participant_info<K>(
+	pub fn add_participant_info(
 		&mut self,
-		keychain: &K,
+		secp: &secp::Secp256k1,
 		sec_key: &SecretKey,
 		sec_nonce: &SecretKey,
 		id: usize,
 		part_sig: Option<Signature>,
 		message: Option<String>,
 		use_test_rng: bool,
-	) -> Result<(), Error>
-	where
-		K: Keychain,
-	{
+	) -> Result<(), Error> {
 		// Add our public key and nonce to the slate
-		let pub_key = PublicKey::from_secret_key(keychain.secp(), &sec_key)?;
-		let pub_nonce = PublicKey::from_secret_key(keychain.secp(), &sec_nonce)?;
+		let pub_key = PublicKey::from_secret_key(secp, &sec_key)?;
+		let pub_nonce = PublicKey::from_secret_key(secp, &sec_nonce)?;
 
 		let test_message_nonce = SecretKey::from_slice(&[1; 32])?;
 		let message_nonce = match use_test_rng {
@@ -599,26 +636,51 @@ impl Slate {
 			if let Some(m) = message.clone() {
 				let hashed = blake2b(secp::constants::MESSAGE_SIZE, &[], &m.as_bytes()[..]);
 				let m = secp::Message::from_slice(&hashed.as_bytes())?;
-				let res = aggsig::sign_single(
-					&keychain.secp(),
-					&m,
-					&sec_key,
-					message_nonce,
-					Some(&pub_key),
-				)?;
+				let res = aggsig::sign_single(secp, &m, &sec_key, message_nonce, Some(&pub_key))?;
 				Some(res)
 			} else {
 				None
 			}
 		};
-		self.participant_data.push(ParticipantData {
-			id: id as u64,
-			public_blind_excess: pub_key,
-			public_nonce: pub_nonce,
-			part_sig: part_sig,
-			message: message,
-			message_sig: message_sig,
-		});
+
+		// The record might exist. In this case we should update it
+		match self
+			.participant_data
+			.iter_mut()
+			.find(|ref p| p.id == id as u64)
+		{
+			Some(pp) => {
+				if pp.public_blind_excess == pub_key && pp.public_nonce == pub_nonce {
+					if part_sig.is_some() {
+						pp.part_sig = part_sig;
+					}
+
+					if pp.message == message {
+						if message_sig.is_some() {
+							pp.message_sig = message_sig;
+						}
+					} else {
+						pp.message_sig = message_sig;
+					}
+				} else {
+					pp.part_sig = part_sig;
+					pp.message_sig = message_sig;
+				}
+				pp.public_blind_excess = pub_key;
+				pp.public_nonce = pub_nonce;
+				pp.message = message;
+			}
+			None => {
+				self.participant_data.push(ParticipantData {
+					id: id as u64,
+					public_blind_excess: pub_key,
+					public_nonce: pub_nonce,
+					part_sig: part_sig,
+					message: message,
+					message_sig: message_sig,
+				});
+			}
+		}
 		Ok(())
 	}
 
@@ -632,19 +694,18 @@ impl Slate {
 		ret
 	}
 
+	/// NOTE: Non compact workflow supporting. This code does generate the offset for NON slatepack case
+	/// Slateppacks will override that!!!!
 	/// Somebody involved needs to generate an offset with their private key
 	/// For now, we'll have the transaction initiator be responsible for it
 	/// Return offset private key for the participant to use later in the
 	/// transaction
-	fn generate_offset<K>(
+	fn generate_legacy_offset<K: Keychain>(
 		&mut self,
 		keychain: &K,
 		sec_key: &mut SecretKey,
 		use_test_rng: bool,
-	) -> Result<(), Error>
-	where
-		K: Keychain,
-	{
+	) -> Result<(), Error> {
 		// Generate a random kernel offset here
 		// and subtract it from the blind_sum so we create
 		// the aggsig context with the "split" key
@@ -663,6 +724,40 @@ impl Slate {
 				.sub_blinding_factor(self.tx.offset.clone()),
 		)?;
 		*sec_key = blind_offset.secret_key()?;
+		Ok(())
+	}
+
+	/// Add our contribution to the offset based on the excess, inputs and outputs
+	pub fn adjust_offset<K: Keychain>(
+		&mut self,
+		keychain: &K,
+		context: &Context,
+	) -> Result<(), Error> {
+		// Only compact slate flow.
+		debug_assert!(self.compact_slate);
+
+		let mut sum = BlindSum::new()
+			.add_blinding_factor(self.offset.clone())
+			.sub_blinding_factor(BlindingFactor::from_secret_key(
+				context.initial_sec_key.clone(),
+			));
+		for (id, _, amount) in &context.input_ids {
+			sum = sum.sub_blinding_factor(BlindingFactor::from_secret_key(keychain.derive_key(
+				*amount,
+				id,
+				SwitchCommitmentType::Regular,
+			)?));
+		}
+		for (id, _, amount) in &context.output_ids {
+			sum = sum.add_blinding_factor(BlindingFactor::from_secret_key(keychain.derive_key(
+				*amount,
+				id,
+				SwitchCommitmentType::Regular,
+			)?));
+		}
+
+		self.offset = keychain.blind_sum(&sum)?;
+
 		Ok(())
 	}
 
@@ -718,6 +813,11 @@ impl Slate {
 
 	/// Verifies any messages in the slate's participant data match their signatures
 	pub fn verify_messages(&self) -> Result<(), Error> {
+		// Compact (slatepack) doesn't have a signature for the messages and have to use encrypted slatepack to move the data
+		if self.compact_slate {
+			return Ok(());
+		}
+
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::VerifyOnly);
 		for p in self.participant_data.iter() {
 			if let Some(msg) = &p.message {
@@ -777,23 +877,20 @@ impl Slate {
 	///
 	/// Returns completed transaction ready for posting to the chain
 
-	fn finalize_signature<K>(&mut self, keychain: &K) -> Result<Signature, Error>
-	where
-		K: Keychain,
-	{
-		self.verify_part_sigs(keychain.secp())?;
+	pub fn finalize_signature(&mut self, secp: &secp::Secp256k1) -> Result<Signature, Error> {
+		self.verify_part_sigs(secp)?;
 
 		let part_sigs = self.part_sigs();
 		let pub_nonce_sum = self.pub_nonce_sum()?;
 		let final_pubkey = self.pub_blind_sum()?;
 		// get the final signature
-		let final_sig = aggsig::add_signatures(&keychain.secp(), part_sigs, &pub_nonce_sum)?;
+		let final_sig = aggsig::add_signatures(secp, part_sigs, &pub_nonce_sum)?;
 
 		// Calculate the final public key (for our own sanity check)
 
 		// Check our final sig verifies
 		aggsig::verify_completed_sig(
-			&keychain.secp(),
+			secp,
 			&final_sig,
 			&final_pubkey,
 			Some(&final_pubkey),
@@ -804,21 +901,30 @@ impl Slate {
 	}
 
 	/// return the final excess
-	pub fn calc_excess<K>(&self, keychain: &K) -> Result<Commitment, Error>
+	pub fn calc_excess<K>(&self, keychain: Option<&K>) -> Result<Commitment, Error>
 	where
 		K: Keychain,
 	{
-		let kernel_offset = &self.tx.offset;
-		let tx = self.tx.clone();
-		let overage = tx.fee() as i64;
-		let tx_excess = tx.sum_commitments(overage)?;
+		if self.compact_slate {
+			let sum = self.pub_blind_sum()?;
+			Ok(Commitment::from_pubkey(&sum)?)
+		} else {
+			// Legacy method
+			let kernel_offset = &self.tx.offset;
+			let tx = self.tx.clone();
+			let overage = tx.fee() as i64;
+			let tx_excess = tx.sum_commitments(overage)?;
 
-		// subtract the kernel_excess (built from kernel_offset)
-		let offset_excess = keychain.secp().commit(0, kernel_offset.secret_key()?)?;
-		Ok(secp::Secp256k1::commit_sum(
-			vec![tx_excess],
-			vec![offset_excess],
-		)?)
+			// subtract the kernel_excess (built from kernel_offset)
+			let offset_excess = keychain
+				.unwrap()
+				.secp()
+				.commit(0, kernel_offset.secret_key()?)?;
+			Ok(secp::Secp256k1::commit_sum(
+				vec![tx_excess],
+				vec![offset_excess],
+			)?)
+		}
 	}
 
 	/// builds a final transaction after the aggregated sig exchange
@@ -832,7 +938,7 @@ impl Slate {
 	{
 		self.check_fees()?;
 		// build the final excess based on final tx and offset
-		let final_excess = self.calc_excess(keychain)?;
+		let final_excess = self.calc_excess(Some(keychain))?;
 
 		debug!("Final Tx excess: {:?}", final_excess);
 
@@ -845,6 +951,10 @@ impl Slate {
 
 		// confirm the kernel verifies successfully before proceeding
 		debug!("Validating final transaction");
+		trace!(
+			"Final tx: {}",
+			serde_json::to_string_pretty(&final_tx).unwrap()
+		);
 		final_tx.kernels()[0].verify()?;
 
 		// confirm the overall transaction is valid (including the updated kernel)
@@ -865,7 +975,7 @@ impl Serialize for Slate {
 		use serde::ser::Error;
 
 		let v3 = SlateV3::from(self);
-		match self.version_info.orig_version {
+		match self.version_info.version {
 			3 => v3.serialize(serializer),
 			// left as a reminder
 			2 => {
@@ -914,6 +1024,7 @@ impl From<CbData> for CoinbaseV3 {
 impl From<Slate> for SlateV3 {
 	fn from(slate: Slate) -> SlateV3 {
 		let Slate {
+			compact_slate,
 			num_participants,
 			id,
 			tx,
@@ -927,6 +1038,7 @@ impl From<Slate> for SlateV3 {
 			participant_data,
 			version_info,
 			payment_proof,
+			offset: _,
 		} = slate;
 		let participant_data = map_vec!(participant_data, |data| ParticipantDataV3::from(data));
 		let version_info = VersionCompatInfoV3::from(&version_info);
@@ -949,6 +1061,7 @@ impl From<Slate> for SlateV3 {
 			participant_data,
 			version_info,
 			payment_proof,
+			compact_slate: if compact_slate { Some(true) } else { None },
 		}
 	}
 }
@@ -956,6 +1069,7 @@ impl From<Slate> for SlateV3 {
 impl From<&Slate> for SlateV3 {
 	fn from(slate: &Slate) -> SlateV3 {
 		let Slate {
+			compact_slate,
 			num_participants,
 			id,
 			tx,
@@ -969,6 +1083,7 @@ impl From<&Slate> for SlateV3 {
 			participant_data,
 			version_info,
 			payment_proof,
+			offset: _,
 		} = slate;
 		let num_participants = *num_participants;
 		let id = *id;
@@ -1006,6 +1121,7 @@ impl From<&Slate> for SlateV3 {
 			participant_data,
 			version_info,
 			payment_proof,
+			compact_slate: if *compact_slate { Some(true) } else { None },
 		}
 	}
 }
@@ -1041,15 +1157,13 @@ impl From<&VersionCompatInfo> for VersionCompatInfoV3 {
 	fn from(data: &VersionCompatInfo) -> VersionCompatInfoV3 {
 		let VersionCompatInfo {
 			version,
-			orig_version,
 			block_header_version,
 		} = data;
 		let version = *version;
-		let orig_version = *orig_version;
 		let block_header_version = *block_header_version;
 		VersionCompatInfoV3 {
 			version,
-			orig_version,
+			orig_version: version,
 			block_header_version,
 		}
 	}
@@ -1188,6 +1302,7 @@ impl From<SlateV3> for Slate {
 			participant_data,
 			version_info,
 			payment_proof,
+			compact_slate,
 		} = slate;
 		let participant_data = map_vec!(participant_data, |data| ParticipantData::from(data));
 		let version_info = VersionCompatInfo::from(&version_info);
@@ -1197,6 +1312,8 @@ impl From<SlateV3> for Slate {
 		};
 		let tx = Transaction::from(tx);
 		Slate {
+			compact_slate: compact_slate.unwrap_or(false),
+			offset: tx.offset.clone(),
 			num_participants,
 			id,
 			tx,
@@ -1245,15 +1362,13 @@ impl From<&VersionCompatInfoV3> for VersionCompatInfo {
 	fn from(data: &VersionCompatInfoV3) -> VersionCompatInfo {
 		let VersionCompatInfoV3 {
 			version,
-			orig_version,
+			orig_version: _,
 			block_header_version,
 		} = data;
 		let version = *version;
-		let orig_version = *orig_version;
 		let block_header_version = *block_header_version;
 		VersionCompatInfo {
 			version,
-			orig_version,
 			block_header_version,
 		}
 	}

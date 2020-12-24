@@ -75,7 +75,7 @@ impl BuyApi {
 		}
 
 		// Multisig tx needs to be unlocked and valid. Let's take a look at what we get.
-		let lock_slate: Slate = offer.lock_slate.into();
+		let lock_slate: Slate = offer.lock_slate.into_slate_plain()?;
 		if lock_slate.lock_height > 0 {
 			return Err(ErrorKind::InvalidLockHeightLockTx);
 		}
@@ -145,7 +145,7 @@ impl BuyApi {
 		// Refund tx needs to be locked until exactly as offer specify. For MWC we are expecting one block every 1 minute.
 		// So numbers should match with accuracy of few blocks.
 		// Note!!! We can't valiry exact number because we don't know what height seller get when he created the offer
-		let refund_slate: Slate = offer.refund_slate.into();
+		let refund_slate: Slate = offer.refund_slate.into_slate_plain()?;
 		// expecting at least half of the interval
 
 		// Lock_height will be verified later
@@ -198,7 +198,7 @@ impl BuyApi {
 		)?;
 
 		// Start redeem slate
-		let mut redeem_slate = Slate::blank(2);
+		let mut redeem_slate = Slate::blank(2, false);
 
 		#[cfg(test)]
 		if is_test_mode() {
@@ -323,10 +323,10 @@ impl BuyApi {
 	pub fn init_redeem_message(swap: &Swap) -> Result<Message, ErrorKind> {
 		swap.message(
 			Update::InitRedeem(InitRedeemUpdate {
-				redeem_slate: VersionedSlate::into_version(
+				redeem_slate: VersionedSlate::into_version_plain(
 					swap.redeem_slate.clone(),
 					SlateVersion::V2, // V2 should satify our needs, dont adding extra
-				),
+				)?,
 				adaptor_signature: swap.adaptor_signature.ok_or(ErrorKind::UnexpectedAction(
 					"Buyer Fn init_redeem_message(), multisig is empty".to_string(),
 				))?,
@@ -417,7 +417,12 @@ impl BuyApi {
 			None,
 			false,
 		)?;
-		slate.fill_round_2(keychain, &sec_key, &context.lock_nonce, swap.participant_id)?;
+		slate.fill_round_2(
+			keychain.secp(),
+			&sec_key,
+			&context.lock_nonce,
+			swap.participant_id,
+		)?;
 
 		Ok(())
 	}
@@ -464,7 +469,7 @@ impl BuyApi {
 			false,
 		)?;
 		slate.fill_round_2(
-			keychain,
+			keychain.secp(),
 			&sec_key,
 			&context.refund_nonce,
 			swap.participant_id,
@@ -514,9 +519,7 @@ impl BuyApi {
 		slate.amount = swap.primary_amount - slate.fee;
 		let mut elems = Vec::new();
 		elems.push(build::output(slate.amount, bcontext.output.clone()));
-		slate
-			.add_transaction_elements(keychain, &proof::ProofBuilder::new(keychain), elems)?
-			.secret_key()?;
+		slate.add_transaction_elements(keychain, &proof::ProofBuilder::new(keychain), elems)?;
 
 		#[cfg(test)]
 		{
@@ -588,7 +591,7 @@ impl BuyApi {
 
 		// Sign + finalize slate
 		slate.fill_round_2(
-			keychain,
+			keychain.secp(),
 			&sec_key,
 			&context.redeem_nonce,
 			swap.participant_id,

@@ -74,7 +74,7 @@ fn aggsig_sender_receiver_interaction() {
 
 		let blind = blinding_factor.secret_key().unwrap();
 
-		s_cx = Context::new(&keychain.secp(), blind, &parent, false, 0);
+		s_cx = Context::with_excess(&keychain.secp(), blind, &parent, false, 0, 0, 0, None);
 		s_cx.get_public_keys(&keychain.secp())
 	};
 
@@ -88,7 +88,7 @@ fn aggsig_sender_receiver_interaction() {
 		// let blind = blind_sum.secret_key(&keychain.secp())?;
 		let blind = keychain.derive_key(0, &key_id, switch).unwrap();
 
-		rx_cx = Context::new(&keychain.secp(), blind, &parent, false, 1);
+		rx_cx = Context::with_excess(&keychain.secp(), blind, &parent, false, 1, 0, 0, None);
 		let (pub_excess, pub_nonce) = rx_cx.get_public_keys(&keychain.secp());
 		rx_cx.add_output(&key_id, &None, 0);
 
@@ -284,7 +284,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 
 		let blind = blinding_factor.secret_key().unwrap();
 
-		s_cx = Context::new(&keychain.secp(), blind, &parent, false, 0);
+		s_cx = Context::with_excess(&keychain.secp(), blind, &parent, false, 0, 0, 0, None);
 		s_cx.get_public_keys(&keychain.secp())
 	};
 
@@ -297,7 +297,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 
 		let blind = keychain.derive_key(0, &key_id, switch).unwrap();
 
-		rx_cx = Context::new(&keychain.secp(), blind, &parent, false, 1);
+		rx_cx = Context::with_excess(&keychain.secp(), blind, &parent, false, 1, 0, 0, None);
 		let (pub_excess, pub_nonce) = rx_cx.get_public_keys(&keychain.secp());
 		rx_cx.add_output(&key_id, &None, 0);
 

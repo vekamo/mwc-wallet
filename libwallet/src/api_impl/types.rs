@@ -48,7 +48,7 @@ pub struct SendTXArgs {
 }
 
 /// V2 Init / Send TX API Args
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct InitTxArgs {
 	/// The human readable account name from which to draw outputs
 	/// for the transaction, overriding whatever the active account is as set via the
@@ -57,7 +57,7 @@ pub struct InitTxArgs {
 	#[serde(default)]
 	pub src_acct_name: Option<String>,
 	#[serde(with = "secp_ser::string_or_u64")]
-	/// The amount to send, in nanogrins. (`1 G = 1_000_000_000nG`)
+	/// The amount to send, in nano MWC. (`1 MWC = 1_000_000_000 nMWC`)
 	pub amount: u64,
 	#[serde(with = "secp_ser::string_or_u64")]
 	/// The minimum number of confirmations an output
@@ -132,11 +132,19 @@ pub struct InitTxArgs {
 	pub send_args: Option<InitTxSendArgs>,
 	/// Selected outputs. If none, will use all outputs
 	pub outputs: Option<Vec<String>>, // outputs to include into the transaction
+	/// Slatepack recipient. If defined will send as a slatepack. Otherwise as not encrypted. Will be ignored for MQS
+	/// ProvableAddress has to be tor (DalekPublicKey) address
+	pub slatepack_recipient: Option<ProvableAddress>,
+	/// if flagged, create the transaction as late-locked, i.e. don't select actual
+	/// inputs until just before finalization. This feature make sense for files and slatepacks,
+	/// because we don't want outputs to be reserved for a long time.
+	#[serde(default)]
+	pub late_lock: Option<bool>,
 }
 
 /// Send TX API Args, for convenience functionality that inits the transaction and sends
 /// in one go
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct InitTxSendArgs {
 	/// The transaction method. Can currently be 'http' .
 	pub method: String,
@@ -174,7 +182,9 @@ impl Default for InitTxArgs {
 			exclude_change_outputs: Some(false),
 			minimum_confirmations_change_outputs: 1,
 			send_args: None,
+			late_lock: Some(false),
 			outputs: None,
+			slatepack_recipient: None,
 		}
 	}
 }
@@ -231,6 +241,9 @@ pub struct IssueInvoiceTxArgs {
 	/// recipient address
 	#[serde(default)]
 	pub address: Option<String>,
+	/// Slatepack recipient. If defined will send as a slatepack. Otherwise as not encrypted. Will be ignored for MQS
+	/// ProvableAddress has to be tor (DalekPublicKey) address
+	pub slatepack_recipient: Option<ProvableAddress>,
 }
 
 impl Default for IssueInvoiceTxArgs {
@@ -241,6 +254,7 @@ impl Default for IssueInvoiceTxArgs {
 			message: None,
 			target_slate_version: None,
 			address: None,
+			slatepack_recipient: None,
 		}
 	}
 }

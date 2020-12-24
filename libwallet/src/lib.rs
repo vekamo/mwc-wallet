@@ -58,11 +58,14 @@ pub mod internal;
 pub mod proof;
 mod slate;
 pub mod slate_versions;
+pub mod slatepack;
 /// Atomic Swap library
 pub mod swap;
 mod types;
 extern crate bitcoin as bitcoin_lib;
 extern crate bitcoin_hashes;
+
+pub use crate::slatepack::{SlatePurpose, Slatepack, SlatepackArmor, Slatepacker};
 
 pub use bitcoin::Address as BitcoinAddress;
 

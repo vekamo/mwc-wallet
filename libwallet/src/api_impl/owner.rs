@@ -41,7 +41,7 @@ use std::io::Write;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
-const USER_MESSAGE_MAX_LEN: usize = 256;
+const USER_MESSAGE_MAX_LEN: usize = 1000; // We can keep messages as long as we need unless the slate will be too large to operate. 1000 symbols should be enough to keep everybody happy
 use crate::proof::crypto;
 use crate::proof::proofaddress;
 use grin_core::global;
@@ -368,7 +368,7 @@ where
 pub fn init_send_tx<'a, T: ?Sized, C, K>(
 	w: &mut T,
 	keychain_mask: Option<&SecretKey>,
-	args: InitTxArgs,
+	args: &InitTxArgs,
 	use_test_rng: bool,
 	routputs: usize, // Number of resulting outputs. Normally it is 1
 ) -> Result<Slate, Error>
@@ -377,9 +377,9 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	let parent_key_id = match args.src_acct_name {
+	let parent_key_id = match &args.src_acct_name {
 		Some(d) => {
-			let pm = w.get_acct_path(d)?;
+			let pm = w.get_acct_path(d.clone())?;
 			match pm {
 				Some(p) => p.path,
 				None => w.parent_key_id(),
@@ -388,15 +388,24 @@ where
 		None => w.parent_key_id(),
 	};
 
-	let message = match args.message {
-		Some(mut m) => {
+	let message = match &args.message {
+		Some(m) => {
+			let mut m = m.clone();
 			m.truncate(USER_MESSAGE_MAX_LEN);
 			Some(m)
 		}
 		None => None,
 	};
 
-	let mut slate = tx::new_tx_slate(&mut *w, args.amount, 2, use_test_rng, args.ttl_blocks)?;
+	let compact_slate = args.slatepack_recipient.is_some();
+	let mut slate = tx::new_tx_slate(
+		&mut *w,
+		args.amount,
+		2,
+		use_test_rng,
+		args.ttl_blocks,
+		compact_slate,
+	)?;
 
 	// if we just want to estimate, don't save a context, just send the results
 	// back
@@ -419,24 +428,48 @@ where
 		return Ok(slate);
 	}
 
-	let mut context = tx::add_inputs_to_slate(
-		&mut *w,
-		keychain_mask,
-		&mut slate,
-		args.minimum_confirmations,
-		args.max_outputs as usize,
-		args.num_change_outputs as usize,
-		args.selection_strategy_is_use_all,
-		&parent_key_id,
-		0,
-		message,
-		true,
-		use_test_rng,
-		&args.outputs,
-		routputs,
-		args.exclude_change_outputs.unwrap_or(false),
-		args.minimum_confirmations_change_outputs,
-	)?;
+	// Updating height because it is lookup height for the kernel
+	slate.height = w.w2n_client().get_chain_tip()?.0;
+	let h = slate.height;
+	let mut context = if args.late_lock.unwrap_or(false) {
+		if !slate.compact_slate {
+			return Err(ErrorKind::GenericError(
+				"Lock later feature available only with a slatepack (compact slate) model"
+					.to_string(),
+			)
+			.into());
+		}
+
+		tx::create_late_lock_context(
+			&mut *w,
+			keychain_mask,
+			&mut slate,
+			h,
+			&args,
+			&parent_key_id,
+			use_test_rng,
+			0,
+		)?
+	} else {
+		tx::add_inputs_to_slate(
+			&mut *w,
+			keychain_mask,
+			&mut slate,
+			args.minimum_confirmations,
+			args.max_outputs as usize,
+			args.num_change_outputs as usize,
+			args.selection_strategy_is_use_all,
+			&parent_key_id,
+			0,
+			message,
+			true,
+			use_test_rng,
+			&args.outputs,
+			routputs,
+			args.exclude_change_outputs.unwrap_or(false),
+			args.minimum_confirmations_change_outputs,
+		)?
+	};
 
 	// Payment Proof, add addresses to slate and save address
 	// TODO: Note we only use single derivation path for now,
@@ -445,7 +478,7 @@ where
 	let k = w.keychain(keychain_mask)?;
 	let sender_a = proofaddress::payment_proof_address(&k, proofaddress::ProofAddressType::MQS)?;
 
-	if let Some(a) = args.address {
+	if let Some(a) = &args.address {
 		if a.eq("file_proof") {
 			debug!("doing file proof");
 			//in file proof, we are putting the same address both both sender_address and receiver_address
@@ -459,10 +492,10 @@ where
 		}
 	}
 
-	if let Some(a) = args.payment_proof_recipient_address {
+	if let Some(a) = &args.payment_proof_recipient_address {
 		slate.payment_proof = Some(PaymentInfo {
 			sender_address: sender_a,
-			receiver_address: a,
+			receiver_address: a.clone(),
 			receiver_signature: None,
 		});
 
@@ -485,9 +518,6 @@ where
 		batch.save_private_context(slate.id.as_bytes(), 0, &context)?;
 		batch.commit()?;
 	}
-	if let Some(v) = args.target_slate_version {
-		slate.version_info.orig_version = v;
-	}
 
 	slate.coin_type = Some("mwc".to_string());
 	if global::is_floonet() {
@@ -503,7 +533,7 @@ where
 pub fn issue_invoice_tx<'a, T: ?Sized, C, K>(
 	w: &mut T,
 	keychain_mask: Option<&SecretKey>,
-	args: IssueInvoiceTxArgs,
+	args: &IssueInvoiceTxArgs,
 	use_test_rng: bool,
 	num_outputs: usize, // Number of outputs for this transaction. Normally it is 1
 ) -> Result<Slate, Error>
@@ -512,9 +542,9 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	let parent_key_id = match args.dest_acct_name {
+	let parent_key_id = match &args.dest_acct_name {
 		Some(d) => {
-			let pm = w.get_acct_path(d)?;
+			let pm = w.get_acct_path(d.clone())?;
 			match pm {
 				Some(p) => p.path,
 				None => w.parent_key_id(),
@@ -523,19 +553,23 @@ where
 		None => w.parent_key_id(),
 	};
 
-	let message = match args.message {
-		Some(mut m) => {
+	let message = match &args.message {
+		Some(m) => {
+			let mut m = m.clone();
 			m.truncate(USER_MESSAGE_MAX_LEN);
 			Some(m)
 		}
 		None => None,
 	};
 
-	let mut slate = tx::new_tx_slate(&mut *w, args.amount, 2, use_test_rng, None)?;
+	let compact_slate = args.slatepack_recipient.is_some();
+	let mut slate = tx::new_tx_slate(&mut *w, args.amount, 2, use_test_rng, None, compact_slate)?;
+	let chain_tip = slate.height; // it is fresh slate, height is a tip
 	let context = tx::add_output_to_slate(
 		&mut *w,
 		keychain_mask,
 		&mut slate,
+		chain_tip,
 		args.address.clone(),
 		None,
 		None,
@@ -556,10 +590,6 @@ where
 		batch.commit()?;
 	}
 
-	if let Some(v) = args.target_slate_version {
-		slate.version_info.orig_version = v;
-	}
-
 	Ok(slate)
 }
 
@@ -570,7 +600,7 @@ pub fn process_invoice_tx<'a, T: ?Sized, C, K>(
 	w: &mut T,
 	keychain_mask: Option<&SecretKey>,
 	slate: &Slate,
-	args: InitTxArgs,
+	args: &InitTxArgs,
 	use_test_rng: bool,
 	refresh_from_node: bool,
 ) -> Result<Slate, Error>
@@ -581,9 +611,9 @@ where
 {
 	let mut ret_slate = slate.clone();
 	check_ttl(w, &ret_slate, refresh_from_node)?;
-	let parent_key_id = match args.src_acct_name {
+	let parent_key_id = match &args.src_acct_name {
 		Some(d) => {
-			let pm = w.get_acct_path(d)?;
+			let pm = w.get_acct_path(d.clone())?;
 			match pm {
 				Some(p) => p.path,
 				None => w.parent_key_id(),
@@ -608,8 +638,9 @@ where
 		}
 	}
 
-	let message = match args.message {
-		Some(mut m) => {
+	let message = match &args.message {
+		Some(m) => {
+			let mut m = m.clone();
 			m.truncate(USER_MESSAGE_MAX_LEN);
 			Some(m)
 		}
@@ -620,11 +651,14 @@ where
 	ret_slate.height = w.w2n_client().get_chain_tip()?.0;
 
 	// update ttl if desired
-	if let Some(b) = args.ttl_blocks {
+	if let Some(b) = &args.ttl_blocks {
 		ret_slate.ttl_cutoff_height = Some(ret_slate.height + b);
 	}
 
-	let context = tx::add_inputs_to_slate(
+	// if self sending, make sure to store 'initiator' keys
+	let context_res = w.get_private_context(keychain_mask, slate.id.as_bytes(), 0); // See issue_invoice_tx for sender (self)
+
+	let mut context = tx::add_inputs_to_slate(
 		&mut *w,
 		keychain_mask,
 		&mut ret_slate,
@@ -643,17 +677,49 @@ where
 		args.minimum_confirmations_change_outputs,
 	)?;
 
+	if slate.compact_slate {
+		let keychain = w.keychain(keychain_mask)?;
+
+		// Add our contribution to the offset
+		if context_res.is_ok() {
+			// Self sending: don't correct for inputs and outputs
+			// here, as we will do it during finalization.
+			let mut tmp_context = context.clone();
+			tmp_context.input_ids.clear();
+			tmp_context.output_ids.clear();
+			ret_slate.adjust_offset(&keychain, &mut tmp_context)?;
+		} else {
+			ret_slate.adjust_offset(&keychain, &mut context)?;
+		}
+
+		// needs to be stored as we're removing sig data for return trip. this needs to be present
+		// when locking transaction context and updating tx log with excess later
+		context.calculated_excess = Some(ret_slate.calc_excess(Some(&keychain))?);
+
+		// if self-sending, merge contexts
+		if let Ok(c) = context_res {
+			context.initial_sec_key = c.initial_sec_key;
+			context.initial_sec_nonce = c.initial_sec_nonce;
+			context.fee = c.fee;
+			context.amount = c.amount;
+			for o in c.output_ids.iter() {
+				context.output_ids.push(o.clone());
+			}
+			for i in c.input_ids.iter() {
+				context.input_ids.push(i.clone());
+			}
+		}
+
+		selection::repopulate_tx(&mut *w, keychain_mask, &mut ret_slate, &context, false)?;
+	}
+
 	// Save the aggsig context in our DB for when we
 	// recieve the transaction back
 	{
 		let mut batch = w.batch(keychain_mask)?;
 		// Participant id 1 for mwc713 compatibility
-		batch.save_private_context(slate.id.as_bytes(), 1, &context)?;
+		batch.save_private_context(ret_slate.id.as_bytes(), 1, &context)?;
 		batch.commit()?;
-	}
-
-	if let Some(v) = args.target_slate_version {
-		ret_slate.version_info.orig_version = v;
 	}
 
 	Ok(ret_slate)
@@ -673,7 +739,29 @@ where
 	K: Keychain + 'a,
 {
 	let context = w.get_private_context(keychain_mask, slate.id.as_bytes(), participant_id)?;
-	selection::lock_tx_context(&mut *w, keychain_mask, slate, &context, address)
+	let mut excess_override = None;
+
+	let mut sl = slate.clone();
+
+	if slate.compact_slate {
+		selection::repopulate_tx(&mut *w, keychain_mask, &mut sl, &context, true)?;
+
+		if sl.participant_data.len() == 1 {
+			// purely for invoice workflow, payer needs the excess back temporarily for storage
+			excess_override = context.calculated_excess;
+		}
+	}
+
+	let height = w.w2n_client().get_chain_tip()?.0;
+	selection::lock_tx_context(
+		&mut *w,
+		keychain_mask,
+		&sl,
+		height,
+		&context,
+		address,
+		excess_override,
+	)
 }
 
 /// Finalize slate
@@ -690,8 +778,67 @@ where
 	K: Keychain + 'a,
 {
 	let mut sl = slate.clone();
+	sl.height = w.w2n_client().get_chain_tip()?.0;
 	check_ttl(w, &sl, refresh_from_node)?;
-	let context = w.get_private_context(keychain_mask, sl.id.as_bytes(), 0)?;
+	let mut context = w.get_private_context(keychain_mask, sl.id.as_bytes(), 0)?;
+	let keychain = w.keychain(keychain_mask)?;
+	let parent_key_id = w.parent_key_id();
+
+	if let Some(args) = context.late_lock_args.take() {
+		// Transaction was late locked, select inputs+change now
+		// and insert into original context
+
+		let mut temp_sl = tx::new_tx_slate(
+			&mut *w,
+			context.amount,
+			2,
+			false,
+			args.ttl_blocks,
+			slate.compact_slate,
+		)?;
+		temp_sl.height = sl.height;
+		let temp_context = selection::build_send_tx(
+			w,
+			&keychain,
+			keychain_mask,
+			&mut temp_sl,
+			args.minimum_confirmations,
+			args.max_outputs as usize,
+			args.num_change_outputs as usize,
+			args.selection_strategy_is_use_all,
+			parent_key_id.clone(),
+			0,
+			false,
+			true,
+			&args.outputs,
+			1,
+			args.exclude_change_outputs.unwrap_or(false),
+			args.minimum_confirmations_change_outputs,
+			args.message,
+		)?;
+
+		// Add inputs and outputs to original context
+		context.input_ids = temp_context.input_ids;
+		context.output_ids = temp_context.output_ids;
+
+		// Store the updated context
+		{
+			let mut batch = w.batch(keychain_mask)?;
+			batch.save_private_context(sl.id.as_bytes(), 0, &context)?;
+			batch.commit()?;
+		}
+
+		// Now do the actual locking
+		tx_lock_outputs(w, keychain_mask, &sl, args.address, 0)?;
+	}
+
+	if slate.compact_slate {
+		// Add our contribution to the offset
+		sl.adjust_offset(&keychain, &mut context)?;
+
+		selection::repopulate_tx(&mut *w, keychain_mask, &mut sl, &context, true)?;
+	}
+
 	tx::complete_tx(&mut *w, keychain_mask, &mut sl, 0, &context)?;
 	tx::verify_slate_payment_proof(&mut *w, keychain_mask, &context, &sl)?;
 	tx::update_stored_tx(&mut *w, keychain_mask, &context, &sl, false)?;

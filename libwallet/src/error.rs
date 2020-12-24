@@ -84,7 +84,7 @@ pub enum ErrorKind {
 	Secp(String),
 
 	/// Onion V3 Address Error
-	#[fail(display = "Onion V3 Address Error")]
+	#[fail(display = "Onion V3 Address Error, {}", _0)]
 	OnionV3Address(util::OnionV3AddressError),
 
 	/// Callback implementation error conversion
@@ -336,6 +336,14 @@ pub enum ErrorKind {
 	/// Swap error
 	#[fail(display = "Swap Error , {}", _0)]
 	SwapError(String),
+
+	/// Slatepack Decoding Error
+	#[fail(display = "Slatepack decode error, {}", _0)]
+	SlatepackDecodeError(String),
+
+	/// Slatepack Encoding Error
+	#[fail(display = "Slatepack encode error, {}", _0)]
+	SlatepackEncodeError(String),
 }
 
 impl Display for Error {

@@ -205,7 +205,7 @@ impl TxProof {
 			decrypted_message.truncate(leng - 59); //remove the "tor" and tor_key from the elnd
 		}
 
-		let slate = Slate::deserialize_upgrade(&decrypted_message).map_err(|e| {
+		let slate = Slate::deserialize_upgrade_plain(&decrypted_message).map_err(|e| {
 			ErrorKind::TxProofGenericError(format!(
 				"Unable to build Slate form proof message, {}",
 				e
@@ -231,7 +231,7 @@ impl TxProof {
 		}
 	}
 
-	/// Build proof data. massage suppose to be slate.
+	/// Build proof data. message suppose to be slate.
 	pub fn from_response(
 		from: &ProvableAddress,
 		message: String,
@@ -317,7 +317,13 @@ impl TxProof {
 					//and generate the key.
 
 					let version = slate.lowest_version();
-					let slate = VersionedSlate::into_version(slate.clone(), version);
+					let slate = VersionedSlate::into_version_plain(slate.clone(), version)
+						.map_err(|e| {
+							ErrorKind::TxProofGenericError(format!(
+								"Slate serialization error, {}",
+								e
+							))
+						})?;
 
 					let mut slate_json_with_tor = serde_json::to_string(&slate).map_err(|e| {
 						ErrorKind::TxProofGenericError(format!(
@@ -399,7 +405,13 @@ impl TxProof {
 					//and generate the key.
 
 					let version = slate.lowest_version();
-					let slate = VersionedSlate::into_version(slate.clone(), version);
+					let slate = VersionedSlate::into_version_plain(slate.clone(), version)
+						.map_err(|e| {
+							ErrorKind::TxProofGenericError(format!(
+								"Slate serialization error, {}",
+								e
+							))
+						})?;
 
 					let encrypted_message = EncryptedMessage::new(
 						serde_json::to_string(&slate).map_err(|e| {

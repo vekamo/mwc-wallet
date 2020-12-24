@@ -24,7 +24,7 @@ use self::core::consensus;
 use self::core::global;
 use grin_wallet_libwallet as libwallet;
 use impls::test_framework::{self, LocalWalletClient};
-use impls::{PathToSlate, SlatePutter as _};
+use impls::{PathToSlatePutter, SlatePutter};
 use libwallet::{InitTxArgs, NodeClient};
 use std::thread;
 use std::time::Duration;
@@ -188,10 +188,10 @@ fn scan_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 			selection_strategy_is_use_all: true,
 			..Default::default()
 		};
-		let slate = api.init_send_tx(m, args, 1)?;
+		let slate = api.init_send_tx(m, &args, 1)?;
 		// output tx file
 		let send_file = format!("{}/part_tx_1.tx", test_dir);
-		PathToSlate(send_file.into()).put_tx(&slate)?;
+		PathToSlatePutter::build_plain(send_file.into()).put_tx(&slate)?;
 		api.tx_lock_outputs(m, &slate, None, 0)?;
 		Ok(())
 	})?;

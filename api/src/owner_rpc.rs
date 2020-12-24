@@ -22,7 +22,8 @@ use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::slate_versions::v3::TransactionV3;
 use crate::libwallet::{
 	AcctPathMapping, ErrorKind, InitTxArgs, IssueInvoiceTxArgs, NodeClient, NodeHeightResult,
-	OutputCommitMapping, Slate, TxLogEntry, VersionedSlate, WalletInfo, WalletLCProvider,
+	OutputCommitMapping, Slate, SlatePurpose, TxLogEntry, VersionedSlate, WalletInfo,
+	WalletLCProvider,
 };
 use crate::types::TxLogEntryAPI;
 use crate::util;
@@ -642,7 +643,7 @@ pub trait OwnerRpc: Sync + Send {
 			  },
 			  "version_info": {
 				"block_header_version": 2,
-				"orig_version": 2,
+				"orig_version": 3,
 				"version": 2
 			  }
 			}
@@ -1450,15 +1451,43 @@ where
 	}
 
 	fn init_send_tx(&self, args: InitTxArgs) -> Result<VersionedSlate, ErrorKind> {
-		let slate = Owner::init_send_tx(self, None, args, 1).map_err(|e| e.kind())?;
-		let version = slate.lowest_version();
-		Ok(VersionedSlate::into_version(slate, version))
+		let slate = Owner::init_send_tx(self, None, &args, 1).map_err(|e| e.kind())?;
+
+		let vslate = Owner::encrypt_slate(
+			&self,
+			None,
+			&slate,
+			if args.send_args.is_some() {
+				SlatePurpose::SendSend
+			} else {
+				SlatePurpose::FullSlate
+			},
+			args.slatepack_recipient
+				.map(|a| a.slate_pack_public_key())
+				.filter(|a| a.is_ok())
+				.map(|a| a.unwrap()),
+		)
+		.map_err(|e| e.kind())?;
+
+		Ok(vslate)
 	}
 
 	fn issue_invoice_tx(&self, args: IssueInvoiceTxArgs) -> Result<VersionedSlate, ErrorKind> {
-		let slate = Owner::issue_invoice_tx(self, None, args).map_err(|e| e.kind())?;
-		let version = slate.lowest_version();
-		Ok(VersionedSlate::into_version(slate, version))
+		let slate = Owner::issue_invoice_tx(self, None, &args).map_err(|e| e.kind())?;
+
+		let vslate = Owner::encrypt_slate(
+			&self,
+			None,
+			&slate,
+			SlatePurpose::InvoiceSend,
+			args.slatepack_recipient
+				.map(|a| a.slate_pack_public_key())
+				.filter(|a| a.is_ok())
+				.map(|a| a.unwrap()),
+		)
+		.map_err(|e| e.kind())?;
+
+		Ok(vslate)
 	}
 
 	fn process_invoice_tx(
@@ -1466,17 +1495,33 @@ where
 		in_slate: VersionedSlate,
 		args: InitTxArgs,
 	) -> Result<VersionedSlate, ErrorKind> {
-		let out_slate = Owner::process_invoice_tx(self, None, &Slate::from(in_slate), args)
-			.map_err(|e| e.kind())?;
-		let version = out_slate.lowest_version();
-		Ok(VersionedSlate::into_version(out_slate, version))
+		let (slate_from, sender) = Owner::decrypt_versioned_slate(self, None, in_slate)
+			.map_err(|e| ErrorKind::SlatepackDecodeError(format!("{}", e)))?;
+
+		let out_slate =
+			Owner::process_invoice_tx(self, None, &slate_from, &args).map_err(|e| e.kind())?;
+
+		let vslate = Owner::encrypt_slate(
+			&self,
+			None,
+			&out_slate,
+			SlatePurpose::InvoiceResponse,
+			sender,
+		)
+		.map_err(|e| e.kind())?;
+
+		Ok(vslate)
 	}
 
 	fn finalize_tx(&self, in_slate: VersionedSlate) -> Result<VersionedSlate, ErrorKind> {
-		let out_slate =
-			Owner::finalize_tx(self, None, &Slate::from(in_slate)).map_err(|e| e.kind())?;
-		let version = out_slate.lowest_version();
-		Ok(VersionedSlate::into_version(out_slate, version))
+		let (slate_from, sender) = Owner::decrypt_versioned_slate(self, None, in_slate)
+			.map_err(|e| ErrorKind::SlatepackDecodeError(format!("{}", e)))?;
+		let out_slate = Owner::finalize_tx(self, None, &slate_from).map_err(|e| e.kind())?;
+
+		let vslate = Owner::encrypt_slate(&self, None, &out_slate, SlatePurpose::FullSlate, sender)
+			.map_err(|e| e.kind())?;
+
+		Ok(vslate)
 	}
 
 	fn tx_lock_outputs(
@@ -1484,8 +1529,9 @@ where
 		slate: VersionedSlate,
 		participant_id: usize,
 	) -> Result<(), ErrorKind> {
-		Owner::tx_lock_outputs(self, None, &Slate::from(slate), None, participant_id)
-			.map_err(|e| e.kind())
+		let (slate_from, _sender) = Owner::decrypt_versioned_slate(self, None, slate)
+			.map_err(|e| ErrorKind::SlatepackDecodeError(format!("{}", e)))?;
+		Owner::tx_lock_outputs(self, None, &slate_from, None, participant_id).map_err(|e| e.kind())
 	}
 
 	fn cancel_tx(&self, tx_id: Option<u32>, tx_slate_id: Option<Uuid>) -> Result<(), ErrorKind> {
@@ -1540,7 +1586,16 @@ where
 	}
 
 	fn verify_slate_messages(&self, slate: VersionedSlate) -> Result<(), ErrorKind> {
-		Owner::verify_slate_messages(self, None, &Slate::from(slate)).map_err(|e| e.kind())
+		if slate.is_encrypted() {
+			return Err(ErrorKind::SlatepackDecodeError(
+				"verify_slate_messages doesn't make sense for slatepack".to_string(),
+			));
+		}
+		let slate = slate
+			.into_slate_plain()
+			.map_err(|e| ErrorKind::SlatepackDecodeError(format!("{}", e)))?;
+
+		Owner::verify_slate_messages(self, None, &slate).map_err(|e| e.kind())
 	}
 
 	fn scan(&self, start_height: Option<u64>, delete_unconfirmed: bool) -> Result<(), ErrorKind> {
@@ -1630,7 +1685,7 @@ pub fn run_doctest_owner(
 		mask1.clone(),
 	);
 
-	let mut slate_outer = Slate::blank(2);
+	let mut slate_outer = Slate::blank(2, false);
 
 	let rec_phrase_2 = util::ZeroingString::from(
 		"hour kingdom ripple lunch razor inquiry coyote clay stamp mean \
@@ -1734,7 +1789,7 @@ pub fn run_doctest_owner(
 			..Default::default()
 		};
 		let mut slate =
-			api_impl::owner::init_send_tx(&mut **w, (&mask1).as_ref(), args, true, 1).unwrap();
+			api_impl::owner::init_send_tx(&mut **w, (&mask1).as_ref(), &args, true, 1).unwrap();
 		println!("INITIAL SLATE");
 		println!("{}", serde_json::to_string_pretty(&slate).unwrap());
 		{
@@ -1864,44 +1919,6 @@ fn test() {
 
 	grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
 		r#"
-		{
-			"jsonrpc": "2.0",
-			"method": "init_send_tx",
-			"params": {
-				"args": {
-					"amount": "200000000"
-
-				}
-			},
-			"id": 1
-		}
-		"#,
-		r#"
-		{
-		  "id": 1,
-		  "jsonrpc": "2.0",
-		  "result": {
-			"Err": {
-			  "NotEnoughFunds": {
-				"available": 0,
-				"available_disp": "0.0",
-				"needed": 209000000,
-				"needed_disp": "0.209"
-			  }
-			}
-		  }
-		}
-		"#,
-		false,
-		4,
-		false,
-		false,
-		false,
-		false
-	);
-
-	grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
-		r#"
 			{
 				"jsonrpc": "2.0",
 				"method": "init_send_tx",
@@ -1933,7 +1950,7 @@ fn test() {
 				  "amount": "200000000",
 				  "fee": "12000000",
 				  "height": "4",
-				  "id": "0436430c-2b02-624c-2032-570501212b01",
+				  "id": "0436430c-2b02-624c-2032-570501212b00",
 				  "lock_height": "0",
 				  "num_participants": 2,
 				  "participant_data": [

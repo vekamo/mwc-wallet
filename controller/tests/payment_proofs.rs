@@ -87,7 +87,7 @@ fn payment_proofs_test_impl(test_dir: &'static str) -> Result<(), wallet::Error>
 	let address = ProvableAddress::from_pub_key(&address.unwrap());
 	println!("Public address is: {:?}", address);
 	let amount = 2_000_000_000; // grin value: 60_000_000_000
-	let mut slate = Slate::blank(1);
+	let mut slate = Slate::blank(1, false);
 	wallet::controller::owner_single_use(Some(wallet1.clone()), mask1, None, |sender_api, m| {
 		// note this will increment the block count as part of the transaction "Posting"
 		let args = InitTxArgs {
@@ -100,7 +100,7 @@ fn payment_proofs_test_impl(test_dir: &'static str) -> Result<(), wallet::Error>
 			payment_proof_recipient_address: Some(address.clone()),
 			..Default::default()
 		};
-		let slate_i = sender_api.init_send_tx(m, args, 1)?;
+		let slate_i = sender_api.init_send_tx(m, &args, 1)?;
 
 		assert_eq!(
 			slate_i
@@ -118,7 +118,7 @@ fn payment_proofs_test_impl(test_dir: &'static str) -> Result<(), wallet::Error>
 
 		// Check we are creating a tx with the expected lock_height of 0.
 		// We will check this produces a Plain kernel later.
-		assert_eq!(0, slate.lock_height);
+		assert_eq!(0, slate_i.lock_height);
 
 		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
 		sender_api.tx_lock_outputs(m, &slate, None, 0)?;
@@ -129,7 +129,7 @@ fn payment_proofs_test_impl(test_dir: &'static str) -> Result<(), wallet::Error>
 		let pp = txs[0].clone().payment_proof.unwrap();
 		assert_eq!(
 			pp.receiver_address.public_key,
-			slate_i
+			slate
 				.payment_proof
 				.as_ref()
 				.unwrap()

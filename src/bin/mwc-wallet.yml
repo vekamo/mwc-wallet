@@ -124,6 +124,10 @@ subcommands:
             help: Estimates all possible Coin/Output selection strategies.
             short: e
             long: estimate-selection
+        - late_lock:
+            help: EXPERIMENTAL - Do not lock the coins immediately, instead only lock them during finalization.
+            short: l
+            long: late-lock
         - change_outputs:
             help: Number of change outputs to generate (mainly for testing)
             short: o
@@ -187,6 +191,10 @@ subcommands:
             short: p
             long: outputs
             takes_value: true
+        - slatepack_recipient:
+            help: send transaction as encoded slatepack for this recipient (wallet public key, similar to proof_address)
+            long: slatepack_recipient
+            takes_value: true
   - receive:
       about: Processes a transaction file to accept a transfer from a sender
       args:
@@ -236,6 +244,10 @@ subcommands:
             help: Name of destination slate output file
             short: d
             long: dest
+            takes_value: true
+        - slatepack_recipient:
+            help: send transaction as encoded slatepack for this recipient (wallet public key, similar to proof_address)
+            long: slatepack_recipient
             takes_value: true
   - finalize_invoice:
       about: Processes invoice transaction file to finalize a transfer.

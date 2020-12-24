@@ -20,7 +20,7 @@ extern crate grin_wallet_impls as impls;
 use grin_wallet_util::grin_core as core;
 
 use impls::test_framework::{self, LocalWalletClient};
-use impls::{PathToSlate, SlateGetter as _, SlatePutter as _};
+use impls::{PathToSlateGetter, PathToSlatePutter, SlateGetter, SlatePutter};
 use std::thread;
 use std::time::Duration;
 
@@ -123,9 +123,9 @@ fn file_exchange_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> 
 			message: Some(message.to_owned()),
 			..Default::default()
 		};
-		let mut slate = api.init_send_tx(m, args, 1)?;
+		let mut slate = api.init_send_tx(m, &args, 1)?;
 		// output tx file
-		PathToSlate((&send_file).into()).put_tx(&mut slate)?;
+		PathToSlatePutter::build_plain((&send_file).into()).put_tx(&mut slate)?;
 		api.tx_lock_outputs(m, &slate, None, 0)?;
 		Ok(())
 	})?;
@@ -136,7 +136,10 @@ fn file_exchange_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> 
 		w.set_parent_key_id_by_name("account1")?;
 	}
 
-	let mut slate = PathToSlate((&send_file).into()).get_tx()?;
+	let mut slate = PathToSlateGetter::build((&send_file).into())
+		.get_tx(None)?
+		.to_slate()?
+		.0;
 	let mut naughty_slate = slate.clone();
 	naughty_slate.participant_data[0].message = Some("I changed the message".to_owned());
 
@@ -152,13 +155,16 @@ fn file_exchange_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> 
 	// wallet 2 receives file, completes, sends file back
 	wallet::controller::foreign_single_use(wallet2.clone(), mask2_i.clone(), |api| {
 		slate = api.receive_tx(&slate, None, None, Some(sender2_message.clone()))?;
-		PathToSlate((&receive_file).into()).put_tx(&slate)?;
+		PathToSlatePutter::build_plain((&receive_file).into()).put_tx(&slate)?;
 		Ok(())
 	})?;
 
 	// wallet 1 finalises and posts
 	wallet::controller::owner_single_use(Some(wallet1.clone()), mask1, None, |api, m| {
-		let mut slate = PathToSlate(receive_file.into()).get_tx()?;
+		let mut slate = PathToSlateGetter::build(receive_file.into())
+			.get_tx(None)?
+			.to_slate()?
+			.0;
 		api.verify_slate_messages(m, &slate)?;
 		slate = api.finalize_tx(m, &slate)?;
 		api.post_tx(m, &slate.tx, false)?;

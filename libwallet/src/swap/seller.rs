@@ -77,7 +77,7 @@ impl SellApi {
 		let now_ts = swap::get_cur_time();
 		let started = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now_ts, 0), Utc);
 
-		let ls = Slate::blank(2);
+		let ls = Slate::blank(2, false);
 
 		#[cfg(test)]
 		let id = if test_mode {
@@ -110,8 +110,8 @@ impl SellApi {
 			participant_id: 0,
 			multisig,
 			lock_slate: ls,
-			refund_slate: Slate::blank(2),
-			redeem_slate: Slate::blank(2),
+			refund_slate: Slate::blank(2, false),
+			redeem_slate: Slate::blank(2, false),
 			redeem_kernel_updated: false,
 			adaptor_signature: None,
 			mwc_confirmations,
@@ -271,7 +271,7 @@ impl SellApi {
 			.into());
 		}
 
-		let mut redeem_slate: Slate = init_redeem.redeem_slate.into();
+		let mut redeem_slate: Slate = init_redeem.redeem_slate.into_slate_plain()?;
 
 		// Validate adaptor signature
 		let (pub_nonce_sum, _, message) = swap.redeem_tx_fields(&redeem_slate)?;
@@ -362,14 +362,14 @@ impl SellApi {
 				secondary_amount: swap.secondary_amount,
 				secondary_currency: swap.secondary_currency,
 				multisig: swap.multisig.export()?,
-				lock_slate: VersionedSlate::into_version(
+				lock_slate: VersionedSlate::into_version_plain(
 					swap.lock_slate.clone(),
 					SlateVersion::V2, // V2 should satify our needs, dont adding extra
-				),
-				refund_slate: VersionedSlate::into_version(
+				)?,
+				refund_slate: VersionedSlate::into_version_plain(
 					swap.refund_slate.clone(),
 					SlateVersion::V2, // V2 should satify our needs, dont adding extra
-				),
+				)?,
 				redeem_participant: swap.redeem_slate.participant_data[swap.participant_id].clone(),
 				mwc_confirmations: swap.mwc_confirmations,
 				secondary_confirmations: swap.secondary_confirmations,
@@ -539,7 +539,12 @@ impl SellApi {
 		tx_add_output(slate, commit, proof);
 
 		// Sign + finalize slate
-		slate.fill_round_2(keychain, &sec_key, &context.lock_nonce, swap.participant_id)?;
+		slate.fill_round_2(
+			keychain.secp(),
+			&sec_key,
+			&context.lock_nonce,
+			swap.participant_id,
+		)?;
 		slate.finalize(keychain)?;
 
 		Ok(())
@@ -585,9 +590,7 @@ impl SellApi {
 		// The multisig input is missing because it is not yet fully known
 		let mut elems = Vec::new();
 		elems.push(build::output(refund_amount, scontext.refund_output.clone()));
-		slate
-			.add_transaction_elements(keychain, &proof::ProofBuilder::new(keychain), elems)?
-			.secret_key()?;
+		slate.add_transaction_elements(keychain, &proof::ProofBuilder::new(keychain), elems)?;
 		slate.tx.offset = BlindingFactor::from_secret_key(SecretKey::new(&mut thread_rng()));
 
 		#[cfg(test)]
@@ -640,7 +643,7 @@ impl SellApi {
 
 		// Sign + finalize slate
 		slate.fill_round_2(
-			keychain,
+			keychain.secp(),
 			&sec_key,
 			&context.refund_nonce,
 			swap.participant_id,
@@ -699,7 +702,7 @@ impl SellApi {
 		keychain: &K,
 		redeem_slate: &mut Slate,
 	) -> Result<Commitment, ErrorKind> {
-		let excess = redeem_slate.calc_excess(keychain)?;
+		let excess = redeem_slate.calc_excess(Some(keychain))?;
 		redeem_slate.tx.body.kernels[0].excess = excess.clone();
 		Ok(excess)
 	}
@@ -720,7 +723,7 @@ impl SellApi {
 
 		// Sign slate
 		slate.fill_round_2(
-			keychain,
+			keychain.secp(),
 			&sec_key,
 			&context.redeem_nonce,
 			swap.participant_id,

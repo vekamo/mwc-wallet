@@ -25,8 +25,11 @@ pub fn slate_deser<'a, D>(deserializer: D) -> Result<Slate, D::Error>
 where
 	D: Deserializer<'a>,
 {
+	use serde::de::Error;
 	let s = VersionedSlate::deserialize(deserializer)?;
-	Ok(s.into())
+	// Swaps are not using the slatepacks.
+	s.into_slate_plain()
+		.map_err(|e| D::Error::custom(format!("{}", e)))
 }
 
 /// Serialize Vec<u8> as HEX

@@ -30,6 +30,8 @@ chrono = { version = "0.4.4", features = ["serde"] }
 easy-jsonrpc-mw = "0.5.3"
 lazy_static = "1"
 colored = "1.6"
+x25519-dalek = "0.6"
+ed25519-dalek = "1.0.0-pre.4"
 
 grin_wallet_util = { path = "../util", version = "4.0.0" }
 

@@ -17,12 +17,13 @@
 use crate::keychain::Keychain;
 use crate::libwallet::api_impl::foreign;
 use crate::libwallet::{
-	BlockFees, CbData, Error, NodeClient, NodeVersionInfo, Slate, VersionInfo, WalletInst,
-	WalletLCProvider,
+	BlockFees, CbData, Error, NodeClient, NodeVersionInfo, Slate, VersionInfo, VersionedSlate,
+	WalletInst, WalletLCProvider,
 };
 use crate::util::secp::key::SecretKey;
 use crate::util::Mutex;
 use std::sync::Arc;
+use x25519_dalek::PublicKey as xDalekPublicKey;
 
 /// ForeignAPI Middleware Check callback
 pub type ForeignCheckMiddleware =
@@ -316,7 +317,7 @@ where
 	///
 	/// let mut api_foreign = Foreign::new(wallet.clone(), None, None);
 	///
-	/// # let slate = Slate::blank(2);
+	/// # let slate = Slate::blank(2, false);
 	/// // Receive a slate via some means
 	///
 	/// let res = api_foreign.verify_slate_messages(&slate);
@@ -388,7 +389,7 @@ where
 	/// # grin_wallet_api::doctest_helper_setup_doc_env_foreign!(wallet, wallet_config);
 	///
 	/// let mut api_foreign = Foreign::new(wallet.clone(), None, None);
-	/// # let slate = Slate::blank(2);
+	/// # let slate = Slate::blank(2, false);
 	///
 	/// // . . .
 	/// // Obtain a sent slate somehow
@@ -467,12 +468,12 @@ where
 	///     amount: 10_000_000_000,
 	///     ..Default::default()
 	/// };
-	/// let result = api_owner.issue_invoice_tx(None, args);
+	/// let result = api_owner.issue_invoice_tx(None, &args);
 	///
 	/// // If result okay, send to payer, who will apply the transaction via their
 	/// // owner API, then send back the slate
 	/// // ...
-	/// # let slate = Slate::blank(2);
+	/// # let slate = Slate::blank(2, false);
 	///
 	/// let slate = api_foreign.finalize_invoice_tx(&slate);
 	/// // if okay, then post via the owner API
@@ -497,6 +498,16 @@ where
 			(&self.keychain_mask).as_ref(),
 			swap_message,
 		)
+	}
+
+	// Utility method, not expected to be called from Foreign API.
+	pub fn decrypt_slatepack(
+		&self,
+		encrypted_slate: VersionedSlate,
+	) -> Result<(Slate, Option<xDalekPublicKey>), Error> {
+		let mut w_lock = self.wallet_inst.lock();
+		let w = w_lock.lc_provider()?.wallet_inst()?;
+		foreign::decrypt_slatepack(&mut **w, (&self.keychain_mask).as_ref(), encrypted_slate)
 	}
 }
 

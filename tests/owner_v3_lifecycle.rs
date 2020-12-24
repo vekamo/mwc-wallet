@@ -388,7 +388,7 @@ fn owner_v3_lifecycle() -> Result<(), grin_wallet_controller::Error> {
 	)?;
 	println!("RES 15: {:?}", res);
 	assert!(res.is_ok());
-	let mut slate: Slate = res.unwrap().into();
+	let mut slate: Slate = res.unwrap().into_slate_plain()?;
 
 	// give this slate over to wallet 2 manually
 	grin_wallet_controller::controller::owner_single_use(
@@ -405,7 +405,7 @@ fn owner_v3_lifecycle() -> Result<(), grin_wallet_controller::Error> {
 				selection_strategy_is_use_all: false,
 				..Default::default()
 			};
-			let res = api.process_invoice_tx(m, &slate, args);
+			let res = api.process_invoice_tx(m, &slate, &args);
 			assert!(res.is_ok());
 			slate = res.unwrap();
 			api.tx_lock_outputs(m, &slate, None, 1)?;
@@ -421,7 +421,7 @@ fn owner_v3_lifecycle() -> Result<(), grin_wallet_controller::Error> {
 		"id": 1,
 		"method": "finalize_invoice_tx",
 		"params": {
-			"slate": VersionedSlate::into_version(slate, SlateVersion::V3),
+			"slate": VersionedSlate::into_version_plain(slate, SlateVersion::V3)?,
 		}
 	});
 	let res =

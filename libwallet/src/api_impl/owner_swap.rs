@@ -947,8 +947,10 @@ where
 					&mut **w,
 					keychain_mask,
 					&swap.lock_slate,
+					tx_conf.mwc_tip,
 					&slate_context,
 					Some(format!("Swap {} Lock", swap.id)),
+					None,
 				)?;
 			}
 

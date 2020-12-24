@@ -2256,10 +2256,11 @@ where
 	}
 
 	fn init_send_tx(&self, token: Token, args: InitTxArgs) -> Result<VersionedSlate, ErrorKind> {
-		let slate = Owner::init_send_tx(self, (&token.keychain_mask).as_ref(), args, 1)
+		let slate = Owner::init_send_tx(self, (&token.keychain_mask).as_ref(), &args, 1)
 			.map_err(|e| e.kind())?;
 		let version = slate.lowest_version();
-		Ok(VersionedSlate::into_version(slate, version))
+		Ok(VersionedSlate::into_version_plain(slate, version)
+			.map_err(|e| ErrorKind::SlatepackEncodeError(format!("{}", e)))?)
 	}
 
 	fn issue_invoice_tx(
@@ -2267,10 +2268,11 @@ where
 		token: Token,
 		args: IssueInvoiceTxArgs,
 	) -> Result<VersionedSlate, ErrorKind> {
-		let slate = Owner::issue_invoice_tx(self, (&token.keychain_mask).as_ref(), args)
+		let slate = Owner::issue_invoice_tx(self, (&token.keychain_mask).as_ref(), &args)
 			.map_err(|e| e.kind())?;
 		let version = slate.lowest_version();
-		Ok(VersionedSlate::into_version(slate, version))
+		Ok(VersionedSlate::into_version_plain(slate, version)
+			.map_err(|e| ErrorKind::SlatepackEncodeError(format!("{}", e)))?)
 	}
 
 	fn process_invoice_tx(
@@ -2279,15 +2281,16 @@ where
 		in_slate: VersionedSlate,
 		args: InitTxArgs,
 	) -> Result<VersionedSlate, ErrorKind> {
-		let out_slate = Owner::process_invoice_tx(
-			self,
-			(&token.keychain_mask).as_ref(),
-			&Slate::from(in_slate),
-			args,
-		)
-		.map_err(|e| e.kind())?;
+		let (slate_from, _sender) =
+			Owner::decrypt_versioned_slate(self, (&token.keychain_mask).as_ref(), in_slate)
+				.map_err(|e| ErrorKind::SlatepackDecodeError(format!("{}", e)))?;
+
+		let out_slate =
+			Owner::process_invoice_tx(self, (&token.keychain_mask).as_ref(), &slate_from, &args)
+				.map_err(|e| e.kind())?;
 		let version = out_slate.lowest_version();
-		Ok(VersionedSlate::into_version(out_slate, version))
+		Ok(VersionedSlate::into_version_plain(out_slate, version)
+			.map_err(|e| ErrorKind::SlatepackEncodeError(format!("{}", e)))?)
 	}
 
 	fn finalize_tx(
@@ -2295,14 +2298,15 @@ where
 		token: Token,
 		in_slate: VersionedSlate,
 	) -> Result<VersionedSlate, ErrorKind> {
-		let out_slate = Owner::finalize_tx(
-			self,
-			(&token.keychain_mask).as_ref(),
-			&Slate::from(in_slate),
-		)
-		.map_err(|e| e.kind())?;
+		let (slate_from, _sender) =
+			Owner::decrypt_versioned_slate(self, (&token.keychain_mask).as_ref(), in_slate)
+				.map_err(|e| ErrorKind::SlatepackDecodeError(format!("{}", e)))?;
+
+		let out_slate = Owner::finalize_tx(self, (&token.keychain_mask).as_ref(), &slate_from)
+			.map_err(|e| e.kind())?;
 		let version = out_slate.lowest_version();
-		Ok(VersionedSlate::into_version(out_slate, version))
+		Ok(VersionedSlate::into_version_plain(out_slate, version)
+			.map_err(|e| ErrorKind::SlatepackEncodeError(format!("{}", e)))?)
 	}
 
 	fn tx_lock_outputs(
@@ -2311,10 +2315,14 @@ where
 		in_slate: VersionedSlate,
 		participant_id: usize,
 	) -> Result<(), ErrorKind> {
+		let (slate_from, _sender) =
+			Owner::decrypt_versioned_slate(self, (&token.keychain_mask).as_ref(), in_slate)
+				.map_err(|e| ErrorKind::SlatepackDecodeError(format!("{}", e)))?;
+
 		Owner::tx_lock_outputs(
 			self,
 			(&token.keychain_mask).as_ref(),
-			&Slate::from(in_slate),
+			&slate_from,
 			None, // RPC doesn't support address
 			participant_id,
 		)
@@ -2389,6 +2397,15 @@ where
 	}
 
 	fn verify_slate_messages(&self, token: Token, slate: VersionedSlate) -> Result<(), ErrorKind> {
+		if slate.is_encrypted() {
+			return Err(ErrorKind::SlatepackDecodeError(
+				"verify_slate_messages doesn't make sense for slatepack".to_string(),
+			));
+		}
+		let slate = slate
+			.into_slate_plain()
+			.map_err(|e| ErrorKind::SlatepackDecodeError(format!("{}", e)))?;
+
 		Owner::verify_slate_messages(self, (&token.keychain_mask).as_ref(), &Slate::from(slate))
 			.map_err(|e| e.kind())
 	}

@@ -96,7 +96,7 @@ fn invoice_tx_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 		Ok(())
 	})?;
 
-	let mut slate = Slate::blank(2);
+	let mut slate = Slate::blank(2, false);
 
 	wallet::controller::owner_single_use(Some(wallet2.clone()), mask2, None, |api, m| {
 		// Wallet 2 inititates an invoice transaction, requesting payment
@@ -104,7 +104,7 @@ fn invoice_tx_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 			amount: reward * 2,
 			..Default::default()
 		};
-		slate = api.issue_invoice_tx(m, args)?;
+		slate = api.issue_invoice_tx(m, &args)?;
 		Ok(())
 	})?;
 
@@ -119,7 +119,7 @@ fn invoice_tx_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 			selection_strategy_is_use_all: true,
 			..Default::default()
 		};
-		slate = api.process_invoice_tx(m, &slate, args)?;
+		slate = api.process_invoice_tx(m, &slate, &args)?;
 		api.tx_lock_outputs(m, &slate, None, 1)?;
 		Ok(())
 	})?;
@@ -177,7 +177,7 @@ fn invoice_tx_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 			amount: reward * 2,
 			..Default::default()
 		};
-		slate = api.issue_invoice_tx(m, args)?;
+		slate = api.issue_invoice_tx(m, &args)?;
 		// Wallet 1 receives the invoice transaction
 		let args = InitTxArgs {
 			src_acct_name: None,
@@ -188,7 +188,7 @@ fn invoice_tx_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 			selection_strategy_is_use_all: true,
 			..Default::default()
 		};
-		slate = api.process_invoice_tx(m, &slate, args)?;
+		slate = api.process_invoice_tx(m, &slate, &args)?;
 		api.tx_lock_outputs(m, &slate, None, 1)?;
 		Ok(())
 	})?;

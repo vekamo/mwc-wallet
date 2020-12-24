@@ -29,10 +29,13 @@ use crate::grin_util::secp::{self, pedersen, Secp256k1};
 use crate::grin_util::ZeroingString;
 use crate::proof::proofaddress::ProvableAddress;
 use crate::slate::ParticipantMessages;
+use crate::InitTxArgs;
 use crate::Slate;
 use chrono::prelude::*;
 use grin_util::ToHex;
 use grin_wallet_util::grin_core::core::Committed;
+use rand::rngs::mock::StepRng;
+use rand::thread_rng;
 use serde;
 use serde_json;
 use std::collections::HashMap;
@@ -605,6 +608,10 @@ pub struct Context {
 	/// Secret nonce (of which public is shared)
 	/// (basically a SecretKey)
 	pub sec_nonce: SecretKey,
+	/// only used if self-sending an invoice
+	pub initial_sec_key: SecretKey,
+	/// as above
+	pub initial_sec_nonce: SecretKey,
 	/// store my outputs + amounts between invocations
 	/// Id, mmr_index (if known), amount
 	pub output_ids: Vec<(Identifier, Option<u64>, u64)>,
@@ -626,16 +633,63 @@ pub struct Context {
 	/// Input commitments, mwc713 payment proof support.
 	#[serde(default)]
 	pub input_commits: Vec<Commitment>,
+	/// If late-locking, store my tranasction creation prefs
+	/// for later
+	pub late_lock_args: Option<InitTxArgs>,
+	/// for invoice I2 Only, store the tx excess so we can
+	/// remove it from the slate on return
+	pub calculated_excess: Option<pedersen::Commitment>,
+	/// Slate message that was added from this participant.
+	pub message: Option<String>,
 }
 
 impl Context {
-	/// Create a new context with defaults
+	/// Create a new context, the secret will be generated. It is a normal way of context cretion since
+	/// Lock later & compact slate was introduced
 	pub fn new(
+		secp: &secp::Secp256k1,
+		parent_key_id: &Identifier,
+		use_test_rng: bool,
+		is_initiator: bool,
+		participant_id: usize,
+		amount: u64,
+		fee: u64,
+		message: Option<String>,
+	) -> Context {
+		let sec_key = match use_test_rng {
+			false => SecretKey::new(&mut thread_rng()),
+			true => {
+				// allow for consistent test results
+				let mut test_rng = if is_initiator {
+					StepRng::new(1_234_567_890_u64, 1)
+				} else {
+					StepRng::new(1_234_567_891_u64, 1)
+				};
+				SecretKey::new(&mut test_rng)
+			}
+		};
+		Self::with_excess(
+			secp,
+			sec_key,
+			parent_key_id,
+			use_test_rng,
+			participant_id,
+			amount,
+			fee,
+			message,
+		)
+	}
+
+	/// Create a new context from pregenerated secret key. Normal case for tests only.
+	pub fn with_excess(
 		secp: &secp::Secp256k1,
 		sec_key: SecretKey,
 		parent_key_id: &Identifier,
 		use_test_rng: bool,
 		participant_id: usize,
+		amount: u64,
+		fee: u64,
+		message: Option<String>,
 	) -> Context {
 		let sec_nonce = match use_test_rng {
 			false => aggsig::create_secnonce(secp).unwrap(),
@@ -643,16 +697,21 @@ impl Context {
 		};
 		Context {
 			parent_key_id: parent_key_id.clone(),
-			sec_key: sec_key,
-			sec_nonce,
+			sec_key: sec_key.clone(),
+			sec_nonce: sec_nonce.clone(),
+			initial_sec_key: sec_key.clone(),
+			initial_sec_nonce: sec_nonce.clone(),
 			input_ids: vec![],
 			output_ids: vec![],
-			amount: 0,
-			fee: 0,
+			amount,
+			fee,
 			participant_id: participant_id,
 			payment_proof_derivation_index: None,
 			output_commits: vec![],
 			input_commits: vec![],
+			late_lock_args: None,
+			calculated_excess: None,
+			message,
 		}
 	}
 
@@ -668,6 +727,8 @@ impl Context {
 	) -> Result<Context, Error> {
 		Ok(Context {
 			parent_key_id,
+			initial_sec_key: ZERO_KEY, // Not needed
+			initial_sec_nonce: nonce.clone(),
 			sec_key: ZERO_KEY, // Not needed
 			sec_nonce: nonce.clone(),
 			// Id, mmr_index (if known), amount
@@ -679,6 +740,9 @@ impl Context {
 			payment_proof_derivation_index: None,
 			output_commits: slate.tx.body.outputs_committed(),
 			input_commits: slate.tx.body.inputs_committed(),
+			calculated_excess: None,
+			late_lock_args: None,
+			message: None,
 		})
 	}
 }

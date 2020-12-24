@@ -32,6 +32,7 @@ use crate::proof::tx_proof::{push_proof_for_slate, TxProof};
 use crate::signature::Signature as otherSignature;
 use crate::slate::Slate;
 use crate::types::{Context, NodeClient, StoredProofInfo, TxLogEntryType, WalletBackend};
+use crate::InitTxArgs;
 use crate::{Error, ErrorKind};
 use ed25519_dalek::Keypair as DalekKeypair;
 use ed25519_dalek::PublicKey as DalekPublicKey;
@@ -53,6 +54,7 @@ pub fn new_tx_slate<'a, T: ?Sized, C, K>(
 	num_participants: usize,
 	use_test_rng: bool,
 	ttl_blocks: Option<u64>,
+	compact_slate: bool,
 ) -> Result<Slate, Error>
 where
 	T: WalletBackend<'a, C, K>,
@@ -60,7 +62,7 @@ where
 	K: Keychain + 'a,
 {
 	let current_height = wallet.w2n_client().get_chain_tip()?.0;
-	let mut slate = Slate::blank(num_participants);
+	let mut slate = Slate::blank(num_participants, compact_slate);
 	if let Some(b) = ttl_blocks {
 		slate.ttl_cutoff_height = Some(current_height + b);
 	}
@@ -173,6 +175,8 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
+	let keychain = wallet.keychain(keychain_mask)?;
+
 	// Sender selects outputs into a new slate and save our corresponding keys in
 	// a transaction context. The secret key in our transaction context will be
 	// randomly selected. This returns the public slate, and a closure that locks
@@ -182,7 +186,7 @@ where
 	// this process can be split up in any way
 	let mut context = selection::build_send_tx(
 		wallet,
-		&wallet.keychain(keychain_mask)?,
+		&keychain,
 		keychain_mask,
 		slate,
 		minimum_confirmations,
@@ -190,18 +194,21 @@ where
 		num_change_outputs,
 		selection_strategy_is_use_all,
 		parent_key_id.clone(),
+		participant_id,
 		use_test_rng,
+		is_initator,
 		outputs,  // outputs to include into the transaction
 		routputs, // Number of resulting outputs. Normally it is 1
 		exclude_change_outputs,
 		change_output_minimum_confirmations,
+		message.clone(),
 	)?;
 
 	// Generate a kernel offset and subtract from our context's secret key. Store
 	// the offset in the slate's transaction kernel, and adds our public key
 	// information to the slate
 	slate.fill_round_1(
-		&wallet.keychain(keychain_mask)?,
+		&keychain,
 		&mut context.sec_key,
 		&context.sec_nonce,
 		participant_id,
@@ -209,10 +216,12 @@ where
 		use_test_rng,
 	)?;
 
+	context.initial_sec_key = context.sec_key.clone();
+
 	if !is_initator {
 		// perform partial sig
 		slate.fill_round_2(
-			&wallet.keychain(keychain_mask)?,
+			keychain.secp(),
 			&context.sec_key,
 			&context.sec_nonce,
 			participant_id,
@@ -228,6 +237,7 @@ pub fn add_output_to_slate<'a, T: ?Sized, C, K>(
 	wallet: &mut T,
 	keychain_mask: Option<&SecretKey>,
 	slate: &mut Slate,
+	current_height: u64,
 	address: Option<String>,
 	key_id_opt: Option<&str>,
 	output_amounts: Option<Vec<u64>>,
@@ -243,23 +253,28 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
+	let keychain = wallet.keychain(keychain_mask)?;
+
 	// create an output using the amount in the slate
-	let (_, mut context) = selection::build_recipient_output(
+	let (_, mut context, mut tx) = selection::build_recipient_output(
 		wallet,
 		keychain_mask,
 		slate,
+		current_height,
 		address,
 		parent_key_id.clone(),
 		participant_id,
 		key_id_opt,
 		output_amounts,
 		use_test_rng,
+		is_initiator,
 		num_outputs, // Number of outputs for this transaction. Normally it is 1
+		message.clone(),
 	)?;
 
 	// fill public keys
 	slate.fill_round_1(
-		&wallet.keychain(keychain_mask)?,
+		&keychain,
 		&mut context.sec_key,
 		&context.sec_nonce,
 		participant_id,
@@ -267,15 +282,90 @@ where
 		use_test_rng,
 	)?;
 
+	context.initial_sec_key = context.sec_key.clone();
+
 	if !is_initiator {
 		// perform partial sig
 		slate.fill_round_2(
-			&wallet.keychain(keychain_mask)?,
+			keychain.secp(),
 			&context.sec_key,
 			&context.sec_nonce,
 			participant_id,
 		)?;
+
+		// update excess in stored transaction
+		let mut batch = wallet.batch(keychain_mask)?;
+		tx.kernel_excess = Some(slate.calc_excess(Some(&keychain))?);
+		batch.save_tx_log_entry(tx.clone(), &parent_key_id)?;
+		batch.commit()?;
 	}
+
+	Ok(context)
+}
+
+/// Create context, without adding inputs to slate
+pub fn create_late_lock_context<'a, T: ?Sized, C, K>(
+	wallet: &mut T,
+	keychain_mask: Option<&SecretKey>,
+	slate: &mut Slate,
+	current_height: u64,
+	init_tx_args: &InitTxArgs,
+	parent_key_id: &Identifier,
+	use_test_rng: bool,
+	participant_id: usize,
+) -> Result<Context, Error>
+where
+	T: WalletBackend<'a, C, K>,
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
+{
+	// Expected to work for compact slate model only
+	debug_assert!(slate.compact_slate);
+
+	// we're just going to run a selection to get the potential fee,
+	// but this won't be locked
+	let (_coins, _total, _amount, fee) = selection::select_coins_and_fee(
+		wallet,
+		init_tx_args.amount,
+		current_height,
+		init_tx_args.minimum_confirmations,
+		init_tx_args.max_outputs as usize,
+		init_tx_args.num_change_outputs as usize,
+		init_tx_args.selection_strategy_is_use_all,
+		&parent_key_id,
+		&init_tx_args.outputs,
+		1,
+		init_tx_args.exclude_change_outputs.clone().unwrap_or(false),
+		init_tx_args.minimum_confirmations_change_outputs,
+	)?;
+
+	slate.fee = fee;
+
+	let keychain = wallet.keychain(keychain_mask)?;
+
+	// Create our own private context
+	let mut context = Context::new(
+		keychain.secp(),
+		&parent_key_id,
+		use_test_rng,
+		true,
+		participant_id,
+		slate.amount,
+		slate.fee,
+		init_tx_args.message.clone(),
+	);
+	context.late_lock_args = Some(init_tx_args.clone());
+
+	// Generate a blinding factor for the tx and add
+	//  public key info to the slate
+	slate.fill_round_1(
+		&keychain,
+		&mut context.sec_key,
+		&context.sec_nonce,
+		participant_id,
+		init_tx_args.message.clone(),
+		use_test_rng,
+	)?;
 
 	Ok(context)
 }
@@ -293,15 +383,28 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	slate.fill_round_2(
-		&wallet.keychain(keychain_mask)?,
-		&context.sec_key,
-		&context.sec_nonce,
-		participant_id,
-	)?;
+	// when self sending invoice tx, use initiator nonce to finalize
+	let (sec_key, sec_nonce) = if slate.compact_slate {
+		{
+			if context.initial_sec_key != context.sec_key
+				&& context.initial_sec_nonce != context.sec_nonce
+			{
+				(&context.initial_sec_key, &context.initial_sec_nonce)
+			} else {
+				(&context.sec_key, &context.sec_nonce)
+			}
+		}
+	} else {
+		// Legacy - just use context.sec_key & context.sec_nonce,
+		(&context.sec_key, &context.sec_nonce)
+	};
+
+	let keychain = wallet.keychain(keychain_mask)?;
+	slate.fill_round_2(keychain.secp(), sec_key, sec_nonce, participant_id)?;
 
 	// Final transaction can be built by anyone at this stage
-	slate.finalize(&wallet.keychain(keychain_mask)?)?;
+	trace!("Slate to finalize is: {:?}", slate);
+	slate.finalize(&keychain)?;
 	Ok(())
 }
 
@@ -409,15 +512,21 @@ where
 
 	wallet.store_tx(&format!("{}", tx.tx_slate_id.unwrap()), &slate.tx)?;
 	let parent_key = tx.parent_key_id.clone();
-	tx.kernel_excess = Some(slate.tx.body.kernels[0].excess);
+
+	let keychain = wallet.keychain(keychain_mask)?;
+
+	if slate.compact_slate {
+		tx.kernel_excess = Some(slate.calc_excess(Some(&keychain))?);
+	} else {
+		tx.kernel_excess = Some(slate.tx.body.kernels[0].excess);
+	}
 
 	if let Some(ref p) = slate.payment_proof {
 		let derivation_index = match context.payment_proof_derivation_index {
 			Some(i) => i,
 			None => get_address_index(),
 		};
-		let keychain = wallet.keychain(keychain_mask)?;
-		let excess = slate.calc_excess(&keychain)?;
+		let excess = slate.calc_excess(Some(&keychain))?;
 		//sender address.
 		let sender_address_secret_key =
 			proofaddress::payment_proof_address_secret_from_index(&keychain, derivation_index)?;
@@ -443,6 +552,8 @@ where
 			sender_signature: Some(sig),
 		})
 	}
+
+	wallet.store_tx(&format!("{}", slate.id), &slate.tx)?;
 
 	let mut batch = wallet.batch(keychain_mask)?;
 	batch.save_tx_log_entry(tx, &parent_key)?;
@@ -644,7 +755,7 @@ where
 		//build the message which was used to generated receiver signature.
 		let msg = payment_proof_message(
 			slate.amount,
-			&slate.calc_excess(&keychain)?,
+			&slate.calc_excess(Some(&keychain))?,
 			orig_sender_a.public_key.clone(),
 		)?;
 		let sig = match p.clone().receiver_signature {

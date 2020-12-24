@@ -18,6 +18,7 @@ use crate::api_impl::owner_swap;
 use crate::grin_keychain::Keychain;
 use crate::grin_util::secp::key::SecretKey;
 use crate::grin_util::Mutex;
+use crate::internal::selection;
 use crate::internal::{tx, updater};
 use crate::proof::proofaddress;
 use crate::proof::proofaddress::ProofAddressType;
@@ -25,13 +26,15 @@ use crate::proof::proofaddress::ProvableAddress;
 use crate::slate_versions::SlateVersion;
 use crate::{
 	BlockFees, CbData, Error, ErrorKind, NodeClient, Slate, TxLogEntryType, VersionInfo,
-	WalletBackend, WalletInst, WalletLCProvider,
+	VersionedSlate, WalletBackend, WalletInst, WalletLCProvider,
 };
+use ed25519_dalek::SecretKey as DalekSecretKey;
 use grin_core::core::amount_to_hr_string;
 use grin_wallet_util::OnionV3Address;
 use std::sync::Arc;
 use std::sync::RwLock;
 use strum::IntoEnumIterator;
+use x25519_dalek::PublicKey as xDalekPublicKey;
 
 const FOREIGN_API_VERSION: u16 = 2;
 const USER_MESSAGE_MAX_LEN: usize = 256;
@@ -123,8 +126,6 @@ where
 	let slate_message = &slate.participant_data[0].message;
 	let mut address_for_logging = address.clone();
 
-	check_ttl(w, &slate, refresh_from_node)?;
-
 	if address.is_none() {
 		// that means it's not mqs so need to print it
 		if slate_message.is_some() {
@@ -206,11 +207,14 @@ where
 		None => 1,
 	};
 
+	let height = w.last_confirmed_height()?;
+
 	// Note: key_id & output_amounts needed for secure claims, mwc713.
-	tx::add_output_to_slate(
+	let mut context = tx::add_output_to_slate(
 		&mut *w,
 		keychain_mask,
 		&mut ret_slate,
+		height,
 		address_for_logging,
 		key_id_opt,
 		output_amounts,
@@ -221,10 +225,17 @@ where
 		use_test_rng,
 		num_outputs,
 	)?;
-	tx::update_message(&mut *w, keychain_mask, &ret_slate)?;
 
 	let keychain = w.keychain(keychain_mask)?;
-	let excess = ret_slate.calc_excess(&keychain)?;
+
+	if slate.compact_slate {
+		// Add our contribution to the offset
+		ret_slate.adjust_offset(&keychain, &mut context)?;
+	}
+
+	tx::update_message(&mut *w, keychain_mask, &ret_slate)?;
+
+	let excess = ret_slate.calc_excess(Some(&keychain))?;
 
 	if let Some(ref mut p) = ret_slate.payment_proof {
 		if p.sender_address
@@ -267,6 +278,18 @@ where
 	check_ttl(w, &sl, refresh_from_node)?;
 	// Participant id 0 for mwc713 compatibility
 	let context = w.get_private_context(keychain_mask, sl.id.as_bytes(), 0)?;
+
+	if slate.compact_slate {
+		// Add our contribution to the offset
+		sl.adjust_offset(&w.keychain(keychain_mask)?, &context)?;
+
+		// Slate can  be 'compact'  - it is mean some of the data can be gone
+		let mut temp_ctx = context.clone();
+		temp_ctx.sec_key = context.initial_sec_key.clone();
+		temp_ctx.sec_nonce = context.initial_sec_nonce.clone();
+		selection::repopulate_tx(&mut *w, keychain_mask, &mut sl, &temp_ctx, false)?;
+	}
+
 	// Participant id 0 for mwc713 compatibility
 	tx::complete_tx(&mut *w, keychain_mask, &mut sl, 0, &context)?;
 	tx::update_stored_tx(&mut *w, keychain_mask, &context, &sl, true)?;
@@ -298,4 +321,31 @@ where
 		))
 	})?;
 	Ok(())
+}
+
+/// Utility method to decrypt the slate pack for receive operation.
+/// Returns: slate, sender PK
+pub fn decrypt_slatepack<'a, T: ?Sized, C, K>(
+	w: &mut T,
+	keychain_mask: Option<&SecretKey>,
+	encrypted_slate: VersionedSlate,
+) -> Result<(Slate, Option<xDalekPublicKey>), Error>
+where
+	T: WalletBackend<'a, C, K>,
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
+{
+	let keychain = w.keychain(keychain_mask)?;
+
+	let sec_key = proofaddress::payment_proof_address_secret(&keychain).map_err(|e| {
+		ErrorKind::SlatepackDecodeError(format!("Unable to build key to decrypt, {}", e))
+	})?;
+
+	let sec_key = DalekSecretKey::from_bytes(&sec_key.0).map_err(|e| {
+		ErrorKind::SlatepackDecodeError(format!("Unable to convert key to decrypt, {}", e))
+	})?;
+	let sp = encrypted_slate.into_slatepack(Some(&sec_key))?;
+	let sender = sp.get_sender();
+	let slate = sp.to_result_slate();
+	Ok((slate, sender))
 }

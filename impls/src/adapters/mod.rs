@@ -17,7 +17,7 @@ pub mod http;
 mod mwcmq;
 mod types;
 
-pub use self::file::PathToSlate;
+pub use self::file::{PathToSlateGetter, PathToSlatePutter};
 pub use self::http::HttpDataSender;
 
 use crate::config::{TorConfig, WalletConfig};
@@ -26,6 +26,9 @@ use crate::libwallet::swap::message::Message;
 use crate::libwallet::Slate;
 use crate::tor::config::complete_tor_address;
 use crate::util::ZeroingString;
+use ed25519_dalek::SecretKey as DalekSecretKey;
+use grin_wallet_libwallet::slatepack::SlatePurpose;
+use grin_wallet_libwallet::Slatepacker;
 pub use mwcmq::{
 	get_mwcmqs_brocker, init_mwcmqs_access_data, MWCMQPublisher, MWCMQSubscriber, MwcMqsChannel,
 };
@@ -33,12 +36,19 @@ pub use types::{
 	Address, AddressType, CloseReason, HttpsAddress, MWCMQSAddress, Publisher, Subscriber,
 	SubscriptionHandler,
 };
+use x25519_dalek::PublicKey as xDalekPublicKey;
 
 /// Sends transactions to a corresponding SlateReceiver
 pub trait SlateSender {
 	/// Send a transaction slate to another listening wallet and return result
 	/// TODO: Probably need a slate wrapper type
-	fn send_tx(&self, slate: &Slate) -> Result<Slate, Error>;
+	fn send_tx(
+		&self,
+		slate: &Slate,
+		slate_content: SlatePurpose,
+		slatepack_secret: &DalekSecretKey,
+		recipients: &Vec<xDalekPublicKey>,
+	) -> Result<Slate, Error>;
 }
 
 pub trait SlateReceiver {
@@ -60,16 +70,49 @@ pub trait SlatePutter {
 	fn put_tx(&self, slate: &Slate) -> Result<(), Error>;
 }
 
+/// SlateGetter, get_tx response
+pub enum SlateGetData {
+	/// Plain slate, V2 or V3
+	PlainSlate(Slate),
+	/// Encoded Slatepack
+	Slatepack(Slatepacker),
+}
+
 /// Checks for a transaction from a corresponding SlatePutter, returns the transaction if it exists
 pub trait SlateGetter {
 	/// Receive a transaction async. (Actually just read it from wherever and return the slate)
-	fn get_tx(&self) -> Result<Slate, Error>;
+	fn get_tx(
+		&self,
+		slatepack_deserialize_key: Option<&DalekSecretKey>,
+	) -> Result<SlateGetData, Error>;
 }
 
 /// Swap Message Sender
 pub trait SwapMessageSender {
 	/// Send a swap message. Return true is message delivery acknowledge can be set (message was delivered and procesed)
 	fn send_swap_message(&self, swap_message: &Message) -> Result<bool, Error>;
+}
+
+impl SlateGetData {
+	/// Check if the slate is encrypted
+	pub fn is_encrypted(&self) -> bool {
+		match &self {
+			SlateGetData::PlainSlate(_) => false,
+			SlateGetData::Slatepack(_) => true,
+		}
+	}
+
+	/// Convert to the slate
+	pub fn to_slate(self) -> Result<(Slate, Option<xDalekPublicKey>), Error> {
+		let res = match self {
+			SlateGetData::PlainSlate(slate) => (slate, None),
+			SlateGetData::Slatepack(slatepacker) => {
+				let sender = slatepacker.get_sender();
+				(slatepacker.to_result_slate(), sender)
+			}
+		};
+		Ok(res)
+	}
 }
 
 /// select a SlateSender based on method and dest fields from, e.g., SendArgs

@@ -45,7 +45,7 @@ pub enum ErrorKind {
 	Keychain(keychain::Error),
 
 	/// Onion V3 Address Error
-	#[fail(display = "Onion V3 Address Error")]
+	#[fail(display = "Onion V3 Address Error, {}", _0)]
 	OnionV3Address(OnionV3AddressError),
 
 	/// Error when formatting json

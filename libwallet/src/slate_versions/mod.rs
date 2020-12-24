@@ -20,7 +20,12 @@
 use crate::slate::Slate;
 use crate::slate_versions::v2::{CoinbaseV2, SlateV2};
 use crate::slate_versions::v3::{CoinbaseV3, SlateV3};
+use crate::slatepack::SlatePurpose;
 use crate::types::CbData;
+use crate::Slatepacker;
+use crate::{Error, ErrorKind};
+use ed25519_dalek::SecretKey as DalekSecretKey;
+use x25519_dalek::PublicKey as xDalekPublicKey;
 
 pub mod ser;
 
@@ -38,6 +43,8 @@ pub const GRIN_BLOCK_HEADER_VERSION: u16 = 3;
 /// Existing versions of the slate
 #[derive(EnumIter, Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub enum SlateVersion {
+	/// SP - has a slatepack support
+	SP,
 	/// V3b (most current) the difference between V3b and V3 is that the way to do payment proof is different
 	/// V3b support both mqs public key and dalek public key; V3 only support mqs public key.
 	/// they have the same format of slate though.
@@ -53,6 +60,9 @@ pub enum SlateVersion {
 /// Versions are ordered newest to oldest so serde attempts to
 /// deserialize newer versions first, then falls back to older versions.
 pub enum VersionedSlate {
+	/// Slatepack
+	SP(String),
+	// V3B is not needed because it is a V3 slate with some optional fields, so it is compatible
 	/// Current (3.0.0 Onwards )
 	V3(SlateV3),
 	/// V2 (2.0.0 - Onwards)
@@ -63,36 +73,104 @@ impl VersionedSlate {
 	/// Return slate version
 	pub fn version(&self) -> SlateVersion {
 		match *self {
+			VersionedSlate::SP(_) => SlateVersion::SP,
 			VersionedSlate::V3(_) => SlateVersion::V3,
 			VersionedSlate::V2(_) => SlateVersion::V2,
 		}
 	}
 
+	/// Return tru is the slate data encrypted
+	pub fn is_encrypted(&self) -> bool {
+		match self {
+			VersionedSlate::SP(_) => true,
+			_ => false,
+		}
+	}
+
 	/// convert this slate type to a specified older version
-	pub fn into_version(slate: Slate, version: SlateVersion) -> VersionedSlate {
+	pub fn into_version(
+		slate: &Slate,
+		version: SlateVersion,
+		content: SlatePurpose,
+		sender: &Option<xDalekPublicKey>,
+		recipients: &Vec<xDalekPublicKey>,
+	) -> Result<VersionedSlate, Error> {
 		match version {
-			SlateVersion::V3B => VersionedSlate::V3(slate.into()),
-			SlateVersion::V3 => VersionedSlate::V3(slate.into()),
+			SlateVersion::SP => {
+				let armored_slatepack = Slatepacker::encrypt_to_send(
+					&slate,
+					SlateVersion::SP,
+					content,
+					&sender,
+					&recipients,
+				)?;
+				Ok(VersionedSlate::SP(armored_slatepack))
+			}
+			_ => Ok(Self::into_version_plain(slate.clone(), version)?),
+		}
+	}
+
+	/// Converting into the low version slate (not packed and encrypted)
+	pub fn into_version_plain(
+		slate: Slate,
+		version: SlateVersion,
+	) -> Result<VersionedSlate, Error> {
+		match version {
+			SlateVersion::SP => {
+				return Err(ErrorKind::GenericError("Slate is encrypted".to_string()).into())
+			}
+			SlateVersion::V3B | SlateVersion::V3 => Ok(VersionedSlate::V3(slate.into())),
 			// Left here as a reminder of what needs to be inserted on
 			// the release of a new slate
 			SlateVersion::V2 => {
 				let s = SlateV3::from(slate);
 				let s = SlateV2::from(&s);
-				VersionedSlate::V2(s)
+				Ok(VersionedSlate::V2(s))
 			}
 		}
 	}
-}
 
-impl From<VersionedSlate> for Slate {
-	fn from(slate: VersionedSlate) -> Slate {
-		match slate {
-			VersionedSlate::V3(s) => Slate::from(s),
+	/// Decode into the slate and sender address.
+	pub fn into_slatepack(&self, dec_key: Option<&DalekSecretKey>) -> Result<Slatepacker, Error> {
+		match self {
+			VersionedSlate::SP(arm_slatepack) => {
+				let packer = Slatepacker::decrypt_slatepack(arm_slatepack.as_bytes(), dec_key)?;
+				Ok(packer)
+			}
+			VersionedSlate::V3(s) => Ok(Slatepacker::wrap_slate(Slate::from(s.clone()))),
 			VersionedSlate::V2(s) => {
-				let s = SlateV3::from(s);
-				Slate::from(s)
+				let s = SlateV3::from(s.clone());
+				Ok(Slatepacker::wrap_slate(Slate::from(s)))
 			}
 		}
+	}
+
+	/// Non encrypted slate conversion
+	pub fn into_slate_plain(&self) -> Result<Slate, Error> {
+		match self {
+			VersionedSlate::SP(_) => {
+				return Err(ErrorKind::GenericError("Slate is encrypted".to_string()).into())
+			}
+			VersionedSlate::V3(s) => Ok(Slate::from(s.clone())),
+			VersionedSlate::V2(s) => {
+				let s = SlateV3::from(s.clone());
+				Ok(Slate::from(s))
+			}
+		}
+	}
+
+	/// Convert into the string as Json or as aString armor
+	pub fn as_string(&self) -> Result<String, Error> {
+		let str = match self {
+			VersionedSlate::SP(s) => s.clone(),
+			VersionedSlate::V3(s) => serde_json::to_string(&s).map_err(|e| {
+				ErrorKind::GenericError(format!("Failed convert SlateV3 to Json, {}", e))
+			})?,
+			VersionedSlate::V2(s) => serde_json::to_string(&s).map_err(|e| {
+				ErrorKind::GenericError(format!("Failed convert SlateV2 to Json, {}", e))
+			})?,
+		};
+		Ok(str)
 	}
 }
 
@@ -111,8 +189,9 @@ impl VersionedCoinbase {
 	/// convert this coinbase data to a specific versioned representation for the json api.
 	pub fn into_version(cb: CbData, version: SlateVersion) -> VersionedCoinbase {
 		match version {
-			SlateVersion::V3B => VersionedCoinbase::V3(cb.into()),
-			SlateVersion::V3 => VersionedCoinbase::V3(cb.into()),
+			SlateVersion::SP | SlateVersion::V3B | SlateVersion::V3 => {
+				VersionedCoinbase::V3(cb.into())
+			}
 			SlateVersion::V2 => VersionedCoinbase::V2(cb.into()),
 		}
 	}

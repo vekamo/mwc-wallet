@@ -46,11 +46,14 @@ pub fn build_send_tx<'a, T: ?Sized, C, K>(
 	change_outputs: usize,
 	selection_strategy_is_use_all: bool,
 	parent_key_id: Identifier,
+	participant_id: usize,
 	use_test_nonce: bool,
+	is_initiator: bool,
 	outputs: &Option<Vec<String>>, // outputs to include into the transaction
 	routputs: usize,               // Number of resulting outputs. Normally it is 1
 	exclude_change_outputs: bool,
 	change_output_minimum_confirmations: u64,
+	message: Option<String>,
 ) -> Result<Context, Error>
 where
 	T: WalletBackend<'a, C, K>,
@@ -71,6 +74,7 @@ where
 		routputs,
 		exclude_change_outputs,
 		change_output_minimum_confirmations,
+		true, // Legacy value is true
 	)?;
 
 	// Update the fee on the slate so we account for this when building the tx.
@@ -79,16 +83,31 @@ where
 	let blinding = slate.add_transaction_elements(keychain, &ProofBuilder::new(keychain), elems)?;
 
 	// Create our own private context
-	let mut context = Context::new(
-		keychain.secp(),
-		blinding.secret_key()?,
-		&parent_key_id,
-		use_test_nonce,
-		0,
-	);
-
-	context.amount = slate.amount;
-	context.fee = fee;
+	let mut context = if slate.compact_slate {
+		Context::new(
+			keychain.secp(),
+			//blinding.secret_key()?,
+			&parent_key_id,
+			use_test_nonce,
+			is_initiator,
+			participant_id,
+			slate.amount,
+			slate.fee,
+			message,
+		)
+	} else {
+		// Legacy part
+		Context::with_excess(
+			keychain.secp(),
+			blinding.secret_key()?,
+			&parent_key_id,
+			use_test_nonce,
+			participant_id,
+			slate.amount,
+			slate.fee,
+			message,
+		)
+	};
 
 	// Store our private identifiers for each input
 	for input in inputs {
@@ -115,8 +134,10 @@ pub fn lock_tx_context<'a, T: ?Sized, C, K>(
 	wallet: &mut T,
 	keychain_mask: Option<&SecretKey>,
 	slate: &Slate,
+	current_height: u64,
 	context: &Context,
 	address: Option<String>,
+	excess_override: Option<Commitment>,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<'a, C, K>,
@@ -145,7 +166,7 @@ where
 		let lock_inputs = context.get_inputs();
 		let messages = Some(slate.participant_messages());
 		let slate_id = slate.id;
-		let height = slate.height;
+		let height = current_height;
 		let parent_key_id = context.parent_key_id.clone();
 		let mut batch = wallet.batch(keychain_mask)?;
 		let log_id = batch.next_tx_log_id(&parent_key_id)?;
@@ -153,15 +174,22 @@ where
 		t.tx_slate_id = Some(slate_id);
 		let filename = format!("{}.mwctx", slate_id);
 		t.stored_tx = Some(filename);
-		t.fee = Some(slate.fee);
+		t.fee = Some(context.fee);
 		t.ttl_cutoff_height = slate.ttl_cutoff_height;
+		if t.ttl_cutoff_height == Some(0) {
+			t.ttl_cutoff_height = None;
+		}
 
 		t.address = address;
 
-		if let Ok(e) = slate.calc_excess(&keychain) {
+		if let Ok(e) = slate.calc_excess(Some(&keychain)) {
 			t.kernel_excess = Some(e)
 		}
-		t.kernel_lookup_min_height = Some(slate.height);
+		if let Some(e) = excess_override {
+			debug_assert!(slate.compact_slate);
+			t.kernel_excess = Some(e)
+		}
+		t.kernel_lookup_min_height = Some(current_height);
 
 		let mut amount_debited = 0;
 		t.num_inputs = lock_inputs.len();
@@ -238,14 +266,17 @@ pub fn build_recipient_output<'a, T: ?Sized, C, K>(
 	wallet: &mut T,
 	keychain_mask: Option<&SecretKey>,
 	slate: &mut Slate,
+	current_height: u64,
 	address: Option<String>,
 	parent_key_id: Identifier,
 	participant_id: usize,
 	key_id_opt: Option<&str>,
 	output_amounts: Option<Vec<u64>>,
 	use_test_rng: bool,
+	is_initiator: bool,
 	num_outputs: usize, // Number of outputs for this transaction. Normally it is 1
-) -> Result<(Identifier, Context), Error>
+	message: Option<String>,
+) -> Result<(Identifier, Context, TxLogEntry), Error>
 where
 	T: WalletBackend<'a, C, K>,
 	C: NodeClient + 'a,
@@ -306,7 +337,7 @@ where
 
 	let keychain = wallet.keychain(keychain_mask)?;
 	let amount = slate.amount;
-	let height = slate.height;
+	let height = current_height;
 
 	let slate_id = slate.id.clone();
 
@@ -319,13 +350,30 @@ where
 		slate.add_transaction_elements(&keychain, &ProofBuilder::new(&keychain), out_vec)?;
 
 	// Add blinding sum to our context
-	let mut context = Context::new(
-		keychain.secp(),
-		blinding.secret_key()?,
-		&parent_key_id,
-		use_test_rng,
-		participant_id,
-	);
+	let mut context = if slate.compact_slate {
+		Context::new(
+			keychain.secp(),
+			&parent_key_id,
+			use_test_rng,
+			is_initiator,
+			participant_id,
+			amount,
+			slate.fee,
+			message,
+		)
+	} else {
+		// Legacy model
+		Context::with_excess(
+			keychain.secp(),
+			blinding.secret_key()?,
+			&parent_key_id,
+			use_test_rng,
+			participant_id,
+			amount,
+			slate.fee,
+			message,
+		)
+	};
 
 	for kva in &key_vec_amounts {
 		context.add_output(&kva.0, &None, kva.1);
@@ -355,12 +403,16 @@ where
 	t.output_commits = commit_ped;
 	t.messages = messages;
 	t.ttl_cutoff_height = slate.ttl_cutoff_height;
+	if t.ttl_cutoff_height == Some(0) {
+		t.ttl_cutoff_height = None;
+	}
+
 	// when invoicing, this will be invalid
-	if let Ok(e) = slate.calc_excess(&keychain) {
+	if let Ok(e) = slate.calc_excess(Some(&keychain)) {
 		t.kernel_excess = Some(e)
 	}
-	t.kernel_lookup_min_height = Some(slate.height);
-	batch.save_tx_log_entry(t, &parent_key_id)?;
+	t.kernel_lookup_min_height = Some(current_height);
+	batch.save_tx_log_entry(t.clone(), &parent_key_id)?;
 
 	let mut i = 0;
 	for kva in &key_vec_amounts {
@@ -383,7 +435,7 @@ where
 
 	// returning last key that was used in the chain.
 	// That suppose to satisfy all caller needs
-	Ok((key_vec_amounts.last().unwrap().0.clone(), context))
+	Ok((key_vec_amounts.last().unwrap().0.clone(), context, t))
 }
 
 /// Builds a transaction to send to someone from the HD seed associated with the
@@ -403,6 +455,7 @@ pub fn select_send_tx<'a, T: ?Sized, C, K, B>(
 	routputs: usize,               // Number of resulting outputs. Normally it is 1
 	exclude_change_outputs: bool,
 	change_output_minimum_confirmations: u64,
+	include_inputs_in_sum: bool, // Legacy workflow value is true
 ) -> Result<
 	(
 		Vec<Box<build::Append<K, B>>>,
@@ -434,8 +487,15 @@ where
 	)?;
 
 	// build transaction skeleton with inputs and change
-	let (parts, change_amounts_derivations) =
-		inputs_and_change(&coins, wallet, keychain_mask, amount, fee, change_outputs)?;
+	let (parts, change_amounts_derivations) = inputs_and_change(
+		&coins,
+		wallet,
+		keychain_mask,
+		amount,
+		fee,
+		change_outputs,
+		include_inputs_in_sum,
+	)?;
 
 	Ok((parts, coins, change_amounts_derivations, fee))
 }
@@ -561,6 +621,7 @@ pub fn inputs_and_change<'a, T: ?Sized, C, K, B>(
 	amount: u64,
 	fee: u64,
 	num_change_outputs: usize,
+	include_inputs_in_sum: bool,
 ) -> Result<
 	(
 		Vec<Box<build::Append<K, B>>>,
@@ -585,11 +646,13 @@ where
 	let change = total - amount - fee;
 
 	// build inputs using the appropriate derived key_ids
-	for coin in coins {
-		if coin.is_coinbase {
-			parts.push(build::coinbase_input(coin.value, coin.key_id.clone()));
-		} else {
-			parts.push(build::input(coin.value, coin.key_id.clone()));
+	if include_inputs_in_sum {
+		for coin in coins {
+			if coin.is_coinbase {
+				parts.push(build::coinbase_input(coin.value, coin.key_id.clone()));
+			} else {
+				parts.push(build::input(coin.value, coin.key_id.clone()));
+			}
 		}
 	}
 
@@ -766,4 +829,65 @@ fn select_from(amount: u64, select_all: bool, outputs: Vec<OutputData>) -> Optio
 	} else {
 		None
 	}
+}
+
+/// Repopulates output in the slate's tranacstion
+/// with outputs from the stored context
+/// change outputs and tx log entry
+/// Remove the explicitly stored excess
+pub fn repopulate_tx<'a, T: ?Sized, C, K>(
+	wallet: &mut T,
+	keychain_mask: Option<&SecretKey>,
+	slate: &mut Slate,
+	context: &Context,
+	update_fee: bool,
+) -> Result<(), Error>
+where
+	T: WalletBackend<'a, C, K>,
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
+{
+	// Expected to be called at compact slate model only
+	debug_assert!(slate.compact_slate);
+
+	// restore the original amount, fee
+	slate.amount = context.amount;
+	if update_fee {
+		slate.fee = context.fee;
+	}
+
+	let keychain = wallet.keychain(keychain_mask)?;
+
+	// restore my signature data
+	slate.add_participant_info(
+		keychain.secp(),
+		&context.sec_key,
+		&context.sec_nonce,
+		context.participant_id,
+		None,
+		context.message.clone(),
+		false,
+	)?;
+
+	let mut parts = vec![];
+	for (id, _, value) in &context.get_inputs() {
+		let input = wallet.iter().find(|out| out.key_id == *id);
+		if let Some(i) = input {
+			if i.is_coinbase {
+				parts.push(build::coinbase_input(*value, i.key_id.clone()));
+			} else {
+				parts.push(build::input(*value, i.key_id.clone()));
+			}
+		}
+	}
+	for (id, _, value) in &context.get_outputs() {
+		let output = wallet.iter().find(|out| out.key_id == *id);
+		if let Some(i) = output {
+			parts.push(build::output(*value, i.key_id.clone()));
+		}
+	}
+	slate.add_transaction_elements(&keychain, &ProofBuilder::new(&keychain), parts)?;
+	// restore the original offset
+	slate.tx.offset = slate.offset.clone();
+	Ok(())
 }

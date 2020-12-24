@@ -168,9 +168,9 @@ pub struct OfferUpdate {
 	pub secondary_currency: Currency,
 	/// Seller part of multisig
 	pub multisig: MultisigParticipant,
-	/// Lock Slate that Buyer need to continue to build
+	/// Lock V2 Slate that Buyer need to continue to build
 	pub lock_slate: VersionedSlate,
-	/// Refund slate that byer need to sign.
+	/// Refund V2 slate that byer need to sign.
 	pub refund_slate: VersionedSlate,
 	/// Needed info to build step 1 on redeem state (that saving some interaction)
 	pub redeem_participant: TxParticipant,

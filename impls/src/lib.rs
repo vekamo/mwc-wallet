@@ -50,7 +50,7 @@ pub use crate::adapters::{
 	get_mwcmqs_brocker, init_mwcmqs_access_data,
 	Address, AddressType, CloseReason,
 	HttpDataSender, HttpsAddress,
-	MWCMQPublisher, MWCMQSAddress, MWCMQSubscriber, MwcMqsChannel, PathToSlate, Publisher,
+	MWCMQPublisher, MWCMQSAddress, MWCMQSubscriber, MwcMqsChannel, PathToSlatePutter, PathToSlateGetter, Publisher,
 	SlateGetter, SlatePutter, SlateReceiver, SlateSender, Subscriber, SubscriptionHandler,
 	SwapMessageSender,
 };

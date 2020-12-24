@@ -30,6 +30,8 @@ linefeed = "0.6"
 semver = "0.9"
 rustyline = "6"
 lazy_static = "1"
+ed25519-dalek = "1.0.0-pre.4"
+x25519-dalek = "0.6"
 
 grin_wallet_api = { path = "./api", version = "4.0.0" }
 grin_wallet_impls = { path = "./impls", version = "4.0.0" }

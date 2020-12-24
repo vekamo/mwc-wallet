@@ -23,7 +23,7 @@ use grin_wallet_util::grin_core::global;
 
 use self::libwallet::{InitTxArgs, Slate};
 use impls::test_framework::{self, LocalWalletClient};
-use impls::{PathToSlate, SlateGetter as _, SlatePutter as _};
+use impls::{PathToSlateGetter, PathToSlatePutter, SlateGetter, SlatePutter};
 use std::thread;
 use std::time::Duration;
 
@@ -100,7 +100,7 @@ fn file_repost_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	let send_file = format!("{}/part_tx_1.tx", test_dir);
 	let receive_file = format!("{}/part_tx_2.tx", test_dir);
 
-	let mut slate = Slate::blank(2);
+	let mut slate = Slate::blank(2, false);
 
 	// Should have 5 in account1 (5 spendable), 5 in account (2 spendable)
 	wallet::controller::owner_single_use(Some(wallet1.clone()), mask1, None, |api, m| {
@@ -118,8 +118,8 @@ fn file_repost_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 			selection_strategy_is_use_all: true,
 			..Default::default()
 		};
-		let slate = api.init_send_tx(m, args, 1)?;
-		PathToSlate((&send_file).into()).put_tx(&slate)?;
+		let slate = api.init_send_tx(m, &args, 1)?;
+		PathToSlatePutter::build_plain((&send_file).into()).put_tx(&slate)?;
 		api.tx_lock_outputs(m, &slate, None, 0)?;
 		Ok(())
 	})?;
@@ -134,9 +134,12 @@ fn file_repost_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	}
 
 	wallet::controller::foreign_single_use(wallet1.clone(), mask1_i.clone(), |api| {
-		slate = PathToSlate((&send_file).into()).get_tx()?;
+		slate = PathToSlateGetter::build((&send_file).into())
+			.get_tx(None)?
+			.to_slate()?
+			.0;
 		slate = api.receive_tx(&slate, None, None, None)?;
-		PathToSlate((&receive_file).into()).put_tx(&slate)?;
+		PathToSlatePutter::build_plain((&receive_file).into()).put_tx(&slate)?;
 		Ok(())
 	})?;
 
@@ -148,7 +151,10 @@ fn file_repost_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 
 	// wallet 1 finalize
 	wallet::controller::owner_single_use(Some(wallet1.clone()), mask1, None, |api, m| {
-		slate = PathToSlate((&receive_file).into()).get_tx()?;
+		slate = PathToSlateGetter::build((&receive_file).into())
+			.get_tx(None)?
+			.to_slate()?
+			.0;
 		slate = api.finalize_tx(m, &slate)?;
 		Ok(())
 	})?;
@@ -197,7 +203,7 @@ fn file_repost_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 		w.set_parent_key_id_by_name("account1")?;
 	}
 
-	let mut slate = Slate::blank(2);
+	let mut slate = Slate::blank(2, false);
 	let amount = core::consensus::MWC_FIRST_GROUP_REWARD;
 
 	wallet::controller::owner_single_use(Some(wallet1.clone()), mask1, None, |sender_api, m| {
@@ -211,7 +217,7 @@ fn file_repost_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 			selection_strategy_is_use_all: true,
 			..Default::default()
 		};
-		let slate_i = sender_api.init_send_tx(m, args, 1)?;
+		let slate_i = sender_api.init_send_tx(m, &args, 1)?;
 		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
 		sender_api.tx_lock_outputs(m, &slate, None, 0)?;
 		slate = sender_api.finalize_tx(m, &mut slate)?;

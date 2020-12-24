@@ -23,20 +23,23 @@ use crate::core::core::Transaction;
 use crate::core::global;
 use crate::impls::create_sender;
 use crate::keychain::{Identifier, Keychain};
+use crate::libwallet::api_impl::foreign;
 use crate::libwallet::api_impl::owner_updater::{start_updater_log_thread, StatusMessage};
 use crate::libwallet::api_impl::{owner, owner_swap, owner_updater};
+use crate::libwallet::proof::proofaddress;
 use crate::libwallet::proof::tx_proof::TxProof;
 use crate::libwallet::swap::fsm::state::{StateEtaInfo, StateId, StateProcessRespond};
 use crate::libwallet::swap::types::{Action, SwapTransactionsConfirmations};
 use crate::libwallet::swap::{message::Message, swap::Swap, swap::SwapJournalRecord};
 use crate::libwallet::{
 	AcctPathMapping, Error, ErrorKind, InitTxArgs, IssueInvoiceTxArgs, NodeClient,
-	NodeHeightResult, OutputCommitMapping, PaymentProof, Slate, SwapStartArgs, TxLogEntry,
-	WalletInfo, WalletInst, WalletLCProvider,
+	NodeHeightResult, OutputCommitMapping, PaymentProof, Slate, SlatePurpose, SlateVersion,
+	SwapStartArgs, TxLogEntry, VersionedSlate, WalletInfo, WalletInst, WalletLCProvider,
 };
 use crate::util::logger::LoggingConfig;
 use crate::util::secp::key::SecretKey;
 use crate::util::{from_hex, Mutex, ZeroingString};
+use ed25519_dalek::SecretKey as DalekSecretKey;
 use grin_wallet_util::grin_util::secp::key::PublicKey;
 use grin_wallet_util::OnionV3Address;
 use std::convert::TryFrom;
@@ -46,6 +49,7 @@ use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
+use x25519_dalek::PublicKey as xDalekPublicKey;
 
 /// Main interface into all wallet API functions.
 /// Wallet APIs are split into two seperate blocks of functionality
@@ -669,7 +673,7 @@ where
 	/// };
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
-	/// 	args,
+	/// 	&args,
 	/// 	1,
 	/// );
 	///
@@ -684,7 +688,7 @@ where
 	pub fn init_send_tx(
 		&self,
 		keychain_mask: Option<&SecretKey>,
-		args: InitTxArgs,
+		args: &InitTxArgs,
 		routputs: usize, // Number of resulting outputs. Normally it is 1
 	) -> Result<Slate, Error> {
 		let address = args.address.clone();
@@ -712,6 +716,11 @@ where
 			None => {}
 		}
 
+		let mut recipients: Vec<xDalekPublicKey> = vec![];
+		if let Some(r) = &args.slatepack_recipient {
+			recipients.push(r.slate_pack_public_key()?);
+		}
+
 		let mut slate = {
 			let mut w_lock = self.wallet_inst.lock();
 			let w = w_lock.lc_provider()?.wallet_inst()?;
@@ -735,12 +744,35 @@ where
 							ErrorKind::GenericError(format!("Unable to create a sender, {}", e))
 						})?;
 
-						slate = comm_adapter.send_tx(&slate).map_err(|e| {
-							ErrorKind::ClientCallback(format!(
-								"Unable to send slate {} with {}, {}",
-								slate.id, sa.method, e
-							))
-						})?;
+						let slatepack_secret = {
+							let mut w_lock = self.wallet_inst.lock();
+							let w = w_lock.lc_provider()?.wallet_inst()?;
+							let keychain = w.keychain(keychain_mask)?;
+							let slatepack_secret =
+								proofaddress::payment_proof_address_secret(&keychain)?;
+							let slatepack_secret = DalekSecretKey::from_bytes(&slatepack_secret.0)
+								.map_err(|e| {
+									ErrorKind::SlatepackEncodeError(format!(
+										"Unable to build secret, {}",
+										e
+									))
+								})?;
+							slatepack_secret
+						};
+
+						slate = comm_adapter
+							.send_tx(
+								&slate,
+								SlatePurpose::SendSend,
+								&slatepack_secret,
+								&recipients,
+							)
+							.map_err(|e| {
+								ErrorKind::ClientCallback(format!(
+									"Unable to send slate {} with {}, {}",
+									slate.id, sa.method, e
+								))
+							})?;
 					}
 					_ => {
 						error!("unsupported payment method: {}", sa.method);
@@ -816,7 +848,7 @@ where
 	///     amount: 60_000_000_000,
 	///     ..Default::default()
 	/// };
-	/// let result = api_owner.issue_invoice_tx(None, args);
+	/// let result = api_owner.issue_invoice_tx(None, &args);
 	///
 	/// if let Ok(slate) = result {
 	///     // if okay, send to the payer to add their inputs
@@ -826,7 +858,7 @@ where
 	pub fn issue_invoice_tx(
 		&self,
 		keychain_mask: Option<&SecretKey>,
-		args: IssueInvoiceTxArgs,
+		args: &IssueInvoiceTxArgs,
 	) -> Result<Slate, Error> {
 		let mut w_lock = self.wallet_inst.lock();
 		let w = w_lock.lc_provider()?.wallet_inst()?;
@@ -869,7 +901,7 @@ where
 	///
 	/// // . . .
 	/// // The slate has been recieved from the invoicer, somehow
-	/// # let slate = Slate::blank(2);
+	/// # let slate = Slate::blank(2, false);
 	/// let args = InitTxArgs {
 	///     src_acct_name: None,
 	///     amount: slate.amount,
@@ -880,7 +912,7 @@ where
 	///     ..Default::default()
 	/// };
 	///
-	/// let result = api_owner.process_invoice_tx(None, &slate, args);
+	/// let result = api_owner.process_invoice_tx(None, &slate, &args);
 	///
 	/// if let Ok(slate) = result {
 	/// // If result okay, send back to the invoicer
@@ -892,7 +924,7 @@ where
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		slate: &Slate,
-		args: InitTxArgs,
+		args: &InitTxArgs,
 	) -> Result<Slate, Error> {
 		owner::update_wallet_state(self.wallet_inst.clone(), keychain_mask, &None)?;
 
@@ -960,7 +992,7 @@ where
 	/// };
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
-	/// 	args,
+	/// 	&args,
 	/// 	1,
 	/// );
 	///
@@ -1028,7 +1060,7 @@ where
 	/// };
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
-	/// 	args,
+	/// 	&args,
 	/// 	1,
 	/// );
 	///
@@ -1091,7 +1123,7 @@ where
 	/// };
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
-	/// 	args,
+	/// 	&args,
 	/// 	1,
 	/// );
 	///
@@ -1164,7 +1196,7 @@ where
 	/// };
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
-	/// 	args,
+	/// 	&args,
 	/// 	1,
 	/// );
 	///
@@ -1288,7 +1320,7 @@ where
 	/// };
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
-	/// 	args,
+	/// 	&args,
 	/// 	1,
 	/// );
 	///
@@ -2480,6 +2512,78 @@ where
 		message: String,
 	) -> Result<Option<Message>, Error> {
 		owner_swap::swap_income_message(self.wallet_inst.clone(), keychain_mask, &message, None)
+	}
+
+	// decryipt income slate. It is the common routine for most API calls that accept the slates
+	// Note, the merge case if not covered by this API.
+	pub fn decrypt_versioned_slate(
+		&self,
+		keychain_mask: Option<&SecretKey>,
+		in_slate: VersionedSlate,
+	) -> Result<(Slate, Option<xDalekPublicKey>), Error> {
+		let (slate_from, sender) = if in_slate.is_encrypted() {
+			let (slate_from, sender) =
+				self.decrypt_slatepack(keychain_mask, in_slate)
+					.map_err(|e| {
+						ErrorKind::SlatepackDecodeError(format!(
+							"Unable to decrypt a slatepack, {}",
+							e
+						))
+					})?;
+			(slate_from, sender)
+		} else {
+			let slate_from = in_slate.into_slate_plain().map_err(|e| e.kind())?;
+			(slate_from, None)
+		};
+		Ok((slate_from, sender))
+	}
+
+	// Utility method, not expected to be called from Owner API directly.
+	fn decrypt_slatepack(
+		&self,
+		keychain_mask: Option<&SecretKey>,
+		encrypted_slate: VersionedSlate,
+	) -> Result<(Slate, Option<xDalekPublicKey>), Error> {
+		let mut w_lock = self.wallet_inst.lock();
+		let w = w_lock.lc_provider()?.wallet_inst()?;
+		foreign::decrypt_slatepack(&mut **w, keychain_mask, encrypted_slate)
+	}
+
+	// Encrypot slate to send back.
+	pub fn encrypt_slate(
+		&self,
+		keychain_mask: Option<&SecretKey>,
+		slate: &Slate,
+		content: SlatePurpose,
+		slatepack_recipient: Option<xDalekPublicKey>,
+	) -> Result<VersionedSlate, Error> {
+		if slatepack_recipient.is_none() {
+			// Using unencrypted format
+			let version = slate.lowest_version();
+			Ok(
+				VersionedSlate::into_version_plain(slate.clone(), version).map_err(|e| {
+					ErrorKind::SlatepackEncodeError(format!("Unable to build a slate, {}", e))
+				})?,
+			)
+		} else {
+			let slatepack_pk = {
+				let mut w_lock = self.wallet_inst.lock();
+				let w = w_lock.lc_provider()?.wallet_inst()?;
+				let keychain = w.keychain(keychain_mask)?;
+				let slatepack_secret = proofaddress::payment_proof_address_secret(&keychain)?;
+				let tor_pk = proofaddress::secret_2_tor_pub(&slatepack_secret)?;
+				let slatepack_pk = proofaddress::tor_pub_2_slatepack_pub(&tor_pk)?;
+				slatepack_pk
+			};
+
+			Ok(VersionedSlate::into_version(
+				slate,
+				SlateVersion::SP,
+				content,
+				&Some(slatepack_pk),
+				&vec![slatepack_recipient.unwrap()],
+			)?)
+		}
 	}
 }
 

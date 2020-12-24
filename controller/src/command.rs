@@ -20,18 +20,20 @@ use crate::config::{MQSConfig, TorConfig, WalletConfig, WALLET_CONFIG_FILE_NAME}
 use crate::core::{core, global};
 use crate::error::{Error, ErrorKind};
 use crate::impls::{create_sender, SlateGetter as _};
-use crate::impls::{PathToSlate, SlatePutter};
+use crate::impls::{PathToSlateGetter, PathToSlatePutter, SlatePutter};
 use crate::keychain;
 use crate::libwallet::{InitTxArgs, IssueInvoiceTxArgs, NodeClient, WalletLCProvider};
 use crate::util::secp::key::SecretKey;
 use crate::util::{Mutex, ZeroingString};
 use crate::{controller, display};
 use chrono::Utc;
+use ed25519_dalek::SecretKey as DalekSecretKey;
 use grin_wallet_impls::adapters::{create_swap_message_sender, validate_tor_address};
 use grin_wallet_impls::{Address, MWCMQSAddress, Publisher};
 use grin_wallet_libwallet::api_impl::owner_swap;
-use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
+use grin_wallet_libwallet::proof::proofaddress::{self, ProvableAddress};
 use grin_wallet_libwallet::proof::tx_proof::TxProof;
+use grin_wallet_libwallet::slatepack::SlatePurpose;
 use grin_wallet_libwallet::swap::message;
 use grin_wallet_libwallet::swap::trades;
 use grin_wallet_libwallet::swap::types::Action;
@@ -46,6 +48,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
+use x25519_dalek::PublicKey as xDalekPublicKey;
 
 lazy_static! {
 	/// Recieve account can be specified separately and must be allpy to ALL receive operations
@@ -312,6 +315,8 @@ pub struct SendArgs {
 	pub minimum_confirmations_change_outputs: u64,
 	pub address: Option<String>,      //this is only for file proof.
 	pub outputs: Option<Vec<String>>, // Outputs to use. If None, all outputs can be used
+	pub slatepack_recipient: Option<ProvableAddress>, // Destination for slatepack. The address will be the same as for payment_proof_address. The role is different.
+	pub late_lock: bool,
 }
 
 pub fn send<L, C, K>(
@@ -347,7 +352,7 @@ where
 					outputs: args.outputs.clone(),
 					..Default::default()
 				};
-				let slate = api.init_send_tx(m, init_args, 1)?;
+				let slate = api.init_send_tx(m, &init_args, 1)?;
 				strategies.push((strategy, slate.amount, slate.fee));
 			}
 			display::estimate(args.amount, strategies, dark_scheme);
@@ -368,9 +373,10 @@ where
 				exclude_change_outputs: Some(args.exclude_change_outputs),
 				minimum_confirmations_change_outputs: args.minimum_confirmations_change_outputs,
 				outputs: args.outputs.clone(),
+				late_lock: Some(args.late_lock),
 				..Default::default()
 			};
-			let result = api.init_send_tx(m, init_args, 1);
+			let result = api.init_send_tx(m, &init_args, 1);
 			let mut slate = match result {
 				Ok(s) => {
 					info!(
@@ -424,16 +430,38 @@ where
 				_ => {}
 			}
 
+			let mut recipients: Vec<xDalekPublicKey> = vec![];
+			if let Some(sp_address) = &args.slatepack_recipient {
+				recipients.push(sp_address.slate_pack_public_key()?);
+			}
+
+			let (slatepack_secret, slatepack_sender) = {
+				let mut w_lock = api.wallet_inst.lock();
+				let w = w_lock.lc_provider()?.wallet_inst()?;
+				let keychain = w.keychain(keychain_mask)?;
+				let slatepack_secret = proofaddress::payment_proof_address_secret(&keychain)?;
+				let tor_pub_key = proofaddress::secret_2_tor_pub(&slatepack_secret)?;
+				let slate_pub_key = proofaddress::tor_pub_2_slatepack_pub(&tor_pub_key)?;
+
+				let slatepack_secret =
+					DalekSecretKey::from_bytes(&slatepack_secret.0).map_err(|e| {
+						ErrorKind::GenericError(format!("Unable to build secret, {}", e))
+					})?;
+				(slatepack_secret, slate_pub_key)
+			};
+
 			match args.method.as_str() {
 				"file" => {
-					PathToSlate((&args.dest).into())
-						.put_tx(&slate)
-						.map_err(|e| {
-							ErrorKind::IO(format!(
-								"Unable to store the file at {}, {}",
-								args.dest, e
-							))
-						})?;
+					PathToSlatePutter::build_encrypted(
+						(&args.dest).into(),
+						Some(SlatePurpose::SendSend),
+						Some(slatepack_sender),
+						recipients,
+					)
+					.put_tx(&slate)
+					.map_err(|e| {
+						ErrorKind::IO(format!("Unable to store the file at {}, {}", args.dest, e))
+					})?;
 					api.tx_lock_outputs(m, &slate, Some(String::from("file")), 0)?;
 					return Ok(());
 				}
@@ -457,7 +485,12 @@ where
 				method => {
 					let original_slate = slate.clone();
 					let sender = create_sender(method, &args.dest, &args.apisecret, tor_config)?;
-					slate = sender.send_tx(&slate)?;
+					slate = sender.send_tx(
+						&slate,
+						SlatePurpose::SendSend,
+						&slatepack_secret,
+						&recipients,
+					)?;
 					// Restore back ttl, because it can be gone
 					slate.ttl_cutoff_height = original_slate.ttl_cutoff_height.clone();
 					// Checking is sender didn't do any harm to slate
@@ -507,12 +540,26 @@ where
 	C: NodeClient + 'static,
 	K: keychain::Keychain + 'static,
 {
-	let mut slate = PathToSlate((&args.input).into()).get_tx()?;
 	let km = match keychain_mask.as_ref() {
 		None => None,
 		Some(&m) => Some(m.to_owned()),
 	};
 	controller::foreign_single_use(owner_api.wallet_inst.clone(), km, |api| {
+		let slatepack_secret = {
+			let mut w_lock = api.wallet_inst.lock();
+			let w = w_lock.lc_provider()?.wallet_inst()?;
+			let keychain = w.keychain(keychain_mask)?;
+			let slatepack_secret = proofaddress::payment_proof_address_secret(&keychain)?;
+			let slatepack_secret = DalekSecretKey::from_bytes(&slatepack_secret.0)
+				.map_err(|e| ErrorKind::GenericError(format!("Unable to build secret, {}", e)))?;
+			slatepack_secret
+		};
+
+		let slate_pkg =
+			PathToSlateGetter::build((&args.input).into()).get_tx(Some(&slatepack_secret))?;
+
+		let (mut slate, sender) = slate_pkg.to_slate()?;
+
 		if let Err(e) = api.verify_slate_messages(&slate) {
 			error!("Error validating participant messages: {}", e);
 			return Err(
@@ -525,13 +572,23 @@ where
 			Some(&g_args.account),
 			args.message.clone(),
 		)?;
+
+		let recipents: Vec<xDalekPublicKey> = sender.iter().cloned().collect();
+
+		PathToSlatePutter::build_encrypted(
+			format!("{}.response", args.input).into(),
+			Some(SlatePurpose::SendResponse),
+			None,
+			recipents,
+		)
+		.put_tx(&slate)?;
+		info!(
+			"Response file {}.response generated, and can be sent back to the transaction originator.",
+			args.input
+		);
 		Ok(())
 	})?;
-	PathToSlate(format!("{}.response", args.input).into()).put_tx(&slate)?;
-	info!(
-		"Response file {}.response generated, and can be sent back to the transaction originator.",
-		args.input
-	);
+
 	Ok(())
 }
 
@@ -554,7 +611,26 @@ where
 	C: NodeClient + 'static,
 	K: keychain::Keychain + 'static,
 {
-	let mut slate = PathToSlate((&args.input).into()).get_tx()?;
+	let mut slate = Slate::blank(2, false); // result placeholder, params not important
+
+	controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, m| {
+		let slatepack_secret = {
+			let mut w_lock = api.wallet_inst.lock();
+			let w = w_lock.lc_provider()?.wallet_inst()?;
+			let keychain = w.keychain(m)?;
+			let slatepack_secret = proofaddress::payment_proof_address_secret(&keychain)?;
+			let slatepack_secret = DalekSecretKey::from_bytes(&slatepack_secret.0)
+				.map_err(|e| ErrorKind::GenericError(format!("Unable to build secret, {}", e)))?;
+			slatepack_secret
+		};
+
+		let slate_pkg =
+			PathToSlateGetter::build((&args.input).into()).get_tx(Some(&slatepack_secret))?;
+
+		slate = slate_pkg.to_slate()?.0;
+
+		Ok(())
+	})?;
 
 	// Note!!! grin wallet was able to detect if it is invoice by using 'different' participant Ids (issuer use 1, fouset 0)
 	//    Unfortunatelly it is breaks mwc713 backward compatibility (issuer Participant Id 0, fouset 1)
@@ -611,7 +687,8 @@ where
 	}
 
 	if args.dest.is_some() {
-		PathToSlate((&args.dest.unwrap()).into()).put_tx(&slate)?;
+		// save to a destination not as a slatepack
+		PathToSlatePutter::build_plain((&args.dest.unwrap()).into()).put_tx(&slate)?;
 	}
 
 	Ok(())
@@ -636,8 +713,20 @@ where
 	K: keychain::Keychain + 'static,
 {
 	controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, m| {
-		let slate = api.issue_invoice_tx(m, args.issue_args)?;
-		PathToSlate((&args.dest).into()).put_tx(&slate)?;
+		let mut recipients: Vec<xDalekPublicKey> = vec![];
+		if let Some(sp_address) = &args.issue_args.slatepack_recipient {
+			recipients.push(sp_address.slate_pack_public_key()?);
+		}
+
+		let slate = api.issue_invoice_tx(m, &args.issue_args)?;
+
+		PathToSlatePutter::build_encrypted(
+			(&args.dest).into(),
+			Some(SlatePurpose::InvoiceSend),
+			None,
+			recipients,
+		)
+		.put_tx(&slate)?;
 		Ok(())
 	})?;
 	Ok(())
@@ -669,7 +758,21 @@ where
 	C: NodeClient + 'static,
 	K: keychain::Keychain + 'static,
 {
-	let slate = PathToSlate((&args.input).into()).get_tx()?;
+	let slatepack_secret = {
+		let mut w_lock = owner_api.wallet_inst.lock();
+		let w = w_lock.lc_provider()?.wallet_inst()?;
+		let keychain = w.keychain(keychain_mask)?;
+		let slatepack_secret = proofaddress::payment_proof_address_secret(&keychain)?;
+		let slatepack_secret = DalekSecretKey::from_bytes(&slatepack_secret.0)
+			.map_err(|e| ErrorKind::GenericError(format!("Unable to build secret, {}", e)))?;
+		slatepack_secret
+	};
+
+	let slate_pkg =
+		PathToSlateGetter::build((&args.input).into()).get_tx(Some(&slatepack_secret))?;
+
+	let (slate, sender_pk) = slate_pkg.to_slate()?;
+
 	let wallet_inst = owner_api.wallet_inst.clone();
 	controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, m| {
 		if args.estimate_selection_strategies {
@@ -685,7 +788,7 @@ where
 					estimate_only: Some(true),
 					..Default::default()
 				};
-				let slate = api.init_send_tx(m, init_args, 1)?;
+				let slate = api.init_send_tx(m, &init_args, 1)?;
 				strategies.push((strategy, slate.amount, slate.fee));
 			}
 			display::estimate(slate.amount, strategies, dark_scheme);
@@ -710,7 +813,7 @@ where
 				))
 				.into());
 			}
-			let result = api.process_invoice_tx(m, &slate, init_args);
+			let result = api.process_invoice_tx(m, &slate, &init_args);
 			let mut slate = match result {
 				Ok(s) => {
 					info!(
@@ -731,8 +834,8 @@ where
 
 			match args.method.as_str() {
 				"file" => {
-					let slate_putter = PathToSlate((&args.dest).into());
-					slate_putter.put_tx(&slate)?;
+					// Process invoice slate is not required to send anywhere. Let's write it for our records.
+					PathToSlatePutter::build_plain((&args.dest).into()).put_tx(&slate)?;
 					api.tx_lock_outputs(m, &slate, Some(String::from("file")), 1)?;
 				}
 				"self" => {
@@ -749,7 +852,12 @@ where
 				method => {
 					let sender = create_sender(method, &args.dest, &None, tor_config)?;
 					// We want to lock outputs for original slate. Sender can respond with anyhting. No reasons to check respond if lock works fine for original slate
-					let _ = sender.send_tx(&slate)?;
+					let _ = sender.send_tx(
+						&slate,
+						SlatePurpose::InvoiceResponse,
+						&slatepack_secret,
+						&sender_pk.iter().cloned().collect(),
+					)?;
 					api.tx_lock_outputs(m, &slate, Some(args.dest.clone()), 1)?;
 				}
 			}
@@ -903,7 +1011,11 @@ where
 	C: NodeClient + 'static,
 	K: keychain::Keychain + 'static,
 {
-	let slate = PathToSlate((&args.input).into()).get_tx()?;
+	// Post expected to be internal api call, so there is no reasons to work with slatepacks.
+	let slate = PathToSlateGetter::build((&args.input).into())
+		.get_tx(None)?
+		.to_slate()?
+		.0;
 
 	controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, m| {
 		api.post_tx(m, &slate.tx, args.fluff)?;

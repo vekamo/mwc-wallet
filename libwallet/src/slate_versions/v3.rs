@@ -74,13 +74,11 @@ pub struct SlateV3 {
 	/// is receiver, though this will change for multi-party
 	pub participant_data: Vec<ParticipantDataV3>,
 	/// Payment Proof
-	///#[serde(default = "default_payment_none")]
 	pub payment_proof: Option<PaymentInfoV3>,
+	/// Support for compact slates.
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub compact_slate: Option<bool>,
 }
-
-//fn default_payment_none() -> Option<PaymentInfoV3> {
-//	None
-//}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VersionCompatInfoV3 {
@@ -252,6 +250,7 @@ impl From<SlateV2> for SlateV3 {
 			participant_data,
 			version_info,
 			payment_proof: None,
+			compact_slate: None,
 		}
 	}
 }
@@ -373,7 +372,11 @@ impl From<&SlateV3> for SlateV2 {
 			participant_data,
 			version_info,
 			payment_proof,
+			compact_slate,
 		} = slate;
+		if compact_slate.unwrap_or(false) {
+			panic!("Slate V3 to V2 conversion error. V2 doesn't support compact model");
+		}
 		let num_participants = *num_participants;
 		let id = *id;
 		let tx = TransactionV2::from(tx);
