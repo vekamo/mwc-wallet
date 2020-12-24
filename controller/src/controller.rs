@@ -38,7 +38,7 @@ use grin_wallet_util::grin_core::core;
 
 use crate::apiwallet::{
 	EncryptedRequest, EncryptedResponse, EncryptionErrorResponse, Foreign,
-	ForeignCheckMiddlewareFn, ForeignRpc, Owner, OwnerRpc, OwnerRpcS,
+	ForeignCheckMiddlewareFn, ForeignRpc, Owner, OwnerRpcV2, OwnerRpcV3,
 };
 use crate::config::{MQSConfig, TorConfig};
 use crate::core::global;
@@ -888,7 +888,7 @@ impl<L, C, K> OwnerAPIHandlerV2<L, C, K>
 
 	async fn call_api(req: Request<Body>, api: Owner<L, C, K>) -> Result<serde_json::Value, Error> {
 	let val: serde_json::Value = parse_body(req).await?;
-	match OwnerRpc::handle_request(&api, val) {
+	match OwnerRpcV2::handle_request(&api, val) {
 		MaybeReply::Reply(r) => Ok(r),
 		MaybeReply::DontReply => {
 			// Since it's http, we need to return something. We return [] because jsonrpc
@@ -1242,7 +1242,7 @@ impl<L, C, K> OwnerAPIHandlerV3<L, C, K>
 	is_init_secure_api = OwnerV3Helpers::is_init_secure_api(&val);
 	// also need to intercept open/close wallet requests
 	let is_open_wallet = OwnerV3Helpers::is_open_wallet(&val);
-	match OwnerRpcS::handle_request(&*api, val) {
+	match OwnerRpcV3::handle_request(&*api, val) {
 		MaybeReply::Reply(mut r) => {
 			let (_was_error, unencrypted_intercept) =
 				OwnerV3Helpers::check_error_response(&r.clone());

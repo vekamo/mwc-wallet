@@ -29,7 +29,7 @@ use crate::types::TxLogEntryAPI;
 use crate::util;
 use crate::util::secp::pedersen;
 use crate::util::Mutex;
-use crate::{Owner, OwnerRpcS};
+use crate::{Owner, OwnerRpcV3};
 use easy_jsonrpc_mw;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use std::sync::Arc;
@@ -39,7 +39,7 @@ use std::sync::Arc;
 /// `localhost:3420/v2/owner`
 /// * The endpoint only supports POST operations, with the json-rpc request as the body
 #[easy_jsonrpc_mw::rpc]
-pub trait OwnerRpc: Sync + Send {
+pub trait OwnerRpcV2: Sync + Send {
 	/**
 	Networked version of [Owner::accounts](struct.Owner.html#method.accounts).
 
@@ -1395,7 +1395,7 @@ pub trait OwnerRpc: Sync + Send {
 	fn node_height(&self) -> Result<NodeHeightResult, ErrorKind>;
 }
 
-impl<'a, L, C, K> OwnerRpc for Owner<L, C, K>
+impl<'a, L, C, K> OwnerRpcV2 for Owner<L, C, K>
 where
 	L: WalletLCProvider<'static, C, K>,
 	C: NodeClient + 'static,
@@ -1851,10 +1851,10 @@ pub fn run_doctest_owner(
 	let mut api_owner = Owner::new(wallet1, None, None);
 	api_owner.doctest_mode = true;
 	let res = if use_token {
-		let owner_api = &api_owner as &dyn OwnerRpcS;
+		let owner_api = &api_owner as &dyn OwnerRpcV3;
 		owner_api.handle_request(request).as_option()
 	} else {
-		let owner_api = &api_owner as &dyn OwnerRpc;
+		let owner_api = &api_owner as &dyn OwnerRpcV2;
 		owner_api.handle_request(request).as_option()
 	};
 	let _ = fs::remove_dir_all(test_dir);

@@ -44,7 +44,7 @@ use std::time::Duration;
 /// and encryption.
 
 #[easy_jsonrpc_mw::rpc]
-pub trait OwnerRpcS {
+pub trait OwnerRpcV3 {
 	/**
 	Networked version of [Owner::accounts](struct.Owner.html#method.accounts).
 
@@ -2178,7 +2178,7 @@ pub trait OwnerRpcS {
 	fn set_tor_config(&self, tor_config: Option<TorConfig>) -> Result<(), ErrorKind>;
 }
 
-impl<L, C, K> OwnerRpcS for Owner<L, C, K>
+impl<L, C, K> OwnerRpcV3 for Owner<L, C, K>
 where
 	L: WalletLCProvider<'static, C, K>,
 	C: NodeClient + 'static,
