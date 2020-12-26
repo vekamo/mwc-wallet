@@ -14,22 +14,19 @@
 
 /// Slatepack Types + Serialization implementation
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey, PUBLIC_KEY_LENGTH};
-use x25519_dalek::PublicKey as xDalekPublicKey;
 
 use crate::grin_util::secp::key::PublicKey;
-
-use sha2::{Digest, Sha512};
-use x25519_dalek::StaticSecret;
 
 use crate::{Error, ErrorKind};
 use crate::{ParticipantData, Slate, SlateVersion};
 
 use crate::proof::proofaddress::ProvableAddress;
 use std::io;
-use std::io::{Read, Write};
 
+use crate::proof::proofaddress;
 use crate::slate::PaymentInfo;
 use bitstream_io::{BigEndian, BitReader, BitWriter, Endianness};
+use crc::{crc32, Hasher32};
 use grin_core::core::{
 	Input, Inputs, KernelFeatures, Output, OutputFeatures, OutputIdentifier, TxKernel,
 };
@@ -41,6 +38,8 @@ use grin_util::secp::Signature;
 use grin_util::{from_hex, to_hex};
 use grin_wallet_util::grin_core::core::CommitWrapper;
 use grin_wallet_util::grin_util::static_secp_instance;
+use rand::{thread_rng, Rng};
+use ring::aead;
 use smaz;
 use uuid::Uuid;
 
@@ -48,10 +47,10 @@ use uuid::Uuid;
 #[derive(Debug, Clone)]
 pub struct Slatepack {
 	// Optional Fields
-	/// Optional Sender address
-	pub sender: Option<xDalekPublicKey>,
-	/// Optional recipient addresses.
-	pub recipients: Vec<xDalekPublicKey>,
+	/// Sender address
+	pub sender: DalekPublicKey,
+	/// Recipient addresses
+	pub recipient: DalekPublicKey,
 	/// The content purpose. It customize serializer/deserializer for us.
 	pub content: SlatePurpose,
 
@@ -60,17 +59,17 @@ pub struct Slatepack {
 }
 
 /// Slate state definition
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SlatePurpose {
 	/// Standard flow, freshly init
-	SendSend,
+	SendInitial,
 	/// Standard flow, return journey
 	SendResponse,
 	///Invoice flow, init
-	InvoiceSend,
+	InvoiceInitial,
 	///Invoice flow, return journey
 	InvoiceResponse,
-	///Invoice optional return (full slate is encoded, just for caller)
+	/// Just a full slate. Might me stored, or sent for posting.
 	FullSlate,
 }
 
@@ -78,9 +77,9 @@ impl SlatePurpose {
 	/// Create from integer value
 	pub fn from_int(i: u8) -> Result<Self, Error> {
 		let res: Self = match i {
-			0 => SlatePurpose::SendSend,
+			0 => SlatePurpose::SendInitial,
 			1 => SlatePurpose::SendResponse,
-			2 => SlatePurpose::InvoiceSend,
+			2 => SlatePurpose::InvoiceInitial,
 			3 => SlatePurpose::InvoiceResponse,
 			4 => SlatePurpose::FullSlate,
 			_ => {
@@ -97,45 +96,90 @@ impl SlatePurpose {
 	/// Convert to integer value
 	pub fn to_int(&self) -> u8 {
 		match self {
-			SlatePurpose::SendSend => 0,
+			SlatePurpose::SendInitial => 0,
 			SlatePurpose::SendResponse => 1,
-			SlatePurpose::InvoiceSend => 2,
+			SlatePurpose::InvoiceInitial => 2,
 			SlatePurpose::InvoiceResponse => 3,
 			SlatePurpose::FullSlate => 4,
 		}
 	}
 }
 
+const SLATE_PACK_PLAIN_DATA_SIZE: usize = 1 + 32 + 32;
+
 impl Slatepack {
 	/// Decode and decrypt the Slatepack
 	/// Note:  from_binary & to_binary - are NOT serializers, minimum amount of the data is transported.
 	/// from_binary & to_binary are symmetrical
-	pub fn from_binary(data: &Vec<u8>, dec_key: Option<&DalekSecretKey>) -> Result<Self, Error> {
+	pub fn from_binary(data: &Vec<u8>, secret: &DalekSecretKey) -> Result<Self, Error> {
+		if data.len() < SLATE_PACK_PLAIN_DATA_SIZE {
+			return Err(
+				ErrorKind::SlatepackDecodeError("Slatapack data is too short".to_string()).into(),
+			);
+		}
+		let mut digest = crc32::Digest::new(crc32::IEEE);
+		digest.write(&data[..SLATE_PACK_PLAIN_DATA_SIZE]);
+
 		let mut r = BitReader::endian(data.as_slice(), BigEndian);
-		let version: u8 = r.read(4)?;
+		let version: u8 = r.read(8)?;
 		if version != 0 {
 			return Err(
 				ErrorKind::SlatepackDecodeError("Wrong slatepack version".to_string()).into(),
 			);
 		}
-		let enc_len: u32 = r.read(16 + 4)?;
+		// Sender address, so other party can open the message
+		debug_assert!(PUBLIC_KEY_LENGTH == 32);
+		let mut data: [u8; 32] = [0; 32];
+		r.read_bytes(&mut data)?;
+		let sender = DalekPublicKey::from_bytes(&data).map_err(|e| {
+			ErrorKind::SlatepackDecodeError(format!("Unable to read a sender public key, {}", e))
+		})?;
+		// Receiver address, so this wallet open the message if it is in the archive
+		let mut data: [u8; 32] = [0; 32];
+		r.read_bytes(&mut data)?;
+		let recipient = DalekPublicKey::from_bytes(&data).map_err(|e| {
+			ErrorKind::SlatepackDecodeError(format!("Unable to read a sender public key, {}", e))
+		})?;
+
+		let mut nonce: [u8; 12] = [0; 12];
+		r.read_bytes(&mut nonce)?;
+
+		let enc_len: u32 = r.read(16)?;
 		let mut data_to_decrypt: Vec<u8> = vec![0; enc_len as usize];
 		r.read_bytes(&mut data_to_decrypt)?;
-		let payload = Self::try_decrypt_payload(data_to_decrypt, dec_key)?;
+		let payload =
+			match Self::decrypt_payload(data_to_decrypt.clone(), nonce.clone(), secret, &sender) {
+				Ok(payload) => payload,
+				Err(e) => {
+					// Try recipient PK.  May be we are open what was stored before.
+					let res = Self::decrypt_payload(data_to_decrypt, nonce, secret, &recipient);
+					if res.is_err() {
+						// in case of error we want to return the parent error.
+						return Err(e);
+					}
+					res.unwrap()
+				}
+			};
+
+		// Let's check the payload CRC first (crc32 is last 4 bytes.)
+		{
+			digest.write(&payload[..(payload.len() - 4)]);
+			let mut crc_reader = BitReader::endian(&payload[(payload.len() - 4)..], BigEndian);
+			let read_crc32: u32 = crc_reader.read(32)?;
+			let data_crc32 = digest.sum32();
+			if read_crc32 != data_crc32 {
+				return Err(ErrorKind::SlatepackDecodeError(
+					"Slatepack content is not consistent".to_string(),
+				)
+				.into());
+			}
+		}
 
 		let mut r = BitReader::endian(payload.as_slice(), BigEndian);
 		let content = SlatePurpose::from_int(r.read(3)?)?;
 
-		let sender = if r.read::<u8>(1)? == 1 {
-			let mut data: [u8; 32] = [0; 32];
-			r.read_bytes(&mut data)?;
-			Some(xDalekPublicKey::from(data))
-		} else {
-			None
-		};
-
 		let mut slate = match content {
-			SlatePurpose::InvoiceSend => Self::read_slate_data(
+			SlatePurpose::InvoiceInitial => Self::read_slate_data(
 				true, false, false, false, false, false, true, false, false, false, &mut r,
 			)?,
 			SlatePurpose::InvoiceResponse => Self::read_slate_data(
@@ -144,7 +188,7 @@ impl Slatepack {
 			SlatePurpose::FullSlate => Self::read_slate_data(
 				true, true, true, true, true, true, true, true, true, true, &mut r,
 			)?,
-			SlatePurpose::SendSend => Self::read_slate_data(
+			SlatePurpose::SendInitial => Self::read_slate_data(
 				true, true, false, false, false, false, true, false, true, false, &mut r,
 			)?,
 			SlatePurpose::SendResponse => Self::read_slate_data(
@@ -156,7 +200,7 @@ impl Slatepack {
 
 		Ok(Slatepack {
 			sender,
-			recipients: vec![],
+			recipient,
 			content,
 			slate,
 		})
@@ -166,7 +210,11 @@ impl Slatepack {
 	/// The rest will be encrypted, there is no reason to know who isi the sender.
 	/// Note:  from_binary & to_binary - are NOT serializers, minimum amount of the data is transported
 	/// from_binary & to_binary are symmetrical
-	pub fn to_binary(&self, slate_version: SlateVersion) -> Result<Vec<u8>, Error> {
+	pub fn to_binary(
+		&self,
+		slate_version: SlateVersion,
+		secret: &DalekSecretKey,
+	) -> Result<Vec<u8>, Error> {
 		if !self.slate.compact_slate {
 			return Err(ErrorKind::SlatepackEncodeError(
 				"Slatepack expecting only compact model".to_string(),
@@ -184,18 +232,9 @@ impl Slatepack {
 
 		let mut w = BitWriter::endian(&mut encrypted_data, BigEndian);
 		w.write(3, self.content.to_int())?;
-		match &self.sender {
-			None => w.write(1, 0)?,
-			Some(sender) => {
-				w.write(1, 1)?;
-				debug_assert!(sender.as_bytes().len() == 32);
-				w.write_bytes(sender.as_bytes())?;
-			}
-		}
-		// Receiver are not included, so far we don't need them. Format is compact, so no usage, no data
 
 		match self.content {
-			SlatePurpose::InvoiceSend => {
+			SlatePurpose::InvoiceInitial => {
 				Self::write_slate_data(
 					&self.slate,
 					true,
@@ -243,7 +282,7 @@ impl Slatepack {
 					&mut w,
 				)?;
 			}
-			SlatePurpose::SendSend => {
+			SlatePurpose::SendInitial => {
 				Self::write_slate_data(
 					&self.slate,
 					true,
@@ -277,26 +316,54 @@ impl Slatepack {
 			}
 		}
 
-		// Flushing of the last byte into encrypted_data
-		w.write::<u8>(7, 0)?;
-
-		let encrypted_data = Self::try_encrypt_payload(encrypted_data, &self.recipients)?;
-
 		// Here is a binary that we will use
 		let mut pack_binary = Vec::new();
-		let mut w = BitWriter::endian(&mut pack_binary, BigEndian);
+		// w_pack must be limited because we want tread form the pack_binary pretty soon
+		let mut w_pack = BitWriter::endian(&mut pack_binary, BigEndian);
 
 		// Writing the version 0. The version is global for all slatepack.
-		w.write(4, 0)?;
+		w_pack.write(8, 0)?;
+		// Sender address, so other party can open the message
+		debug_assert!(self.sender.as_bytes().len() == 32);
+		w_pack.write_bytes(self.sender.as_bytes())?;
+		// Receiver address, so this wallet open the message if it is in the archive
+		debug_assert!(self.recipient.as_bytes().len() == 32);
+		w_pack.write_bytes(self.recipient.as_bytes())?; // 32 bytes unencrypted - recipient. Primary reason - we want to be able to read what we write.
+												// expected to be aligned
+
+		// Do CRC and encryption. CRC we want to be encrypted
+		{
+			let mut digest = crc32::Digest::new(crc32::IEEE);
+			debug_assert!(pack_binary.len() == SLATE_PACK_PLAIN_DATA_SIZE);
+			digest.write(&pack_binary);
+			w.byte_align()?;
+
+			digest.write(&encrypted_data);
+
+			// We have to destroy prev instance of w in order to read from the encrypted_data for crc32.
+			let mut w = BitWriter::endian(&mut encrypted_data, BigEndian);
+			let crc32: u32 = digest.sum32();
+			w.write(32, crc32)?;
+		}
+		let (encrypted_data, nonce) =
+			Self::encrypt_payload(encrypted_data, secret, &self.recipient)?;
+
+		// We have to destroy prev instance of w_pack in order to read from the pack_binary for crc32.
+		let mut w_pack = BitWriter::endian(&mut pack_binary, BigEndian);
+
+		w_pack.write_bytes(&nonce)?;
+
 		let enc_len = encrypted_data.len();
-		if enc_len > 65535 * 16 {
+		if enc_len > 65534 {
 			return Err(ErrorKind::SlatepackEncodeError(
 				"Slate too large for encoding".to_string(),
 			)
 			.into());
 		}
-		w.write(16 + 4, enc_len as u32)?; // Need to keep byte aligned
-		w.write_bytes(&encrypted_data)?;
+		w_pack.write(16, enc_len as u32)?; // Need to keep byte aligned
+		w_pack.write_bytes(&encrypted_data)?;
+		// expected to be aligned
+
 		Ok(pack_binary)
 	}
 
@@ -867,74 +934,71 @@ impl Slatepack {
 		Ok(slate)
 	}
 
-	/// age encrypt the payload with the given public key
-	fn try_encrypt_payload(
+	/// Encrypt the payload. For encryption we are using  Diffie-Hellman key exchange for secret exchange
+	/// Then everything will be encrypted with EAED.
+	fn encrypt_payload(
 		payload: Vec<u8>,
-		recipients: &Vec<xDalekPublicKey>,
-	) -> Result<Vec<u8>, Error> {
-		if recipients.is_empty() {
-			return Ok(payload);
-		}
+		secret: &DalekSecretKey,
+		recipient: &DalekPublicKey,
+	) -> Result<(Vec<u8>, [u8; 12]), Error> {
+		// https://github.com/dalek-cryptography/x25519-dalek
+		// convert to xDalek PK & Secret
+		let recipient = proofaddress::tor_pub_2_slatepack_pub(&recipient)?;
+		let secret = proofaddress::tor_secret_2_slatepack_secret(&secret);
+		let shared_secret = secret.diffie_hellman(&recipient);
 
-		// Create encrypted metadata, which will be length prefixed
-		let rec_keys: Result<Vec<_>, _> = recipients
-			.into_iter()
-			.map(|pk| {
-				let key = age::keys::RecipientKey::X25519(pk.clone());
-				Ok(key)
-			})
-			.collect();
+		let nonce: [u8; 12] = thread_rng().gen();
+		let mut enc_bytes = payload;
 
-		let keys = match rec_keys {
-			Ok(k) => k,
-			Err(e) => return Err(e),
-		};
+		let unbound_key = aead::UnboundKey::new(&aead::CHACHA20_POLY1305, shared_secret.as_bytes())
+			.map_err(|e| {
+				ErrorKind::SlatepackEncodeError(format!("Unable to build a key, {}", e))
+			})?;
+		let sealing_key: aead::LessSafeKey = aead::LessSafeKey::new(unbound_key);
+		let aad = aead::Aad::from(&[]);
+		sealing_key
+			.seal_in_place_append_tag(
+				aead::Nonce::assume_unique_for_key(nonce),
+				aad,
+				&mut enc_bytes,
+			)
+			.map_err(|e| ErrorKind::SlatepackEncodeError(format!("Unable to encrypt, {}", e)))?;
 
-		let encryptor = age::Encryptor::with_recipients(keys);
-		let mut encrypted = vec![];
-		let mut writer = encryptor.wrap_output(&mut encrypted, age::Format::Binary)?;
-		writer.write_all(&payload)?;
-		writer.finish()?;
-		Ok(encrypted.to_vec())
+		Ok((enc_bytes, nonce))
 	}
 
 	/// As above, decrypt if needed
 	/// dec_key - is a secret that is used for all types of weallet addresses.
-	fn try_decrypt_payload(
+	fn decrypt_payload(
 		payload: Vec<u8>,
-		dec_key: Option<&DalekSecretKey>,
+		nonce: [u8; 12],
+		secret: &DalekSecretKey,
+		sender: &DalekPublicKey,
 	) -> Result<Vec<u8>, Error> {
-		let dec_key = match dec_key {
-			Some(k) => k,
-			None => return Ok(payload),
-		};
-		let mut b = [0u8; 32];
-		b.copy_from_slice(&dec_key.as_bytes()[0..32]);
-		let mut hasher = Sha512::new();
-		hasher.input(&b);
-		let result = hasher.result();
-		b.copy_from_slice(&result[0..32]);
+		// https://github.com/dalek-cryptography/x25519-dalek
+		// convert to xDalek PK & Secret
+		let sender = proofaddress::tor_pub_2_slatepack_pub(&sender)?;
+		let secret = proofaddress::tor_secret_2_slatepack_secret(&secret);
+		let shared_secret = secret.diffie_hellman(&sender);
 
-		let x_dec_secret = StaticSecret::from(b);
-		let key = age::keys::SecretKey::X25519(x_dec_secret);
+		let unbound_key = aead::UnboundKey::new(&aead::CHACHA20_POLY1305, shared_secret.as_bytes())
+			.map_err(|e| {
+				ErrorKind::SlatepackDecodeError(format!("Unable to build a key, {}", e))
+			})?;
+		let opening_key: aead::LessSafeKey = aead::LessSafeKey::new(unbound_key);
+		let aad = aead::Aad::from(&[]);
 
-		let decryptor = match age::Decryptor::new(&payload[..]).map_err(|e| {
-			ErrorKind::SlatepackDecodeError(format!("Unable to build age decryptor, {}", e))
-		})? {
-			age::Decryptor::Recipients(d) => d,
-			_ => {
-				return Err(ErrorKind::SlatepackDecodeError(
-					"Payload using unexpected decryptor".to_string(),
-				)
-				.into())
-			}
-		};
-		let mut decrypted = vec![];
-		let mut reader = decryptor.decrypt(&[key.into()]).map_err(|e| {
-			ErrorKind::SlatepackDecodeError(format!("Unable to decrypt the payload, {}", e))
-		})?;
-		reader.read_to_end(&mut decrypted)?;
-		Ok(decrypted)
+		let mut encrypted_message = payload;
+
+		let decrypted_data = opening_key
+			.open_in_place(
+				aead::Nonce::assume_unique_for_key(nonce),
+				aad,
+				&mut encrypted_message,
+			)
+			.map_err(|e| ErrorKind::SlatepackDecodeError(format!("Unable to decrypt, {}", e)))?;
+
+		Ok(decrypted_data.to_vec())
 	}
 
 	// Update a transaction form the slate data.

@@ -261,7 +261,7 @@ impl Slate {
 	/// Recieve a slate, upgrade it to the latest version internally
 	pub fn deserialize_upgrade_slatepack(
 		slate_str: &str,
-		dec_key: Option<&DalekSecretKey>,
+		dec_key: &DalekSecretKey,
 	) -> Result<Slatepacker, Error> {
 		let sp = Slatepacker::decrypt_slatepack(slate_str.as_bytes(), dec_key)?;
 		Ok(sp)

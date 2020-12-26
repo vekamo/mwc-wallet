@@ -33,23 +33,19 @@ use crate::libwallet::swap::types::{Action, SwapTransactionsConfirmations};
 use crate::libwallet::swap::{message::Message, swap::Swap, swap::SwapJournalRecord};
 use crate::libwallet::{
 	AcctPathMapping, Error, ErrorKind, InitTxArgs, IssueInvoiceTxArgs, NodeClient,
-	NodeHeightResult, OutputCommitMapping, PaymentProof, Slate, SlatePurpose, SlateVersion,
-	SwapStartArgs, TxLogEntry, VersionedSlate, WalletInfo, WalletInst, WalletLCProvider,
+	NodeHeightResult, OutputCommitMapping, PaymentProof, Slate, SlatePurpose, SwapStartArgs,
+	TxLogEntry, VersionedSlate, WalletInfo, WalletInst, WalletLCProvider,
 };
 use crate::util::logger::LoggingConfig;
 use crate::util::secp::key::SecretKey;
 use crate::util::{from_hex, Mutex, ZeroingString};
-use ed25519_dalek::SecretKey as DalekSecretKey;
 use grin_wallet_util::grin_util::secp::key::PublicKey;
-use grin_wallet_util::OnionV3Address;
-use std::convert::TryFrom;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
-use x25519_dalek::PublicKey as xDalekPublicKey;
 
 /// Main interface into all wallet API functions.
 /// Wallet APIs are split into two seperate blocks of functionality
@@ -716,9 +712,9 @@ where
 			None => {}
 		}
 
-		let mut recipients: Vec<xDalekPublicKey> = vec![];
+		let mut recipient: Option<DalekPublicKey> = None;
 		if let Some(r) = &args.slatepack_recipient {
-			recipients.push(r.slate_pack_public_key()?);
+			recipient = Some(r.tor_public_key()?);
 		}
 
 		let mut slate = {
@@ -749,23 +745,16 @@ where
 							let w = w_lock.lc_provider()?.wallet_inst()?;
 							let keychain = w.keychain(keychain_mask)?;
 							let slatepack_secret =
-								proofaddress::payment_proof_address_secret(&keychain)?;
-							let slatepack_secret = DalekSecretKey::from_bytes(&slatepack_secret.0)
-								.map_err(|e| {
-									ErrorKind::SlatepackEncodeError(format!(
-										"Unable to build secret, {}",
-										e
-									))
-								})?;
+								proofaddress::payment_proof_address_dalek_secret(&keychain, None)?;
 							slatepack_secret
 						};
 
 						slate = comm_adapter
 							.send_tx(
 								&slate,
-								SlatePurpose::SendSend,
+								SlatePurpose::SendInitial,
 								&slatepack_secret,
-								&recipients,
+								recipient,
 							)
 							.map_err(|e| {
 								ErrorKind::ClientCallback(format!(
@@ -2104,40 +2093,15 @@ where
 		Ok(q.split_off(index))
 	}
 
-	/// Retrieve the public proof "addresses" associated with the active account at the
-	/// given derivation path.
-	///
-	/// In this case, an "address" means a Dalek ed25519 public key corresponding to
-	/// a private key derived as follows:
-	///
-	/// e.g. The default parent account is at
-	///
-	/// `m/0/0`
-	///
-	/// With output blinding factors created as
-	///
-	/// `m/0/0/0`
-	/// `m/0/0/1` etc...
-	///
-	/// The corresponding public address derivation path would be at:
-	///
-	/// `m/0/1`
-	///
-	/// With addresses created as:
-	///
-	/// `m/0/1/0`
-	/// `m/0/1/1` etc...
-	///
-	/// Note that these addresses correspond to the public keys used in the addresses
-	/// of TOR hidden services configured by the wallet listener.
+	/// Retrieve the MQS address associated with the wallet. This address can be changed with
+	/// address index. In this case it will affect all wallet public addresses
 	///
 	/// # Arguments
 	///
 	/// * `keychain_mask` - Wallet secret mask to XOR against the stored wallet seed before using, if
-	/// * `derivation_index` - The index along the derivation path to retrieve an address for
 	///
 	/// # Returns
-	/// * Ok with a DalekPublicKey representing the address
+	/// * Ok with a PublicKey that representing the address for MQS
 	/// * or [`libwallet::Error`](../grin_wallet_libwallet/struct.Error.html) if an error is encountered.
 	///
 	/// # Example
@@ -2152,7 +2116,7 @@ where
 	/// // Set up as above
 	/// # let api_owner = Owner::new(wallet.clone(), None, None);
 	///
-	/// let res = api_owner.get_public_proof_address(None);
+	/// let res = api_owner.get_mqs_address(None);
 	///
 	/// if let Ok(_) = res {
 	///   // ...
@@ -2160,19 +2124,16 @@ where
 	///
 	/// ```
 
-	pub fn get_public_proof_address(
-		&self,
-		keychain_mask: Option<&SecretKey>,
-	) -> Result<PublicKey, Error> {
-		owner::get_public_proof_address(self.wallet_inst.clone(), keychain_mask)
+	pub fn get_mqs_address(&self, keychain_mask: Option<&SecretKey>) -> Result<PublicKey, Error> {
+		owner::get_mqs_address(self.wallet_inst.clone(), keychain_mask)
 	}
 
-	/// Helper function to convert an Onion v3 address to a payment proof address (essentially
-	/// exctacting and verifying the public key)
+	/// Retrieve the Tor or wallet public address associated with the wallet. This address can be changed with
+	/// address index. In this case it will affect all wallet public addresses
 	///
 	/// # Arguments
 	///
-	/// * `address_v3` - An V3 Onion address
+	/// * `keychain_mask` - Wallet secret mask to XOR against the stored wallet seed before using, if
 	///
 	/// # Returns
 	/// * Ok(DalekPublicKey) representing the public key associated with the address, if successful
@@ -2191,20 +2152,19 @@ where
 	/// // Set up as above
 	/// # let api_owner = Owner::new(wallet.clone(), None, None);
 	///
-	/// let res = api_owner.proof_address_from_onion_v3(
-	///  "2a6at2obto3uvkpkitqp4wxcg6u36qf534eucbskqciturczzc5suyid"
-	/// );
+	/// let res = api_owner.get_wallet_public_address(None);
 	///
 	/// if let Ok(_) = res {
 	///   // ...
 	/// }
 	///
-	/// let res = api_owner.stop_updater();
 	/// ```
 
-	pub fn proof_address_from_onion_v3(&self, address_v3: &str) -> Result<DalekPublicKey, Error> {
-		let addr = OnionV3Address::try_from(address_v3)?;
-		Ok(addr.to_ed25519()?)
+	pub fn get_wallet_public_address(
+		&self,
+		keychain_mask: Option<&SecretKey>,
+	) -> Result<DalekPublicKey, Error> {
+		owner::get_wallet_public_address(self.wallet_inst.clone(), keychain_mask)
 	}
 
 	/// Returns a single, exportable [PaymentProof](../grin_wallet_libwallet/api_impl/types/struct.PaymentProof.html)
@@ -2520,70 +2480,53 @@ where
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		in_slate: VersionedSlate,
-	) -> Result<(Slate, Option<xDalekPublicKey>), Error> {
-		let (slate_from, sender) = if in_slate.is_encrypted() {
-			let (slate_from, sender) =
-				self.decrypt_slatepack(keychain_mask, in_slate)
-					.map_err(|e| {
-						ErrorKind::SlatepackDecodeError(format!(
-							"Unable to decrypt a slatepack, {}",
-							e
-						))
-					})?;
-			(slate_from, sender)
+	) -> Result<(Slate, Option<SlatePurpose>, Option<DalekPublicKey>), Error> {
+		let (slate_from, content, sender) = if in_slate.is_encrypted() {
+			let (slate_from, content, sender, _receiver) = self
+				.decrypt_slatepack(keychain_mask, in_slate, None)
+				.map_err(|e| {
+					ErrorKind::SlatepackDecodeError(format!("Unable to decrypt a slatepack, {}", e))
+				})?;
+			(slate_from, Some(content), Some(sender))
 		} else {
 			let slate_from = in_slate.into_slate_plain().map_err(|e| e.kind())?;
-			(slate_from, None)
+			(slate_from, None, None)
 		};
-		Ok((slate_from, sender))
+		Ok((slate_from, content, sender))
 	}
 
 	// Utility method, not expected to be called from Owner API directly.
-	fn decrypt_slatepack(
+	pub fn decrypt_slatepack(
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		encrypted_slate: VersionedSlate,
-	) -> Result<(Slate, Option<xDalekPublicKey>), Error> {
+		address_index: Option<u32>,
+	) -> Result<(Slate, SlatePurpose, DalekPublicKey, DalekPublicKey), Error> {
 		let mut w_lock = self.wallet_inst.lock();
 		let w = w_lock.lc_provider()?.wallet_inst()?;
-		foreign::decrypt_slatepack(&mut **w, keychain_mask, encrypted_slate)
+		foreign::decrypt_slate(&mut **w, keychain_mask, encrypted_slate, address_index)
 	}
 
-	// Encrypot slate to send back.
+	// Encrypt slate to send back.
 	pub fn encrypt_slate(
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		slate: &Slate,
 		content: SlatePurpose,
-		slatepack_recipient: Option<xDalekPublicKey>,
+		slatepack_recipient: Option<DalekPublicKey>,
+		address_index: Option<u32>,
 	) -> Result<VersionedSlate, Error> {
-		if slatepack_recipient.is_none() {
-			// Using unencrypted format
-			let version = slate.lowest_version();
-			Ok(
-				VersionedSlate::into_version_plain(slate.clone(), version).map_err(|e| {
-					ErrorKind::SlatepackEncodeError(format!("Unable to build a slate, {}", e))
-				})?,
-			)
-		} else {
-			let slatepack_pk = {
-				let mut w_lock = self.wallet_inst.lock();
-				let w = w_lock.lc_provider()?.wallet_inst()?;
-				let keychain = w.keychain(keychain_mask)?;
-				let slatepack_secret = proofaddress::payment_proof_address_secret(&keychain)?;
-				let tor_pk = proofaddress::secret_2_tor_pub(&slatepack_secret)?;
-				let slatepack_pk = proofaddress::tor_pub_2_slatepack_pub(&tor_pk)?;
-				slatepack_pk
-			};
-
-			Ok(VersionedSlate::into_version(
-				slate,
-				SlateVersion::SP,
-				content,
-				&Some(slatepack_pk),
-				&vec![slatepack_recipient.unwrap()],
-			)?)
-		}
+		let mut w_lock = self.wallet_inst.lock();
+		let w = w_lock.lc_provider()?.wallet_inst()?;
+		foreign::encrypt_slate(
+			&mut **w,
+			keychain_mask,
+			slate,
+			None,
+			content,
+			slatepack_recipient,
+			address_index,
+		)
 	}
 }
 

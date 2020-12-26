@@ -785,8 +785,7 @@ pub fn parse_process_invoice_args(
 	if prompt {
 		// Now we need to prompt the user whether they want to do this,
 		// which requires reading the slate
-		let slate = match PathToSlateGetter::build((&tx_file).into()).get_tx(Some(slatepack_secret))
-		{
+		let slate = match PathToSlateGetter::build((&tx_file).into()).get_tx(slatepack_secret) {
 			Ok(s) => s,
 			Err(e) => return Err(ParseError::ArgumentError(format!("{}", e))),
 		};
@@ -1417,11 +1416,8 @@ where
 				let mut w_lock = owner_api.wallet_inst.lock();
 				let w = w_lock.lc_provider()?.wallet_inst()?;
 				let keychain = w.keychain(km)?;
-				let slatepack_secret = proofaddress::payment_proof_address_secret(&keychain)?;
 				let slatepack_secret =
-					DalekSecretKey::from_bytes(&slatepack_secret.0).map_err(|e| {
-						ErrorKind::GenericError(format!("Unable to build secret, {}", e))
-					})?;
+					proofaddress::payment_proof_address_dalek_secret(&keychain, None)?;
 				slatepack_secret
 			};
 

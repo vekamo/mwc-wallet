@@ -27,9 +27,8 @@ use std::path::MAIN_SEPARATOR;
 use crate::tor::config as tor_config;
 use crate::tor::process as tor_process;
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
-use grin_wallet_libwallet::proof::proofaddress;
+use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::slatepack::SlatePurpose;
-use x25519_dalek::PublicKey as xDalekPublicKey;
 
 const TOR_CONFIG_PATH: &str = "tor/sender";
 
@@ -88,7 +87,7 @@ impl HttpDataSender {
 		&self,
 		url: &str,
 		timeout: Option<u128>,
-	) -> Result<SlateVersion, Error> {
+	) -> Result<(SlateVersion, Option<String>), Error> {
 		let res_str: String;
 		let start_time = std::time::Instant::now();
 		trace!("starting now check version");
@@ -170,6 +169,14 @@ impl HttpDataSender {
 			))
 		})?;
 
+		let slatepack_address: Option<String> =
+			serde_json::from_value(resp_value["slatepack_address"].clone()).map_err(|e| {
+				ErrorKind::GenericError(format!(
+					"Unable to read respond slatepack_address value {}, {}",
+					res_str, e
+				))
+			})?;
+
 		// trivial tests for now, but will be expanded later
 		if foreign_api_version < 2 {
 			let report = "Other wallet reports unrecognized API format.".to_string();
@@ -177,15 +184,14 @@ impl HttpDataSender {
 			return Err(ErrorKind::ClientCallback(report).into());
 		}
 
-		if supported_slate_versions.contains(&"V3B".to_owned()) {
-			return Ok(SlateVersion::V3B);
-		}
-
-		if supported_slate_versions.contains(&"V3".to_owned()) {
-			return Ok(SlateVersion::V3);
-		}
-		if supported_slate_versions.contains(&"V2".to_owned()) {
-			return Ok(SlateVersion::V2);
+		if supported_slate_versions.contains(&"SP".to_owned()) {
+			return Ok((SlateVersion::SP, slatepack_address));
+		} else if supported_slate_versions.contains(&"V3B".to_owned()) {
+			return Ok((SlateVersion::V3B, slatepack_address));
+		} else if supported_slate_versions.contains(&"V3".to_owned()) {
+			return Ok((SlateVersion::V3, slatepack_address));
+		} else if supported_slate_versions.contains(&"V2".to_owned()) {
+			return Ok((SlateVersion::V2, slatepack_address));
 		}
 
 		let report = "Unable to negotiate slate format with other wallet.".to_string();
@@ -387,28 +393,43 @@ impl SlateSender for HttpDataSender {
 		slate: &Slate,
 		slate_content: SlatePurpose,
 		slatepack_secret: &DalekSecretKey,
-		recipients: &Vec<xDalekPublicKey>,
+		recipient: Option<DalekPublicKey>,
 	) -> Result<Slate, Error> {
 		// we need to keep _tor in scope so that the process is not killed by drop.
 		let (url_str, _tor) = self.set_up_tor_send_process()?;
 
-		let slate_send = match self.check_other_version(&url_str, None)? {
+		let (mut slate_version, slatepack_address) = self.check_other_version(&url_str, None)?;
+
+		// Slate can't be slatepack if it is not a compact. Let's handle that here.
+		if slate_version == SlateVersion::SP && !slate.compact_slate {
+			slate_version = SlateVersion::V3B;
+		}
+
+		let slate_send = match slate_version {
 			SlateVersion::SP => {
-				if recipients.is_empty() {
+				let mut recipient = recipient;
+				if recipient.is_none() {
+					if let Some(slatepack_address) = slatepack_address {
+						recipient =
+							Some(ProvableAddress::from_str(&slatepack_address)?.tor_public_key()?);
+					}
+				}
+
+				if recipient.is_none() {
 					return Err(ErrorKind::GenericError(
 						"Not provided expected recipient address for Slate Pack".to_string(),
 					)
 					.into());
 				}
 				let tor_pk = DalekPublicKey::from(slatepack_secret);
-				let slatepack_pk = proofaddress::tor_pub_2_slatepack_pub(&tor_pk)?;
 
 				VersionedSlate::into_version(
-					&slate,
+					slate.clone(),
 					SlateVersion::SP,
 					slate_content,
-					&Some(slatepack_pk),
-					recipients,
+					tor_pk,
+					recipient,
+					slatepack_secret,
 				)?
 			}
 			SlateVersion::V3B => {
@@ -532,7 +553,7 @@ impl SlateSender for HttpDataSender {
 				))
 			})?
 		} else {
-			let sp = Slate::deserialize_upgrade_slatepack(&slate_str, Some(slatepack_secret))?;
+			let sp = Slate::deserialize_upgrade_slatepack(&slate_str, &slatepack_secret)?;
 			sp.to_result_slate()
 		};
 

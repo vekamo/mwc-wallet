@@ -529,7 +529,7 @@ where
 		let excess = slate.calc_excess(Some(&keychain))?;
 		//sender address.
 		let sender_address_secret_key =
-			proofaddress::payment_proof_address_secret_from_index(&keychain, derivation_index)?;
+			proofaddress::payment_proof_address_secret(&keychain, Some(derivation_index))?;
 		// MQS because normal public key is needed
 		let sender_a = proofaddress::payment_proof_address_from_index(
 			&keychain,
@@ -821,7 +821,7 @@ where
 		////add an extra step of generating and save proof.
 		//generate the sender secret key
 		let sender_address_secret_key =
-			proofaddress::payment_proof_address_secret_from_index(&keychain, index)?;
+			proofaddress::payment_proof_address_secret(&keychain, Some(index))?;
 		let mut onion_address_str = None;
 		if p.receiver_address.public_key.len() == 56 {
 			//this should be a tor sending

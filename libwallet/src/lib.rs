@@ -50,6 +50,8 @@ extern crate grin_api;
 extern crate hex;
 extern crate signature;
 
+extern crate crc;
+
 pub mod address;
 pub mod api_impl;
 /// Ring prev version internals that are needed for our internal encription functionality

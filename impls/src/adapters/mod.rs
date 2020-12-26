@@ -26,7 +26,7 @@ use crate::libwallet::swap::message::Message;
 use crate::libwallet::Slate;
 use crate::tor::config::complete_tor_address;
 use crate::util::ZeroingString;
-use ed25519_dalek::SecretKey as DalekSecretKey;
+use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
 use grin_wallet_libwallet::slatepack::SlatePurpose;
 use grin_wallet_libwallet::Slatepacker;
 pub use mwcmq::{
@@ -36,7 +36,6 @@ pub use types::{
 	Address, AddressType, CloseReason, HttpsAddress, MWCMQSAddress, Publisher, Subscriber,
 	SubscriptionHandler,
 };
-use x25519_dalek::PublicKey as xDalekPublicKey;
 
 /// Sends transactions to a corresponding SlateReceiver
 pub trait SlateSender {
@@ -47,7 +46,7 @@ pub trait SlateSender {
 		slate: &Slate,
 		slate_content: SlatePurpose,
 		slatepack_secret: &DalekSecretKey,
-		recipients: &Vec<xDalekPublicKey>,
+		recipient: Option<DalekPublicKey>,
 	) -> Result<Slate, Error>;
 }
 
@@ -67,7 +66,7 @@ pub trait SlateReceiver {
 /// Posts slates to be read later by a corresponding getter
 pub trait SlatePutter {
 	/// Send a transaction asynchronously
-	fn put_tx(&self, slate: &Slate) -> Result<(), Error>;
+	fn put_tx(&self, slate: &Slate, slatepack_secret: &DalekSecretKey) -> Result<(), Error>;
 }
 
 /// SlateGetter, get_tx response
@@ -81,10 +80,7 @@ pub enum SlateGetData {
 /// Checks for a transaction from a corresponding SlatePutter, returns the transaction if it exists
 pub trait SlateGetter {
 	/// Receive a transaction async. (Actually just read it from wherever and return the slate)
-	fn get_tx(
-		&self,
-		slatepack_deserialize_key: Option<&DalekSecretKey>,
-	) -> Result<SlateGetData, Error>;
+	fn get_tx(&self, slatepack_secret: &DalekSecretKey) -> Result<SlateGetData, Error>;
 }
 
 /// Swap Message Sender
@@ -103,12 +99,16 @@ impl SlateGetData {
 	}
 
 	/// Convert to the slate
-	pub fn to_slate(self) -> Result<(Slate, Option<xDalekPublicKey>), Error> {
+	/// Return: Slate, sender and recipient
+	pub fn to_slate(
+		self,
+	) -> Result<(Slate, Option<DalekPublicKey>, Option<DalekPublicKey>), Error> {
 		let res = match self {
-			SlateGetData::PlainSlate(slate) => (slate, None),
+			SlateGetData::PlainSlate(slate) => (slate, None, None),
 			SlateGetData::Slatepack(slatepacker) => {
 				let sender = slatepacker.get_sender();
-				(slatepacker.to_result_slate(), sender)
+				let recipient = slatepacker.get_recipient();
+				(slatepacker.to_result_slate(), sender, recipient)
 			}
 		};
 		Ok(res)

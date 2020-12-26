@@ -25,10 +25,11 @@ use grin_core::global;
 use grin_wallet_util::grin_keychain::Keychain;
 use grin_wallet_util::OnionV3Address;
 use serde::{Deserialize, Deserializer, Serializer};
+use sha2::{Digest, Sha512};
 use std::convert::TryFrom;
 use std::fmt::{self, Display};
 use std::sync::atomic::{AtomicU32, Ordering};
-use x25519_dalek::PublicKey as xDalekPublicKey;
+use x25519_dalek::{PublicKey as xDalekPublicKey, StaticSecret as xDalekSecretKey};
 
 /// Address prefixes for mainnet
 pub const PROOFABLE_ADDRESS_VERSION_MAINNET: [u8; 2] = [1, 69];
@@ -54,10 +55,13 @@ pub fn get_address_index() -> u32 {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProvableAddress {
 	/// Public key that is an address
+	#[serde(rename = "address")]
 	pub public_key: String,
 	/// Place holder for mwc713 backcompability. Value is empty string
-	pub domain: String,
-	/// /// Place holder for mwc713 backcompability. Value is None
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub domain: Option<String>,
+	/// Place holder for mwc713 backcompability. Value is None
+	#[serde(skip_serializing_if = "Option::is_none")]
 	pub port: Option<u16>,
 }
 
@@ -72,7 +76,7 @@ impl ProvableAddress {
 	pub fn blank() -> Self {
 		Self {
 			public_key: String::new(),
-			domain: String::new(),
+			domain: None,
 			port: None,
 		}
 	}
@@ -87,7 +91,7 @@ impl ProvableAddress {
 
 		Ok(Self {
 			public_key: String::from(public_key),
-			domain: String::new(),
+			domain: None,
 			port: None,
 		})
 	}
@@ -96,7 +100,7 @@ impl ProvableAddress {
 	pub fn from_pub_key(public_key: &PublicKey) -> Self {
 		Self {
 			public_key: public_key.to_base58_check(version_bytes()),
-			domain: String::new(),
+			domain: None,
 			port: None,
 		}
 	}
@@ -109,7 +113,7 @@ impl ProvableAddress {
 	pub fn from_tor_pub_key(public_key: &DalekPublicKey) -> Self {
 		Self {
 			public_key: OnionV3Address::from_bytes(*public_key.as_bytes()).to_ov3_str(),
-			domain: String::new(),
+			domain: None,
 			port: None,
 		}
 	}
@@ -118,14 +122,6 @@ impl ProvableAddress {
 	pub fn tor_public_key(&self) -> Result<DalekPublicKey, Error> {
 		let addr = OnionV3Address::try_from(self.public_key.as_str())?;
 		Ok(addr.to_ed25519()?)
-	}
-
-	/// For Slates we have different algoripthm but the same curve as tor has. So the
-	/// Public Key can be converted
-	pub fn slate_pack_public_key(&self) -> Result<xDalekPublicKey, Error> {
-		let dalek_pub_key = self.tor_public_key()?;
-		let slatepack_pub_key = tor_pub_2_slatepack_pub(&dalek_pub_key)?;
-		Ok(slatepack_pub_key)
 	}
 }
 
@@ -194,7 +190,7 @@ pub fn payment_proof_address_from_index<K>(
 where
 	K: Keychain,
 {
-	let secret_key = payment_proof_address_secret_from_index(keychain, index)?;
+	let secret_key = payment_proof_address_secret(keychain, Some(index))?;
 
 	match addr_type {
 		ProofAddressType::MQS => {
@@ -209,23 +205,31 @@ where
 	}
 }
 
-/// Derive a secret key given a derivation path and index
-pub fn payment_proof_address_secret<K>(keychain: &K) -> Result<SecretKey, Error>
-where
-	K: Keychain,
-{
-	payment_proof_address_secret_from_index(keychain, get_address_index())
-}
-
-/// Derive a secret key given a derivation path and index
-pub fn payment_proof_address_secret_from_index<K>(
+/// Current secret that is used for public wallet address
+pub fn payment_proof_address_secret<K>(
 	keychain: &K,
-	index: u32,
+	address_index: Option<u32>,
 ) -> Result<SecretKey, Error>
 where
 	K: Keychain,
 {
+	let index = address_index.unwrap_or(get_address_index());
 	hasher::derive_address_key(keychain, index).map_err(|e| e.into())
+}
+
+/// Current secret that is used for public wallet address, DalekSecret type
+pub fn payment_proof_address_dalek_secret<K>(
+	keychain: &K,
+	address_index: Option<u32>,
+) -> Result<DalekSecretKey, Error>
+where
+	K: Keychain,
+{
+	let sk = payment_proof_address_secret(keychain, address_index)?;
+	let dalek_sk = DalekSecretKey::from_bytes(&sk.0).map_err(|e| {
+		ErrorKind::SlatepackDecodeError(format!("Unable to convert key to decrypt, {}", e))
+	})?;
+	Ok(dalek_sk)
 }
 
 /// Get a payment address as secp Public Key (for MQS)
@@ -233,19 +237,8 @@ pub fn payment_proof_address_pubkey<K>(keychain: &K) -> Result<PublicKey, Error>
 where
 	K: Keychain,
 {
-	let sender_address_secret_key = payment_proof_address_secret(keychain)?;
+	let sender_address_secret_key = payment_proof_address_secret(keychain, None)?;
 	crypto::public_key_from_secret_key(&sender_address_secret_key)
-}
-
-/// Get a payment address as dalec (tor) public key
-pub fn payment_proof_address_slate_pack_pubkey<K>(keychain: &K) -> Result<xDalekPublicKey, Error>
-where
-	K: Keychain,
-{
-	let secret = payment_proof_address_secret(keychain)?;
-	let tor_pk = secret_2_tor_pub(&secret)?;
-	let slatepack_pk = tor_pub_2_slatepack_pub(&tor_pk)?;
-	Ok(slatepack_pk)
 }
 
 /// Build Tor public Key from the secret
@@ -256,7 +249,20 @@ pub fn secret_2_tor_pub(secret: &SecretKey) -> Result<DalekPublicKey, Error> {
 	Ok(d_pub_key)
 }
 
+/// Conver the Secret to match what tor_pub_2_slatepack_pub calculate
+/// Here id explanation https://blog.filippo.io/using-ed25519-keys-for-encryption/
+pub fn tor_secret_2_slatepack_secret(secret: &DalekSecretKey) -> xDalekSecretKey {
+	let mut b = [0u8; 32];
+	b.copy_from_slice(&secret.as_bytes()[0..32]);
+	let mut hasher = Sha512::new();
+	hasher.input(&b);
+	let result = hasher.result();
+	b.copy_from_slice(&result[0..32]);
+	xDalekSecretKey::from(b)
+}
+
 /// Build slatepack public key from tor public key
+/// https://blog.filippo.io/using-ed25519-keys-for-encryption/
 pub fn tor_pub_2_slatepack_pub(tor_pub_key: &DalekPublicKey) -> Result<xDalekPublicKey, Error> {
 	let cep = curve25519_dalek::edwards::CompressedEdwardsY::from_slice(tor_pub_key.as_bytes());
 	let ep = match cep.decompress() {

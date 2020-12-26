@@ -21,7 +21,7 @@ use crate::util::Mutex;
 
 use crate::SlateSender;
 use crate::SwapMessageSender;
-use ed25519_dalek::SecretKey as DalekSecretKey;
+use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
 use grin_core::core::amount_to_hr_string;
 use grin_util::RwLock;
 use grin_wallet_libwallet::proof::message::EncryptedMessage;
@@ -40,7 +40,6 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::time::Duration;
 use std::{thread, time};
-use x25519_dalek::PublicKey as xDalekPublicKey;
 
 extern crate nanoid;
 
@@ -145,7 +144,7 @@ impl SlateSender for MwcMqsChannel {
 		slate: &Slate,
 		_slate_content: SlatePurpose,
 		_slatepack_secret: &DalekSecretKey,
-		_recipients: &Vec<xDalekPublicKey>,
+		_recipients: Option<DalekPublicKey>,
 	) -> Result<Slate, Error> {
 		if let Some((mwcmqs_publisher, mwcmqs_subscriber)) = get_mwcmqs_brocker() {
 			// Creating channels for notification

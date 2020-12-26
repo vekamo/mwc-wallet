@@ -22,16 +22,16 @@ use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::slate_versions::v3::TransactionV3;
 use crate::libwallet::{
 	AcctPathMapping, ErrorKind, InitTxArgs, IssueInvoiceTxArgs, NodeClient, NodeHeightResult,
-	OutputCommitMapping, PaymentProof, Slate, StatusMessage, TxLogEntry, VersionedSlate,
-	WalletInfo, WalletLCProvider,
+	OutputCommitMapping, PaymentProof, Slate, SlatePurpose, StatusMessage, TxLogEntry,
+	VersionedSlate, WalletInfo, WalletLCProvider,
 };
-use crate::types::TxLogEntryAPI;
+use crate::types::{SlatepackInfo, TxLogEntryAPI};
 use crate::util;
 use crate::util::logger::LoggingConfig;
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::pedersen;
 use crate::util::{static_secp_instance, ZeroingString};
-use crate::{ECDHPubkey, Owner, PubAddress, Token};
+use crate::{ECDHPubkey, Owner, Token};
 use easy_jsonrpc_mw;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use rand::thread_rng;
@@ -1971,13 +1971,13 @@ pub trait OwnerRpcV3 {
 	fn get_updater_messages(&self, count: u32) -> Result<Vec<StatusMessage>, ErrorKind>;
 
 	/**
-	Networked version of [Owner::get_public_proof_address](struct.Owner.html#method.get_public_proof_address).
+	Networked version of [Owner::get_mqs_address](struct.Owner.html#method.get_mqs_address).
 	```
 	# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
 	# r#"
 	{
 		"jsonrpc": "2.0",
-		"method": "get_public_proof_address",
+		"method": "get_mqs_address",
 		"params": {
 			"token": "d202964900000000d302964900000000d402964900000000d502964900000000"
 		},
@@ -2002,18 +2002,18 @@ pub trait OwnerRpcV3 {
 	```
 	*/
 
-	fn get_public_proof_address(&self, token: Token) -> Result<ProvableAddress, ErrorKind>;
+	fn get_mqs_address(&self, token: Token) -> Result<ProvableAddress, ErrorKind>;
 
 	/**
-	Networked version of [Owner::proof_address_from_onion_v3](struct.Owner.html#method.proof_address_from_onion_v3).
+	Networked version of [Owner::get_wallet_public_address](struct.Owner.html#method.get_wallet_public_address).
 	```
 	# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
 	# r#"
 	{
 		"jsonrpc": "2.0",
-		"method": "proof_address_from_onion_v3",
+		"method": "get_wallet_public_address",
 		"params": {
-			"address_v3": "2a6at2obto3uvkpkitqp4wxcg6u36qf534eucbskqciturczzc5suyid"
+			"token": "d202964900000000d302964900000000d402964900000000d502964900000000"
 		},
 		"id": 1
 	}
@@ -2032,7 +2032,7 @@ pub trait OwnerRpcV3 {
 	```
 	*/
 
-	fn proof_address_from_onion_v3(&self, address_v3: String) -> Result<PubAddress, ErrorKind>;
+	fn get_wallet_public_address(&self, token: Token) -> Result<ProvableAddress, ErrorKind>;
 
 	/**
 	Networked version of [Owner::retrieve_payment_proof](struct.Owner.html#method.retrieve_payment_proof).
@@ -2176,6 +2176,112 @@ pub trait OwnerRpcV3 {
 	```
 	*/
 	fn set_tor_config(&self, tor_config: Option<TorConfig>) -> Result<(), ErrorKind>;
+
+	/**
+	Networked version of [Owner::encode_slatepack_message](struct.Owner.html#method.encode_slatepack_message).
+	```
+	# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
+	# r#"
+	{
+		"jsonrpc": "2.0",
+		"method": "create_slatepack_message",
+		"params": {
+			"token": "d202964900000000d302964900000000d402964900000000d502964900000000",
+			"recipient": [],
+			"slate": {
+				"ver": "4:2",
+				"id": "0436430c-2b02-624c-2032-570501212b00",
+				"sta": "S1",
+				"off": "d202964900000000d302964900000000d402964900000000d502964900000000",
+				"amt": "60000000000",
+				"fee": "7000000",
+				"sigs": [
+					{
+						"xs": "030152d2d72e2dba7c6086ad49a219d9ff0dfe0fd993dcaea22e058c210033ce93",
+						"nonce": "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f"
+					}
+				]
+			}
+		},
+		"id": 1
+	}
+	# "#
+	# ,
+	# r#"
+	{
+		"id": 1,
+		"jsonrpc": "2.0",
+		"result": {
+			"Ok": "BEGINSLATEPACK. xyfzdULuUuM5r3R kS68aywyCuYssPs Jf1JbvnBcK6NDDo ajiGAgh2SPx4t49 xtKuJE3BZCcSEue ksecMmbSoV2DQbX gGcmJniP9UadcmR N1KSc5FBhwAaUjy LXeYDP7EV7Cmsj4 pLaJdZTJTQbccUH 2zG8QTgoEiEWP5V T6rKst1TibmDAFm RRVHYDtskdYJb5G krqfpgN7RjvPfpm Z5ZFyz6ipAt5q9T 2HCjrTxkHdVi9js 22tr2Lx6iXT5vm8 JL6HhjwyFrSaEmN AjsBE8jgiaAABA6 GGZKwcXeXToMfRt nL9DeX1. ENDSLATEPACK."
+		}
+	}
+	# "#
+	# , 0, false, false, false, false);
+	```
+	*/
+
+	fn encode_slatepack_message(
+		&self,
+		token: Token,
+		slate: VersionedSlate,
+		content: SlatePurpose,
+		recipient: ProvableAddress,
+		address_index: Option<u32>,
+	) -> Result<String, ErrorKind>;
+
+	/**
+	Networked version of [Owner::decode_slatepack_message](struct.Owner.html#method.decode_slatepack_message).
+	```
+	# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
+	# r#"
+	{
+		"jsonrpc": "2.0",
+		"method": "decode_slatepack_message",
+		"params": {
+			"token": "d202964900000000d302964900000000d402964900000000d502964900000000",
+			"secret_indices": [0],
+			"message": "BEGINSLATEPACK. 8GQrdcwdLKJD28F 3a9siP7ZhZgAh7w BR2EiZHza5WMWmZ Cc8zBUemrrYRjhq j3VBwA8vYnvXXKU BDmQBN2yKgmR8mX UzvXHezfznA61d7 qFZYChhz94vd8Ew NEPLz7jmcVN2C3w wrfHbeiLubYozP2 uhLouFiYRrbe3fQ 4uhWGfT3sQYXScT dAeo29EaZJpfauh j8VL5jsxST2SPHq nzXFC2w9yYVjt7D ju7GSgHEp5aHz9R xstGbHjbsb4JQod kYLuELta1ohUwDD pvjhyJmsbLcsPei k5AQhZsJ8RJGBtY bou6cU7tZeFJvor 4LB9CBfFB3pmVWD vSLd5RPS75dcnHP nbXD8mSDZ8hJS2Q A9wgvppWzuWztJ2 dLUU8f9tLJgsRBw YZAs71HiVeg7. ENDSLATEPACK."
+		},
+		"id": 1
+	}
+	# "#
+	# ,
+	# r#"
+	{
+		"id": 1,
+		"jsonrpc": "2.0",
+		"result": {
+			"Ok": {
+				"amt": "6000000000",
+				"fee": "8000000",
+				"id": "0436430c-2b02-624c-2032-570501212b00",
+				"off": "d202964900000000d302964900000000d402964900000000d502964900000000",
+				"proof": {
+					"raddr": "783f6528669742a990e0faf0a5fca5d5b3330e37bbb9cd5c628696d03ce4e810",
+					"saddr": "32cdd63928854f8b2628b1dce4626ddcdf35d56cb7cfdf7d64cca5822b78d4d3"
+				},
+				"sigs": [
+					{
+						"nonce": "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f",
+						"xs": "023878ce845727f3a4ec76ca3f3db4b38a2d05d636b8c3632108b857fed63c96de"
+					}
+				],
+				"sta": "S1",
+				"ver": "4:2"
+			}
+		}
+	}
+	# "#
+	# , 0, false, false, false, false);
+	```
+	*/
+
+	fn decode_slatepack_message(
+		&self,
+		token: Token,
+		message: String,
+		address_index: Option<u32>,
+	) -> Result<SlatepackInfo, ErrorKind>;
 }
 
 impl<L, C, K> OwnerRpcV3 for Owner<L, C, K>
@@ -2281,9 +2387,18 @@ where
 		in_slate: VersionedSlate,
 		args: InitTxArgs,
 	) -> Result<VersionedSlate, ErrorKind> {
-		let (slate_from, _sender) =
+		let (slate_from, content, _sender) =
 			Owner::decrypt_versioned_slate(self, (&token.keychain_mask).as_ref(), in_slate)
 				.map_err(|e| ErrorKind::SlatepackDecodeError(format!("{}", e)))?;
+
+		if let Some(content) = &content {
+			if *content != SlatePurpose::InvoiceInitial {
+				return Err(ErrorKind::SlatepackDecodeError(format!(
+					"Expecting InvoiceInitial slate content, get {:?}",
+					content
+				)));
+			}
+		}
 
 		let out_slate =
 			Owner::process_invoice_tx(self, (&token.keychain_mask).as_ref(), &slate_from, &args)
@@ -2298,7 +2413,7 @@ where
 		token: Token,
 		in_slate: VersionedSlate,
 	) -> Result<VersionedSlate, ErrorKind> {
-		let (slate_from, _sender) =
+		let (slate_from, _content, _sender) =
 			Owner::decrypt_versioned_slate(self, (&token.keychain_mask).as_ref(), in_slate)
 				.map_err(|e| ErrorKind::SlatepackDecodeError(format!("{}", e)))?;
 
@@ -2315,7 +2430,7 @@ where
 		in_slate: VersionedSlate,
 		participant_id: usize,
 	) -> Result<(), ErrorKind> {
-		let (slate_from, _sender) =
+		let (slate_from, _content, _sender) =
 			Owner::decrypt_versioned_slate(self, (&token.keychain_mask).as_ref(), in_slate)
 				.map_err(|e| ErrorKind::SlatepackDecodeError(format!("{}", e)))?;
 
@@ -2570,12 +2685,20 @@ where
 		Owner::get_updater_messages(self, count as usize).map_err(|e| e.kind())
 	}
 
-	fn get_public_proof_address(&self, token: Token) -> Result<ProvableAddress, ErrorKind> {
-		let address = Owner::get_public_proof_address(self, (&token.keychain_mask).as_ref())
-			.map_err(|e| e.kind())?;
+	fn get_mqs_address(&self, token: Token) -> Result<ProvableAddress, ErrorKind> {
+		let address =
+			Owner::get_mqs_address(self, (&token.keychain_mask).as_ref()).map_err(|e| e.kind())?;
 		let public_proof_address = ProvableAddress::from_pub_key(&address);
-		println!("public_proof address {}", public_proof_address.public_key);
+		println!("mqs_address address {}", public_proof_address.public_key);
 		Ok(public_proof_address)
+	}
+
+	fn get_wallet_public_address(&self, token: Token) -> Result<ProvableAddress, ErrorKind> {
+		let address = Owner::get_wallet_public_address(self, (&token.keychain_mask).as_ref())
+			.map_err(|e| e.kind())?;
+		let address = ProvableAddress::from_tor_pub_key(&address);
+		println!("wallet_public_address address {}", address.public_key);
+		Ok(address)
 	}
 
 	fn retrieve_payment_proof(
@@ -2604,14 +2727,72 @@ where
 			.map_err(|e| e.kind())
 	}
 
-	fn proof_address_from_onion_v3(&self, address_v3: String) -> Result<PubAddress, ErrorKind> {
-		let address =
-			Owner::proof_address_from_onion_v3(self, &address_v3).map_err(|e| e.kind())?;
-		Ok(PubAddress { address })
-	}
-
 	fn set_tor_config(&self, tor_config: Option<TorConfig>) -> Result<(), ErrorKind> {
 		Owner::set_tor_config(self, tor_config);
 		Ok(())
+	}
+
+	fn encode_slatepack_message(
+		&self,
+		token: Token,
+		slate: VersionedSlate,
+		content: SlatePurpose,
+		recipient: ProvableAddress,
+		address_index: Option<u32>,
+	) -> Result<String, ErrorKind> {
+		// Expected Slate in Json (plain) format
+		let slate = slate.into_slate_plain().map_err(|e| {
+			ErrorKind::SlatepackDecodeError(format!("Expected to get slate in Json format, {}", e))
+		})?;
+
+		let recipient = recipient.tor_public_key().map_err(|e| {
+			ErrorKind::SlatepackEncodeError(format!("Expecting recipient tor address, {}", e))
+		})?;
+
+		let vslate = Owner::encrypt_slate(
+			&self,
+			(&token.keychain_mask).as_ref(),
+			&slate,
+			content,
+			Some(recipient),
+			address_index,
+		)
+		.map_err(|e| e.kind())?;
+
+		if let VersionedSlate::SP(message) = vslate {
+			return Ok(message);
+		} else {
+			return Err(ErrorKind::SlatepackEncodeError(
+				"Unable to encode the slate, internal error".to_string(),
+			));
+		}
+	}
+
+	fn decode_slatepack_message(
+		&self,
+		token: Token,
+		message: String,
+		address_index: Option<u32>,
+	) -> Result<SlatepackInfo, ErrorKind> {
+		let (slate, content, sender, recipient) = Owner::decrypt_slatepack(
+			&self,
+			(&token.keychain_mask).as_ref(),
+			VersionedSlate::SP(message),
+			address_index,
+		)
+		.map_err(|e| e.kind())?;
+
+		let slate_version = slate.lowest_version();
+
+		let vslate = VersionedSlate::into_version_plain(slate, slate_version).map_err(|e| {
+			ErrorKind::SlatepackDecodeError(format!("Unable to convert slate, {}", e))
+		})?;
+
+		Ok(SlatepackInfo {
+			slate: vslate,
+			sender: ProvableAddress::from_tor_pub_key(&sender),
+			recipient: ProvableAddress::from_tor_pub_key(&recipient),
+			content,
+		})
 	}
 }

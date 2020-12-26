@@ -25,16 +25,15 @@ use crate::proof::proofaddress::ProofAddressType;
 use crate::proof::proofaddress::ProvableAddress;
 use crate::slate_versions::SlateVersion;
 use crate::{
-	BlockFees, CbData, Error, ErrorKind, NodeClient, Slate, TxLogEntryType, VersionInfo,
-	VersionedSlate, WalletBackend, WalletInst, WalletLCProvider,
+	BlockFees, CbData, Error, ErrorKind, NodeClient, Slate, SlatePurpose, TxLogEntryType,
+	VersionInfo, VersionedSlate, WalletBackend, WalletInst, WalletLCProvider,
 };
-use ed25519_dalek::SecretKey as DalekSecretKey;
+use ed25519_dalek::PublicKey as DalekPublicKey;
 use grin_core::core::amount_to_hr_string;
 use grin_wallet_util::OnionV3Address;
 use std::sync::Arc;
 use std::sync::RwLock;
 use strum::IntoEnumIterator;
-use x25519_dalek::PublicKey as xDalekPublicKey;
 
 const FOREIGN_API_VERSION: u16 = 2;
 const USER_MESSAGE_MAX_LEN: usize = 256;
@@ -76,11 +75,22 @@ pub fn set_receive_account(account: String) {
 }
 
 /// Return the version info
-pub fn check_version() -> VersionInfo {
-	VersionInfo {
+pub fn check_version<'a, T: ?Sized, C, K>(
+	w: &mut T,
+	keychain_mask: Option<&SecretKey>,
+) -> Result<VersionInfo, Error>
+where
+	T: WalletBackend<'a, C, K>,
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
+{
+	// Proof address will be the onion address (Dalec Paublic Key). It is exactly what we need
+	let address = get_proof_address(w, keychain_mask)?;
+	Ok(VersionInfo {
 		foreign_api_version: FOREIGN_API_VERSION,
 		supported_slate_versions: SlateVersion::iter().collect(),
-	}
+		slatepack_address: Some(address),
+	})
 }
 
 /// Build a coinbase transaction
@@ -243,7 +253,7 @@ where
 			.eq(&p.receiver_address.public_key)
 		{
 			debug!("file proof, replace the receiver address with its address");
-			let sec_key = proofaddress::payment_proof_address_secret(&keychain)?;
+			let sec_key = proofaddress::payment_proof_address_secret(&keychain, None)?;
 			let onion_address = OnionV3Address::from_private(&sec_key.0)?;
 			let dalek_pubkey = onion_address.to_ov3_str();
 			p.receiver_address = ProvableAddress::from_str(&dalek_pubkey)?;
@@ -253,7 +263,7 @@ where
 			&excess,
 			p.sender_address.clone(),
 			p.receiver_address.clone(),
-			proofaddress::payment_proof_address_secret(&keychain)?,
+			proofaddress::payment_proof_address_secret(&keychain, None)?,
 		)?;
 
 		p.receiver_signature = Some(sig);
@@ -324,12 +334,13 @@ where
 }
 
 /// Utility method to decrypt the slate pack for receive operation.
-/// Returns: slate, sender PK
-pub fn decrypt_slatepack<'a, T: ?Sized, C, K>(
+/// Returns: slate, content, sender PK, recipient Pk
+pub fn decrypt_slate<'a, T: ?Sized, C, K>(
 	w: &mut T,
 	keychain_mask: Option<&SecretKey>,
 	encrypted_slate: VersionedSlate,
-) -> Result<(Slate, Option<xDalekPublicKey>), Error>
+	address_index: Option<u32>,
+) -> Result<(Slate, SlatePurpose, DalekPublicKey, DalekPublicKey), Error>
 where
 	T: WalletBackend<'a, C, K>,
 	C: NodeClient + 'a,
@@ -337,15 +348,61 @@ where
 {
 	let keychain = w.keychain(keychain_mask)?;
 
-	let sec_key = proofaddress::payment_proof_address_secret(&keychain).map_err(|e| {
-		ErrorKind::SlatepackDecodeError(format!("Unable to build key to decrypt, {}", e))
-	})?;
-
-	let sec_key = DalekSecretKey::from_bytes(&sec_key.0).map_err(|e| {
-		ErrorKind::SlatepackDecodeError(format!("Unable to convert key to decrypt, {}", e))
-	})?;
-	let sp = encrypted_slate.into_slatepack(Some(&sec_key))?;
-	let sender = sp.get_sender();
+	let sec_key = proofaddress::payment_proof_address_dalek_secret(&keychain, address_index)
+		.map_err(|e| {
+			ErrorKind::SlatepackDecodeError(format!("Unable to build key to decrypt, {}", e))
+		})?;
+	let sp = encrypted_slate.into_slatepack(&sec_key)?;
+	let sender = sp.get_sender().ok_or(ErrorKind::SlatepackDecodeError(
+		"Not found sender".to_string(),
+	))?;
+	let recipient = sp.get_recipient().ok_or(ErrorKind::SlatepackDecodeError(
+		"Not found recipient".to_string(),
+	))?;
+	let content = sp.get_content();
 	let slate = sp.to_result_slate();
-	Ok((slate, sender))
+	Ok((slate, content, sender, recipient))
+}
+
+/// Utility method to conver Slate into the Versioned Slate.
+pub fn encrypt_slate<'a, T: ?Sized, C, K>(
+	w: &mut T,
+	keychain_mask: Option<&SecretKey>,
+	slate: &Slate,
+	version: Option<SlateVersion>,
+	content: SlatePurpose,
+	slatepack_recipient: Option<DalekPublicKey>,
+	address_index: Option<u32>,
+) -> Result<VersionedSlate, Error>
+where
+	T: WalletBackend<'a, C, K>,
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
+{
+	if slatepack_recipient.is_none() {
+		// Using unencrypted format
+		let version = version.unwrap_or(slate.lowest_version());
+		Ok(
+			VersionedSlate::into_version_plain(slate.clone(), version).map_err(|e| {
+				ErrorKind::SlatepackEncodeError(format!("Unable to build a slate, {}", e))
+			})?,
+		)
+	} else {
+		let (slatepack_secret, slatepack_pk) = {
+			let keychain = w.keychain(keychain_mask)?;
+			let slatepack_secret =
+				proofaddress::payment_proof_address_dalek_secret(&keychain, address_index)?;
+			let slatepack_pk = DalekPublicKey::from(&slatepack_secret);
+			(slatepack_secret, slatepack_pk)
+		};
+
+		Ok(VersionedSlate::into_version(
+			slate.clone(),
+			version.unwrap_or(SlateVersion::SP),
+			content,
+			slatepack_pk,
+			slatepack_recipient,
+			&slatepack_secret,
+		)?)
+	}
 }

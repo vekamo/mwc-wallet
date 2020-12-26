@@ -15,14 +15,18 @@ use crate::core::libtx::secp_ser;
 use crate::keychain::Identifier;
 use crate::libwallet::dalek_ser;
 use crate::libwallet::{Error, ErrorKind};
-use crate::libwallet::{ParticipantMessages, StoredProofInfo, TxLogEntry, TxLogEntryType};
+use crate::libwallet::{
+	ParticipantMessages, StoredProofInfo, TxLogEntry, TxLogEntryType, VersionedSlate,
+};
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::pedersen;
 use crate::util::{from_hex, to_hex};
+use grin_wallet_libwallet::slatepack::SlatePurpose;
 
 use base64;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::PublicKey as DalekPublicKey;
+use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use rand::{thread_rng, Rng};
 use ring::aead;
 use serde_json::{self, Value};
@@ -440,6 +444,20 @@ impl TxLogEntryAPI {
 	fn default_creation_ts() -> DateTime<Utc> {
 		Utc::now()
 	}
+}
+
+/// Information about slatepack
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SlatepackInfo {
+	/// Slate V3 or V2
+	pub slate: VersionedSlate,
+	/// Sender address. No receiver address. Wallet can try to decode it to check if receiver this wallet
+	/// Sender address is needed to respond back, or for encoding/decoding
+	pub sender: ProvableAddress,
+	// Receiver address
+	pub recipient: ProvableAddress,
+	/// The content of the slate.
+	pub content: SlatePurpose,
 }
 
 #[test]

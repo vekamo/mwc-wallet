@@ -20,17 +20,16 @@ use crate::adapters::SlateGetData;
 use crate::error::{Error, ErrorKind};
 use crate::libwallet::{Slate, SlateVersion, VersionedSlate};
 use crate::{SlateGetter, SlatePutter};
-use ed25519_dalek::SecretKey as DalekSecretKey;
+use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
 use grin_wallet_libwallet::slatepack::SlatePurpose;
 use std::path::PathBuf;
-use x25519_dalek::PublicKey as xDalekPublicKey;
 
 #[derive(Clone)]
 pub struct PathToSlatePutter {
 	path_buf: PathBuf,
 	content: Option<SlatePurpose>,
-	sender: Option<xDalekPublicKey>,
-	recipients: Vec<xDalekPublicKey>,
+	sender: Option<DalekPublicKey>,
+	recipient: Option<DalekPublicKey>,
 }
 
 pub struct PathToSlateGetter {
@@ -41,15 +40,15 @@ impl PathToSlatePutter {
 	// Build sender that can save slatepacks
 	pub fn build_encrypted(
 		path_buf: PathBuf,
-		content: Option<SlatePurpose>,
-		sender: Option<xDalekPublicKey>,
-		recipients: Vec<xDalekPublicKey>,
+		content: SlatePurpose,
+		sender: DalekPublicKey,
+		recipient: Option<DalekPublicKey>,
 	) -> Self {
 		Self {
 			path_buf,
-			content,
-			sender,
-			recipients,
+			content: Some(content),
+			sender: Some(sender),
+			recipient: recipient,
 		}
 	}
 
@@ -58,7 +57,7 @@ impl PathToSlatePutter {
 			path_buf,
 			content: None,
 			sender: None,
-			recipients: vec![],
+			recipient: None,
 		}
 	}
 }
@@ -70,31 +69,33 @@ impl PathToSlateGetter {
 }
 
 impl SlatePutter for PathToSlatePutter {
-	fn put_tx(&self, slate: &Slate) -> Result<(), Error> {
+	fn put_tx(&self, slate: &Slate, slatepack_secret: &DalekSecretKey) -> Result<(), Error> {
 		let file_name = self.path_buf.to_str().unwrap_or("INVALID PATH");
 		let mut pub_tx = File::create(&self.path_buf).map_err(|e| {
 			ErrorKind::IO(format!("Unable to create proof file {}, {}", file_name, e))
 		})?;
+
 		let out_slate = {
-			if !self.recipients.is_empty() {
-				// Do the slatepack
-				if let Some(content) = self.content.clone() {
-					VersionedSlate::into_version(
-						slate,
-						SlateVersion::SP,
-						content,
-						&self.sender,
-						&self.recipients,
-					)
-					.map_err(|e| {
-						ErrorKind::GenericError(format!("Unable to build a slatepack, {}", e))
-					})?
-				} else {
-					return Err(ErrorKind::IO(
-						"Not defined the content value for Slatepack".to_string(),
+			if self.recipient.is_some() {
+				if self.sender.is_none() || self.content.is_none() {
+					return Err(ErrorKind::GenericError(
+						"Sender or content are not defined".to_string(),
 					)
 					.into());
 				}
+
+				// Do the slatepack
+				VersionedSlate::into_version(
+					slate.clone(),
+					SlateVersion::SP,
+					self.content.clone().unwrap(),
+					self.sender.clone().unwrap(),
+					self.recipient.clone(),
+					slatepack_secret,
+				)
+				.map_err(|e| {
+					ErrorKind::GenericError(format!("Unable to build a slatepack, {}", e))
+				})?
 			} else if slate.compact_slate {
 				warn!("Transaction contains features that require mwc-wallet 4.0.0 or later");
 				warn!("Please ensure the other party is running mwc-wallet v4.0.0 or later before sending");
@@ -136,7 +137,7 @@ impl SlatePutter for PathToSlatePutter {
 }
 
 impl SlateGetter for PathToSlateGetter {
-	fn get_tx(&self, slatepack_secret: Option<&DalekSecretKey>) -> Result<SlateGetData, Error> {
+	fn get_tx(&self, slatepack_secret: &DalekSecretKey) -> Result<SlateGetData, Error> {
 		let file_name = self.path_buf.to_str().unwrap_or("INVALID PATH");
 		let mut pub_tx_f = File::open(&self.path_buf).map_err(|e| {
 			ErrorKind::IO(format!("Unable to open proof file {}, {}", file_name, e))

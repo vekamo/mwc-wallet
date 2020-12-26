@@ -48,8 +48,9 @@ native-tls = "0.2"
 smaz = "0.1"
 bitstream-io = "0.9"
 bs58 = "0.3"
-age = "0.4"
 curve25519-dalek = "2.1"
+crypto_box = "0.5"
+crc = "1.8"
 
 grin_wallet_util = { path = "../util", version = "4.0.0" }
 grin_wallet_config = { path = "../config", version = "4.0.0" }

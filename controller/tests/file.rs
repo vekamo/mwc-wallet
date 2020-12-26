@@ -26,6 +26,8 @@ use std::time::Duration;
 
 use grin_wallet_libwallet::InitTxArgs;
 
+use ed25519_dalek::SecretKey as DalekSecretKey;
+use grin_wallet_libwallet::proof::proofaddress;
 use grin_wallet_util::grin_core::global;
 
 use serde_json;
@@ -106,6 +108,8 @@ fn file_exchange_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> 
 	// test optional message
 	let message = "sender test message, sender test message";
 
+	let mut wallet1_slatepack_secret = DalekSecretKey::from_bytes(&[0; 32]).unwrap();
+
 	// Should have 5 in account1 (5 spendable), 5 in account (2 spendable)
 	wallet::controller::owner_single_use(Some(wallet1.clone()), mask1, None, |api, m| {
 		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(m, true, 1)?;
@@ -124,8 +128,17 @@ fn file_exchange_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> 
 			..Default::default()
 		};
 		let mut slate = api.init_send_tx(m, &args, 1)?;
+
+		{
+			let mut w_lock = api.wallet_inst.lock();
+			let w = w_lock.lc_provider()?.wallet_inst()?;
+			let k = w.keychain(m)?;
+			wallet1_slatepack_secret = proofaddress::payment_proof_address_dalek_secret(&k, None)?;
+		}
+
 		// output tx file
-		PathToSlatePutter::build_plain((&send_file).into()).put_tx(&mut slate)?;
+		PathToSlatePutter::build_plain((&send_file).into())
+			.put_tx(&mut slate, &wallet1_slatepack_secret)?;
 		api.tx_lock_outputs(m, &slate, None, 0)?;
 		Ok(())
 	})?;
@@ -137,7 +150,7 @@ fn file_exchange_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> 
 	}
 
 	let mut slate = PathToSlateGetter::build((&send_file).into())
-		.get_tx(None)?
+		.get_tx(&wallet1_slatepack_secret)?
 		.to_slate()?
 		.0;
 	let mut naughty_slate = slate.clone();
@@ -155,14 +168,15 @@ fn file_exchange_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> 
 	// wallet 2 receives file, completes, sends file back
 	wallet::controller::foreign_single_use(wallet2.clone(), mask2_i.clone(), |api| {
 		slate = api.receive_tx(&slate, None, None, Some(sender2_message.clone()))?;
-		PathToSlatePutter::build_plain((&receive_file).into()).put_tx(&slate)?;
+		PathToSlatePutter::build_plain((&receive_file).into())
+			.put_tx(&slate, &wallet1_slatepack_secret)?;
 		Ok(())
 	})?;
 
 	// wallet 1 finalises and posts
 	wallet::controller::owner_single_use(Some(wallet1.clone()), mask1, None, |api, m| {
 		let mut slate = PathToSlateGetter::build(receive_file.into())
-			.get_tx(None)?
+			.get_tx(&wallet1_slatepack_secret)?
 			.to_slate()?
 			.0;
 		api.verify_slate_messages(m, &slate)?;

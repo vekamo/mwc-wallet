@@ -23,7 +23,6 @@ use crate::libwallet::{
 use crate::{Foreign, ForeignCheckMiddlewareFn};
 use easy_jsonrpc_mw;
 use libwallet::slatepack::SlatePurpose;
-use x25519_dalek::PublicKey as xDalekPublicKey;
 
 /// Public definition used to generate Foreign jsonrpc api.
 /// * When running `mwc-wallet listen` with defaults, the V2 api is available at
@@ -607,10 +606,19 @@ where
 	) -> Result<VersionedSlate, ErrorKind> {
 		let version = in_slate.version();
 		let (slate_from, sender) = if in_slate.is_encrypted() {
-			let (slate_from, sender) = Foreign::decrypt_slatepack(self, in_slate).map_err(|e| {
-				ErrorKind::SlatepackDecodeError(format!("Unable to decrypt a slatepack, {}", e))
-			})?;
-			(slate_from, sender)
+			let (slate_from, content, sender) =
+				Foreign::decrypt_slate(self, in_slate).map_err(|e| {
+					ErrorKind::SlatepackDecodeError(format!("Unable to decrypt a slatepack, {}", e))
+				})?;
+
+			if content != SlatePurpose::SendInitial {
+				return Err(ErrorKind::SlatepackDecodeError(format!(
+					"Expecting SendInitial content of the slatepack, get {:?}",
+					content
+				)));
+			}
+
+			(slate_from, Some(sender))
 		} else {
 			let slate_from = in_slate.into_slate_plain().map_err(|e| e.kind())?;
 			(slate_from, None)
@@ -624,17 +632,13 @@ where
 		)
 		.map_err(|e| e.kind())?;
 
-		let mut recipients: Vec<xDalekPublicKey> = vec![];
-		if let Some(addr) = sender {
-			recipients.push(addr);
-		}
-
-		let res_slate = VersionedSlate::into_version(
+		let res_slate = Foreign::encrypt_slate(
+			self,
 			&out_slate,
-			version,
+			Some(version),
 			SlatePurpose::SendResponse,
-			&None,
-			&recipients,
+			sender, // sending back to the sender
+			None,
 		)
 		.map_err(|e| {
 			ErrorKind::SlatepackEncodeError(format!("Unable to encode the slatepack, {}", e))
@@ -646,10 +650,19 @@ where
 	fn finalize_invoice_tx(&self, in_slate: VersionedSlate) -> Result<VersionedSlate, ErrorKind> {
 		let version = in_slate.version();
 		let (in_slate, sender) = if in_slate.is_encrypted() {
-			let (slate_from, sender) = Foreign::decrypt_slatepack(self, in_slate).map_err(|e| {
-				ErrorKind::SlatepackDecodeError(format!("Unable to decrypt a slatepack, {}", e))
-			})?;
-			(slate_from, sender)
+			let (slate_from, content, sender) =
+				Foreign::decrypt_slate(self, in_slate).map_err(|e| {
+					ErrorKind::SlatepackDecodeError(format!("Unable to decrypt a slatepack, {}", e))
+				})?;
+
+			if content != SlatePurpose::InvoiceResponse {
+				return Err(ErrorKind::SlatepackDecodeError(format!(
+					"Expecting InvoiceResponse content of the slatepack, get {:?}",
+					content
+				)));
+			}
+
+			(slate_from, Some(sender))
 		} else {
 			let slate_from = in_slate.into_slate_plain().map_err(|e| e.kind())?;
 			(slate_from, None)
@@ -657,16 +670,13 @@ where
 
 		let out_slate = Foreign::finalize_invoice_tx(self, &in_slate).map_err(|e| e.kind())?;
 
-		let mut recipients: Vec<xDalekPublicKey> = vec![];
-		if let Some(addr) = sender {
-			recipients.push(addr);
-		}
-		let res_slate = VersionedSlate::into_version(
+		let res_slate = Foreign::encrypt_slate(
+			self,
 			&out_slate,
-			version,
-			SlatePurpose::SendResponse,
-			&None,
-			&recipients,
+			Some(version),
+			SlatePurpose::FullSlate,
+			sender, // sending back to the sender
+			None,
 		)
 		.map_err(|e| {
 			ErrorKind::SlatepackEncodeError(format!("Unable to encode the slatepack, {}", e))

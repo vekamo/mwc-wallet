@@ -1458,14 +1458,15 @@ where
 			None,
 			&slate,
 			if args.send_args.is_some() {
-				SlatePurpose::SendSend
+				SlatePurpose::SendInitial
 			} else {
 				SlatePurpose::FullSlate
 			},
 			args.slatepack_recipient
-				.map(|a| a.slate_pack_public_key())
+				.map(|a| a.tor_public_key())
 				.filter(|a| a.is_ok())
 				.map(|a| a.unwrap()),
+			None,
 		)
 		.map_err(|e| e.kind())?;
 
@@ -1479,11 +1480,12 @@ where
 			&self,
 			None,
 			&slate,
-			SlatePurpose::InvoiceSend,
+			SlatePurpose::InvoiceInitial,
 			args.slatepack_recipient
-				.map(|a| a.slate_pack_public_key())
+				.map(|a| a.tor_public_key())
 				.filter(|a| a.is_ok())
 				.map(|a| a.unwrap()),
+			None,
 		)
 		.map_err(|e| e.kind())?;
 
@@ -1495,8 +1497,17 @@ where
 		in_slate: VersionedSlate,
 		args: InitTxArgs,
 	) -> Result<VersionedSlate, ErrorKind> {
-		let (slate_from, sender) = Owner::decrypt_versioned_slate(self, None, in_slate)
+		let (slate_from, content, sender) = Owner::decrypt_versioned_slate(self, None, in_slate)
 			.map_err(|e| ErrorKind::SlatepackDecodeError(format!("{}", e)))?;
+
+		if let Some(content) = &content {
+			if *content != SlatePurpose::InvoiceInitial {
+				return Err(ErrorKind::SlatepackDecodeError(format!(
+					"Expecting InvoiceInitial slate content, get {:?}",
+					content
+				)));
+			}
+		}
 
 		let out_slate =
 			Owner::process_invoice_tx(self, None, &slate_from, &args).map_err(|e| e.kind())?;
@@ -1507,6 +1518,7 @@ where
 			&out_slate,
 			SlatePurpose::InvoiceResponse,
 			sender,
+			None,
 		)
 		.map_err(|e| e.kind())?;
 
@@ -1514,12 +1526,22 @@ where
 	}
 
 	fn finalize_tx(&self, in_slate: VersionedSlate) -> Result<VersionedSlate, ErrorKind> {
-		let (slate_from, sender) = Owner::decrypt_versioned_slate(self, None, in_slate)
-			.map_err(|e| ErrorKind::SlatepackDecodeError(format!("{}", e)))?;
+		let (slate_from, _content, sender) =
+			Owner::decrypt_versioned_slate(self, None, in_slate)
+				.map_err(|e| ErrorKind::SlatepackDecodeError(format!("{}", e)))?;
+
+		// Not checking content. If slate good enough to finalize, there is not problem with a content
 		let out_slate = Owner::finalize_tx(self, None, &slate_from).map_err(|e| e.kind())?;
 
-		let vslate = Owner::encrypt_slate(&self, None, &out_slate, SlatePurpose::FullSlate, sender)
-			.map_err(|e| e.kind())?;
+		let vslate = Owner::encrypt_slate(
+			&self,
+			None,
+			&out_slate,
+			SlatePurpose::FullSlate,
+			sender,
+			None,
+		)
+		.map_err(|e| e.kind())?;
 
 		Ok(vslate)
 	}
@@ -1529,7 +1551,7 @@ where
 		slate: VersionedSlate,
 		participant_id: usize,
 	) -> Result<(), ErrorKind> {
-		let (slate_from, _sender) = Owner::decrypt_versioned_slate(self, None, slate)
+		let (slate_from, _content, _sender) = Owner::decrypt_versioned_slate(self, None, slate)
 			.map_err(|e| ErrorKind::SlatepackDecodeError(format!("{}", e)))?;
 		Owner::tx_lock_outputs(self, None, &slate_from, None, participant_id).map_err(|e| e.kind())
 	}
@@ -1759,7 +1781,7 @@ pub fn run_doctest_owner(
 	}
 
 	let proof_address_pubkey =
-		api_impl::owner::get_public_proof_address(wallet2.clone(), (&mask2).as_ref()).unwrap();
+		api_impl::owner::get_mqs_address(wallet2.clone(), (&mask2).as_ref()).unwrap();
 	//println!("owner_rpc Wallet 2 proof_address is ============: {}", proof_address);
 	let public_proof_address = ProvableAddress::from_pub_key(&proof_address_pubkey);
 	println!("public_proof address {}", public_proof_address.public_key);

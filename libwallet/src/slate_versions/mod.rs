@@ -24,8 +24,8 @@ use crate::slatepack::SlatePurpose;
 use crate::types::CbData;
 use crate::Slatepacker;
 use crate::{Error, ErrorKind};
+use ed25519_dalek::PublicKey as DalekPublicKey;
 use ed25519_dalek::SecretKey as DalekSecretKey;
-use x25519_dalek::PublicKey as xDalekPublicKey;
 
 pub mod ser;
 
@@ -89,20 +89,29 @@ impl VersionedSlate {
 
 	/// convert this slate type to a specified older version
 	pub fn into_version(
-		slate: &Slate,
+		slate: Slate,
 		version: SlateVersion,
 		content: SlatePurpose,
-		sender: &Option<xDalekPublicKey>,
-		recipients: &Vec<xDalekPublicKey>,
+		sender: DalekPublicKey,
+		recipient: Option<DalekPublicKey>,
+		secret: &DalekSecretKey,
 	) -> Result<VersionedSlate, Error> {
 		match version {
 			SlateVersion::SP => {
+				if recipient.is_none() {
+					return Err(ErrorKind::SlatepackEncodeError(
+						"Not found slatepack recipient values".to_string(),
+					)
+					.into());
+				}
+
 				let armored_slatepack = Slatepacker::encrypt_to_send(
-					&slate,
+					slate,
 					SlateVersion::SP,
 					content,
-					&sender,
-					&recipients,
+					sender,
+					recipient.unwrap(),
+					secret,
 				)?;
 				Ok(VersionedSlate::SP(armored_slatepack))
 			}
@@ -131,7 +140,7 @@ impl VersionedSlate {
 	}
 
 	/// Decode into the slate and sender address.
-	pub fn into_slatepack(&self, dec_key: Option<&DalekSecretKey>) -> Result<Slatepacker, Error> {
+	pub fn into_slatepack(&self, dec_key: &DalekSecretKey) -> Result<Slatepacker, Error> {
 		match self {
 			VersionedSlate::SP(arm_slatepack) => {
 				let packer = Slatepacker::decrypt_slatepack(arm_slatepack.as_bytes(), dec_key)?;

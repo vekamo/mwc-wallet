@@ -35,6 +35,7 @@ use crate::{
 use crate::{Error, ErrorKind};
 
 use crate::proof::tx_proof::{pop_proof_for_slate, TxProof};
+use ed25519_dalek::PublicKey as DalekPublicKey;
 use std::cmp;
 use std::fs::File;
 use std::io::Write;
@@ -81,8 +82,8 @@ where
 	w.set_parent_key_id_by_name(label)
 }
 
-/// Retrieve the payment proof address for the wallet
-pub fn get_public_proof_address<'a, L, C, K>(
+/// Retrieve the MQS address for the wallet
+pub fn get_mqs_address<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 ) -> Result<PublicKey, Error>
@@ -95,6 +96,23 @@ where
 	let k = w.keychain(keychain_mask)?;
 	let pub_key = proofaddress::payment_proof_address_pubkey(&k)?;
 	Ok(pub_key)
+}
+
+/// Retrieve TOR or public wallet address
+pub fn get_wallet_public_address<'a, L, C, K>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
+) -> Result<DalekPublicKey, Error>
+where
+	L: WalletLCProvider<'a, C, K>,
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
+{
+	wallet_lock!(wallet_inst, w);
+	let k = w.keychain(keychain_mask)?;
+	let secret = proofaddress::payment_proof_address_secret(&k, None)?;
+	let tor_pk = proofaddress::secret_2_tor_pub(&secret)?;
+	Ok(tor_pk)
 }
 
 fn perform_refresh_from_node<'a, L, C, K>(

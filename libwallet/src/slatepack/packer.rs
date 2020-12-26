@@ -15,75 +15,96 @@
 use crate::Error;
 use crate::{Slate, SlateVersion, Slatepack, SlatepackArmor};
 
+use ed25519_dalek::PublicKey as DalekPublicKey;
 use ed25519_dalek::SecretKey as DalekSecretKey;
-use x25519_dalek::PublicKey as xDalekPublicKey;
 
 use crate::slatepack::slatepack::SlatePurpose;
-use uuid::Uuid;
 
 #[derive(Clone, Debug)]
 /// Arguments, mostly for encrypting decrypting a slatepack
 pub struct Slatepacker {
-	/// Working context.
-	context: Slatepack,
+	/// Sender address, None for wrapped
+	pub sender: Option<DalekPublicKey>,
+	/// Recipient addresses, None for wrapped
+	pub recipient: Option<DalekPublicKey>,
+	/// The content purpose. It customize serializer/deserializer for us.
+	pub content: SlatePurpose,
+	/// Slate data.
+	pub slate: Slate,
 }
 
 impl Slatepacker {
 	/// Swap a slate with the packer. Slate is expecte to be full
 	pub fn wrap_slate(slate: Slate) -> Self {
-		Slatepacker {
-			context: Slatepack {
-				sender: None,
-				recipients: vec![],
-				content: SlatePurpose::FullSlate,
-				slate,
-			},
+		Self {
+			sender: None,
+			recipient: None,
+			content: SlatePurpose::FullSlate,
+			slate,
 		}
 	}
 
 	/// Pack everything into the armored slatepack
 	pub fn encrypt_to_send(
-		slate: &Slate,
+		slate: Slate,
 		slate_version: SlateVersion,
 		content: SlatePurpose,
-		sender: &Option<xDalekPublicKey>,
-		recipients: &Vec<xDalekPublicKey>,
+		sender: DalekPublicKey,
+		recipient: DalekPublicKey,
+		secret: &DalekSecretKey,
 	) -> Result<String, Error> {
 		let pack = Slatepack {
-			sender: sender.clone(),
-			recipients: recipients.clone(),
+			sender: sender,
+			recipient: recipient,
 			content,
-			slate: slate.clone(),
+			slate: slate,
 		};
 
-		let slate_bin = pack.to_binary(slate_version)?;
+		let slate_bin = pack.to_binary(slate_version, secret)?;
 
 		SlatepackArmor::encode(&slate_bin)
 	}
 
 	/// return slatepack
-	pub fn decrypt_slatepack(data: &[u8], dec_key: Option<&DalekSecretKey>) -> Result<Self, Error> {
+	pub fn decrypt_slatepack(data: &[u8], dec_key: &DalekSecretKey) -> Result<Self, Error> {
 		let slate_bytes = SlatepackArmor::decode(data)?;
 
 		let slatepack = Slatepack::from_binary(&slate_bytes, dec_key)?;
 
-		Ok(Self { context: slatepack })
+		let Slatepack {
+			sender,
+			recipient,
+			content,
+			slate,
+		} = slatepack;
+
+		Ok(Self {
+			sender: Some(sender),
+			recipient: Some(recipient),
+			content,
+			slate,
+		})
 	}
 
 	/// Get Transaction ID related into form this slatepack
-	pub fn get_tx_info(&self) -> (Uuid, SlatePurpose) {
-		(self.context.slate.id.clone(), self.context.content.clone())
+	pub fn get_content(&self) -> SlatePurpose {
+		self.content.clone()
 	}
 
 	/// Get Sender info. It is needed to send the response back
-	pub fn get_sender(&self) -> Option<xDalekPublicKey> {
-		self.context.sender.clone()
+	pub fn get_sender(&self) -> Option<DalekPublicKey> {
+		self.sender.clone()
+	}
+
+	/// Get Sender info. It is needed to send the response back
+	pub fn get_recipient(&self) -> Option<DalekPublicKey> {
+		self.recipient.clone()
 	}
 
 	/// Convert this slate back to the resulting slate. Since the slate pack contain only the change set,
 	/// to recover the data it is required original slate to merge with.
 	pub fn to_result_slate(self) -> Slate {
-		self.context.slate
+		self.slate
 	}
 }
 
@@ -91,6 +112,7 @@ impl Slatepacker {
 fn slatepack_io_test() {
 	use crate::grin_util as util;
 	use crate::grin_util::secp::Signature;
+	use crate::proof::proofaddress;
 	use crate::proof::proofaddress::ProvableAddress;
 	use crate::slate::{PaymentInfo, VersionCompatInfo};
 	use crate::ParticipantData;
@@ -101,6 +123,8 @@ fn slatepack_io_test() {
 	use grin_util::secp::pedersen::{Commitment, RangeProof};
 	use grin_util::secp::{PublicKey, Secp256k1, SecretKey};
 	use grin_wallet_util::grin_keychain::BlindingFactor;
+	use uuid::Uuid;
+	use x25519_dalek::PublicKey as xDalekPublicKey;
 
 	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 
@@ -108,6 +132,10 @@ fn slatepack_io_test() {
 	let bytes_32: [u8; 32] = [
 		1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
 		26, 27, 28, 29, 30, 31, 32,
+	];
+	let bytes_32_2: [u8; 32] = [
+		2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+		27, 28, 29, 30, 31, 32, 33,
 	];
 	let bytes_33: [u8; 33] = [
 		1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
@@ -121,6 +149,30 @@ fn slatepack_io_test() {
 
 	let sk = SecretKey::from_slice(&bytes_32).unwrap();
 	let secp = Secp256k1::new();
+
+	let dalek_sk = DalekSecretKey::from_bytes(&bytes_32).unwrap();
+	let dalek_pk = DalekPublicKey::from(&dalek_sk);
+
+	let dalek_sk2 = DalekSecretKey::from_bytes(&bytes_32_2).unwrap();
+	let dalek_pk2 = DalekPublicKey::from(&dalek_sk2);
+
+	// Let's test out Dalec 2 xDalec algebra.
+	let dalek_xpk = proofaddress::tor_pub_2_slatepack_pub(&dalek_pk).unwrap();
+	let dalek_xpk2 = proofaddress::tor_pub_2_slatepack_pub(&dalek_pk2).unwrap();
+	let dalek_xsk = proofaddress::tor_secret_2_slatepack_secret(&dalek_sk);
+	let dalek_xsk2 = proofaddress::tor_secret_2_slatepack_secret(&dalek_sk2);
+
+	let builded_xpk = xDalekPublicKey::from(&dalek_xsk);
+	let builded_xpk2 = xDalekPublicKey::from(&dalek_xsk2);
+
+	assert_eq!(dalek_xpk.as_bytes(), builded_xpk.as_bytes());
+	assert_eq!(dalek_xpk2.as_bytes(), builded_xpk2.as_bytes());
+
+	// check if Diffie Hoffman works...
+	let shared_secret1 = dalek_xsk.diffie_hellman(&dalek_xpk2);
+	let shared_secret2 = dalek_xsk2.diffie_hellman(&dalek_xpk);
+
+	assert_eq!(shared_secret1.as_bytes(), shared_secret2.as_bytes());
 
 	let mut slate = Slate {
 		compact_slate: true, // Slatepack works only for compact models.
@@ -175,19 +227,30 @@ fn slatepack_io_test() {
 
 	// Not encoded, just want to review the data...
 	let slatepack_string = Slatepacker::encrypt_to_send(
-		&slate,
+		slate,
 		SlateVersion::SP,
 		SlatePurpose::FullSlate,
-		&Some(xDalekPublicKey::from(bytes_32)),
-		&vec![],
+		dalek_pk.clone(),
+		dalek_pk2.clone(), // sending to self, should be fine...
+		&dalek_sk,
 	)
 	.unwrap();
 	println!("slatepack_string = {}", slatepack_string);
 
-	let slatepack = Slatepacker::decrypt_slatepack(slatepack_string.as_bytes(), None).unwrap();
+	// Testing if can open from a backup
+	let slatepack = Slatepacker::decrypt_slatepack(slatepack_string.as_bytes(), &dalek_sk).unwrap();
 	let res_slate = slatepack.to_result_slate();
 	let slate2_str = format!("{:?}", res_slate);
 	println!("res_slate = {:?}", slate2_str);
+
+	assert_eq!(slate1_str, slate2_str);
+
+	// Testing if another party can open it
+	let slatepack =
+		Slatepacker::decrypt_slatepack(slatepack_string.as_bytes(), &dalek_sk2).unwrap();
+	let res_slate = slatepack.to_result_slate();
+	let slate2_str = format!("{:?}", res_slate);
+	println!("res_slate2 = {:?}", slate2_str);
 
 	assert_eq!(slate1_str, slate2_str);
 }

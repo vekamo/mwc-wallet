@@ -121,10 +121,10 @@ pub fn get_tor_address<L, C, K>(
 	let lc = w_lock.lc_provider()?;
 	let w_inst = lc.wallet_inst()?;
 	let k = w_inst.keychain((&mask).as_ref())?;
-	let sec_key = proofaddress::payment_proof_address_secret(&k).map_err(|e| {
+	let sec_key = proofaddress::payment_proof_address_dalek_secret(&k, None).map_err(|e| {
 		ErrorKind::TorConfig(format!("Unable to build key for onion address, {}", e))
 	})?;
-	let onion_addr = OnionV3Address::from_private(&sec_key.0).map_err(|e| ErrorKind::GenericError(format!("Unable to build Onion address, {}", e)))?;
+	let onion_addr = OnionV3Address::from_private(sec_key.as_bytes()).map_err(|e| ErrorKind::GenericError(format!("Unable to build Onion address, {}", e)))?;
 	Ok(format!("{}", onion_addr))
 }
 
@@ -153,7 +153,7 @@ pub fn init_tor_listener<L, C, K>(
 		format!("{}/tor/listener", lc.get_top_level_directory()?)
 	};
 
-	let sec_key = proofaddress::payment_proof_address_secret(&k ).map_err(|e| {
+	let sec_key = proofaddress::payment_proof_address_secret(&k, None).map_err(|e| {
 		ErrorKind::TorConfig(format!("Unable to build key for onion address, {}", e))
 	})?;
 	let onion_address = OnionV3Address::from_private(&sec_key.0)
@@ -248,7 +248,7 @@ fn controller_derive_address_key<'a, L, C, K>(
 {
 	wallet_lock!(wallet, w);
 	let k = w.keychain(keychain_mask)?;
-	let sec_addr_key = proofaddress::payment_proof_address_secret(&k)?;
+	let sec_addr_key = proofaddress::payment_proof_address_secret(&k, None)?;
 	Ok(sec_addr_key)
 }
 

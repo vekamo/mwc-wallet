@@ -17,13 +17,13 @@
 use crate::keychain::Keychain;
 use crate::libwallet::api_impl::foreign;
 use crate::libwallet::{
-	BlockFees, CbData, Error, NodeClient, NodeVersionInfo, Slate, VersionInfo, VersionedSlate,
-	WalletInst, WalletLCProvider,
+	BlockFees, CbData, Error, NodeClient, NodeVersionInfo, Slate, SlatePurpose, SlateVersion,
+	VersionInfo, VersionedSlate, WalletInst, WalletLCProvider,
 };
 use crate::util::secp::key::SecretKey;
 use crate::util::Mutex;
+use ed25519_dalek::PublicKey as DalekPublicKey;
 use std::sync::Arc;
-use x25519_dalek::PublicKey as xDalekPublicKey;
 
 /// ForeignAPI Middleware Check callback
 pub type ForeignCheckMiddleware =
@@ -191,16 +191,17 @@ where
 	/// ```
 
 	pub fn check_version(&self) -> Result<VersionInfo, Error> {
+		let mut w_lock = self.wallet_inst.lock();
+		let w = w_lock.lc_provider()?.wallet_inst()?;
 		if let Some(m) = self.middleware.as_ref() {
-			let mut w_lock = self.wallet_inst.lock();
-			let w = w_lock.lc_provider()?.wallet_inst()?;
 			m(
 				ForeignCheckMiddlewareFn::CheckVersion,
 				w.w2n_client().get_version_info(),
 				None,
 			)?;
 		}
-		Ok(foreign::check_version())
+		let version = foreign::check_version(&mut **w, (&self.keychain_mask).as_ref())?;
+		Ok(version)
 	}
 
 	/// Return the tor proof address
@@ -501,13 +502,42 @@ where
 	}
 
 	// Utility method, not expected to be called from Foreign API.
-	pub fn decrypt_slatepack(
+	pub fn decrypt_slate(
 		&self,
 		encrypted_slate: VersionedSlate,
-	) -> Result<(Slate, Option<xDalekPublicKey>), Error> {
+	) -> Result<(Slate, SlatePurpose, DalekPublicKey), Error> {
 		let mut w_lock = self.wallet_inst.lock();
 		let w = w_lock.lc_provider()?.wallet_inst()?;
-		foreign::decrypt_slatepack(&mut **w, (&self.keychain_mask).as_ref(), encrypted_slate)
+		let (slate, content, sender, _receiver) = foreign::decrypt_slate(
+			&mut **w,
+			(&self.keychain_mask).as_ref(),
+			encrypted_slate,
+			None,
+		)?;
+		Ok((slate, content, sender))
+	}
+
+	// Utility method, not expected to be called from Foreign API.
+	pub fn encrypt_slate(
+		&self,
+		slate: &Slate,
+		version: Option<SlateVersion>,
+		content: SlatePurpose,
+		slatepack_recipient: Option<DalekPublicKey>,
+		address_index: Option<u32>,
+	) -> Result<VersionedSlate, Error> {
+		let mut w_lock = self.wallet_inst.lock();
+		let w = w_lock.lc_provider()?.wallet_inst()?;
+		let vslate = foreign::encrypt_slate(
+			&mut **w,
+			(&self.keychain_mask).as_ref(),
+			slate,
+			version,
+			content,
+			slatepack_recipient,
+			address_index,
+		)?;
+		Ok(vslate)
 	}
 }
 
