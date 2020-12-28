@@ -841,6 +841,7 @@ pub fn repopulate_tx<'a, T: ?Sized, C, K>(
 	slate: &mut Slate,
 	context: &Context,
 	update_fee: bool,
+	use_test_rng: bool,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<'a, C, K>,
@@ -866,7 +867,7 @@ where
 		context.participant_id,
 		None,
 		context.message.clone(),
-		false,
+		use_test_rng,
 	)?;
 
 	let mut parts = vec![];

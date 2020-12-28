@@ -32,6 +32,7 @@ use crate::grin_util::secp::pedersen::Commitment;
 use crate::grin_util::secp::Signature;
 use crate::grin_util::{self, secp, RwLock};
 use crate::Context;
+use grin_core::global;
 use serde::ser::{Serialize, Serializer};
 use serde_json;
 use std::fmt;
@@ -201,11 +202,6 @@ pub struct Slate {
 	/// associated outputs
 	#[serde(with = "secp_ser::opt_string_or_u64")]
 	pub ttl_cutoff_height: Option<u64>,
-	/// If a wallet doesn't support them, they will be filtered out.
-	/// coin Type the default is mwc.
-	pub coin_type: Option<String>,
-	/// network type default is mainnet
-	pub network_type: Option<String>,
 	/// Participant data, each participant in the transaction will
 	/// insert their public data here. For now, 0 is sender and 1
 	/// is receiver, though this will change for multi-party
@@ -305,7 +301,7 @@ impl Slate {
 			}
 			_ => return Err(ErrorKind::SlateVersion(version).into()),
 		};
-		Ok(v3.into())
+		Ok(v3.to_slate()?)
 	}
 
 	/// Create a new slate
@@ -326,8 +322,6 @@ impl Slate {
 			height: 0,
 			lock_height: 0,
 			ttl_cutoff_height: None,
-			coin_type: None,
-			network_type: None,
 			participant_data: vec![],
 			version_info: VersionCompatInfo {
 				version: CURRENT_SLATE_VERSION,
@@ -476,10 +470,13 @@ impl Slate {
 	where
 		K: Keychain,
 	{
-		// Generating offset for backward compability. Offset ONLY for the TX, the slate copy is kept the same.
-		if self.tx.offset == BlindingFactor::zero() {
-			self.generate_legacy_offset(keychain, sec_key, use_test_rng)?;
+		if !self.compact_slate {
+			// Generating offset for backward compability. Offset ONLY for the TX, the slate copy is kept the same.
+			if self.tx.offset == BlindingFactor::zero() {
+				self.generate_legacy_offset(keychain, sec_key, use_test_rng)?;
+			}
 		}
+
 		self.add_participant_info(
 			keychain.secp(),
 			&sec_key,
@@ -1033,12 +1030,10 @@ impl From<Slate> for SlateV3 {
 			height,
 			lock_height,
 			ttl_cutoff_height,
-			coin_type,
-			network_type,
 			participant_data,
 			version_info,
 			payment_proof,
-			offset: _,
+			offset: tx_offset,
 		} = slate;
 		let participant_data = map_vec!(participant_data, |data| ParticipantDataV3::from(data));
 		let version_info = VersionCompatInfoV3::from(&version_info);
@@ -1046,7 +1041,11 @@ impl From<Slate> for SlateV3 {
 			Some(p) => Some(PaymentInfoV3::from(&p)),
 			None => None,
 		};
-		let tx = TransactionV3::from(tx);
+		let mut tx = TransactionV3::from(tx);
+		if compact_slate {
+			// for compact the Slate offset is dominate
+			tx.offset = tx_offset;
+		}
 		SlateV3 {
 			num_participants,
 			id,
@@ -1056,8 +1055,8 @@ impl From<Slate> for SlateV3 {
 			height,
 			lock_height,
 			ttl_cutoff_height,
-			coin_type,
-			network_type,
+			coin_type: Some("mwc".to_string()),
+			network_type: Some(global::get_network_name()),
 			participant_data,
 			version_info,
 			payment_proof,
@@ -1078,35 +1077,29 @@ impl From<&Slate> for SlateV3 {
 			height,
 			lock_height,
 			ttl_cutoff_height,
-			coin_type,
-			network_type,
 			participant_data,
 			version_info,
 			payment_proof,
-			offset: _,
+			offset: tx_offset,
 		} = slate;
 		let num_participants = *num_participants;
 		let id = *id;
-		let tx = TransactionV3::from(tx);
+		let mut tx = TransactionV3::from(tx);
 		let amount = *amount;
 		let fee = *fee;
 		let height = *height;
 		let lock_height = *lock_height;
 		let ttl_cutoff_height = *ttl_cutoff_height;
-		let coin_type = match coin_type {
-			Some(c) => Some(c.to_string()),
-			None => None,
-		};
-		let network_type = match network_type {
-			Some(n) => Some(n.to_string()),
-			None => None,
-		};
 		let participant_data = map_vec!(participant_data, |data| ParticipantDataV3::from(data));
 		let version_info = VersionCompatInfoV3::from(version_info);
 		let payment_proof = match payment_proof {
 			Some(p) => Some(PaymentInfoV3::from(p)),
 			None => None,
 		};
+		if *compact_slate {
+			// for compact the Slate offset is dominate
+			tx.offset = tx_offset.clone();
+		}
 		SlateV3 {
 			num_participants,
 			id,
@@ -1116,8 +1109,8 @@ impl From<&Slate> for SlateV3 {
 			height,
 			lock_height,
 			ttl_cutoff_height,
-			coin_type,
-			network_type,
+			coin_type: Some("mwc".to_string()),
+			network_type: Some(global::get_network_name()),
 			participant_data,
 			version_info,
 			payment_proof,
@@ -1281,52 +1274,6 @@ impl From<&TxKernel> for TxKernelV3 {
 			lock_height,
 			excess: kernel.excess,
 			excess_sig: kernel.excess_sig,
-		}
-	}
-}
-
-// Versioned to current slate
-impl From<SlateV3> for Slate {
-	fn from(slate: SlateV3) -> Slate {
-		let SlateV3 {
-			num_participants,
-			id,
-			tx,
-			amount,
-			fee,
-			height,
-			lock_height,
-			ttl_cutoff_height,
-			coin_type,
-			network_type,
-			participant_data,
-			version_info,
-			payment_proof,
-			compact_slate,
-		} = slate;
-		let participant_data = map_vec!(participant_data, |data| ParticipantData::from(data));
-		let version_info = VersionCompatInfo::from(&version_info);
-		let payment_proof = match payment_proof {
-			Some(p) => Some(PaymentInfo::from(&p)),
-			None => None,
-		};
-		let tx = Transaction::from(tx);
-		Slate {
-			compact_slate: compact_slate.unwrap_or(false),
-			offset: tx.offset.clone(),
-			num_participants,
-			id,
-			tx,
-			amount,
-			fee,
-			height,
-			lock_height,
-			ttl_cutoff_height,
-			coin_type,
-			network_type,
-			participant_data,
-			version_info,
-			payment_proof,
 		}
 	}
 }

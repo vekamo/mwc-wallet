@@ -137,8 +137,11 @@ fn file_exchange_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> 
 		}
 
 		// output tx file
-		PathToSlatePutter::build_plain((&send_file).into())
-			.put_tx(&mut slate, &wallet1_slatepack_secret)?;
+		PathToSlatePutter::build_plain((&send_file).into()).put_tx(
+			&mut slate,
+			&wallet1_slatepack_secret,
+			true,
+		)?;
 		api.tx_lock_outputs(m, &slate, None, 0)?;
 		Ok(())
 	})?;
@@ -168,8 +171,11 @@ fn file_exchange_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> 
 	// wallet 2 receives file, completes, sends file back
 	wallet::controller::foreign_single_use(wallet2.clone(), mask2_i.clone(), |api| {
 		slate = api.receive_tx(&slate, None, None, Some(sender2_message.clone()))?;
-		PathToSlatePutter::build_plain((&receive_file).into())
-			.put_tx(&slate, &wallet1_slatepack_secret)?;
+		PathToSlatePutter::build_plain((&receive_file).into()).put_tx(
+			&slate,
+			&wallet1_slatepack_secret,
+			true,
+		)?;
 		Ok(())
 	})?;
 

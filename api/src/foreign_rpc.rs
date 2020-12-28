@@ -22,6 +22,8 @@ use crate::libwallet::{
 };
 use crate::{Foreign, ForeignCheckMiddlewareFn};
 use easy_jsonrpc_mw;
+use ed25519_dalek::PublicKey as DalekPublicKey;
+use grin_wallet_libwallet::proof::proofaddress::{self, ProvableAddress};
 use libwallet::slatepack::SlatePurpose;
 
 /// Public definition used to generate Foreign jsonrpc api.
@@ -53,6 +55,7 @@ pub trait ForeignRpc {
 		"result": {
 			"Ok": {
 				"foreign_api_version": 2,
+				"slatepack_address": "fffqrotuelaodwjblwmifg36xjedjw4azbwvfexmxmmzsb6xvzbkhuqd",
 				"supported_slate_versions": [
 					"SP",
 					"V3B",
@@ -63,7 +66,7 @@ pub trait ForeignRpc {
 		}
 	}
 	# "#
-	# ,false, 0, false, false);
+	# ,false, 0, false, false, true);
 	```
 	*/
 	fn check_version(&self) -> Result<VersionInfo, ErrorKind>;
@@ -93,7 +96,7 @@ pub trait ForeignRpc {
 		}
 	}
 	# "#
-	# ,false, 0, false, false);
+	# ,false, 0, false, false, true);
 	```
 	*/
 	fn get_proof_address(&self) -> Result<String, ErrorKind>;
@@ -143,7 +146,7 @@ pub trait ForeignRpc {
 	  }
 	}
 	# "#
-	# ,false, 4, false, false);
+	# ,false, 4, false, false, true);
 	```
 	*/
 
@@ -226,7 +229,7 @@ pub trait ForeignRpc {
 		}
 	}
 	# "#
-	# ,false, 1 ,false, false);
+	# ,false, 1 ,false, false, false);
 	```
 	*/
 	fn verify_slate_messages(&self, slate: VersionedSlate) -> Result<(), ErrorKind>;
@@ -313,12 +316,12 @@ pub trait ForeignRpc {
 	  "result": {
 		"Ok": {
 		  "amount": "2000000000",
+		  "coin_type": "mwc",
 		  "fee": "7000000",
 		  "height": "5",
 		  "id": "0436430c-2b02-624c-2032-570501212b00",
 		  "lock_height": "0",
-		  "coin_type": null,
-		  "network_type": null,
+		  "network_type": "automatedtests",
 		  "num_participants": 2,
 		  "participant_data": [
 			{
@@ -383,7 +386,161 @@ pub trait ForeignRpc {
 	  }
 	}
 	# "#
-	# ,false, 5, true, false);
+	# ,false, 5, true, false, false);
+	```
+	```
+	# // Compact slate processing case
+	# grin_wallet_api::doctest_helper_json_rpc_foreign_assert_response!(
+	# r#"
+	{
+		"jsonrpc": "2.0",
+		"method": "receive_tx",
+		"id": 1,
+		"params": [
+		{
+			  "amount": "200000000",
+			  "coin_type": "mwc",
+			  "compact_slate": true,
+			  "fee": "8000000",
+			  "height": "4",
+			  "id": "0436430c-2b02-624c-2032-570501212b02",
+			  "lock_height": "0",
+			  "network_type": "automatedtests",
+			  "num_participants": 2,
+			  "participant_data": [
+				{
+				  "id": "0",
+				  "message": "my message",
+				  "message_sig": "8f07ddd5e9f5179cff19486034181ed76505baaad53e5d994064127b56c5841b7f9d23b4293ae333244716b93f8c85153042fe7e3375eab56ceccb786c66c917",
+				  "part_sig": null,
+				  "public_blind_excess": "02e89cce4499ac1e9bb498dab9e3fab93cc40cd3d26c04a0292e00f4bf272499ec",
+				  "public_nonce": "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f"
+				}
+			  ],
+			  "payment_proof": {
+				"receiver_address": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2",
+				"receiver_signature": null,
+				"sender_address": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5"
+			  },
+			  "ttl_cutoff_height": null,
+			  "tx": {
+				"body": {
+				  "inputs": [],
+				  "kernels": [],
+				  "outputs": []
+				},
+				"offset": "0000000000000000000000000000000000000000000000000000000000000000"
+			  },
+			  "version_info": {
+				"block_header_version": 2,
+				"orig_version": 3,
+				"version": 3
+			  }
+		},
+		null,
+		"Thanks, Yeastplume"
+		]
+	}
+	# "#
+	# ,
+	# r#"
+	{
+	  "id": 1,
+	  "jsonrpc": "2.0",
+	  "result": {
+		"Ok": {
+		  "amount": "200000000",
+		  "coin_type": "mwc",
+		  "compact_slate": true,
+		  "fee": "8000000",
+		  "height": "4",
+		  "id": "0436430c-2b02-624c-2032-570501212b02",
+		  "lock_height": "0",
+		  "network_type": "automatedtests",
+		  "num_participants": 2,
+		  "participant_data": [
+			{
+			  "id": "0",
+			  "message": "my message",
+			  "message_sig": "8f07ddd5e9f5179cff19486034181ed76505baaad53e5d994064127b56c5841b7f9d23b4293ae333244716b93f8c85153042fe7e3375eab56ceccb786c66c917",
+			  "part_sig": null,
+			  "public_blind_excess": "02e89cce4499ac1e9bb498dab9e3fab93cc40cd3d26c04a0292e00f4bf272499ec",
+			  "public_nonce": "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f"
+			},
+			{
+			  "id": "1",
+			  "message": "Thanks, Yeastplume",
+			  "message_sig": "8f07ddd5e9f5179cff19486034181ed76505baaad53e5d994064127b56c5841b93661746d9134e57780d435545a8d78399fc74b135b313c350c6086f90fd2fe5",
+			  "part_sig": "8f07ddd5e9f5179cff19486034181ed76505baaad53e5d994064127b56c5841bb431617fb560348f12fb9a288fd758a3189958a50d5cea436417539314b235f9",
+			  "public_blind_excess": "02e3c128e436510500616fef3f9a22b15ca015f407c8c5cf96c9059163c873828f",
+			  "public_nonce": "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f"
+			}
+		  ],
+		  "payment_proof": {
+			"receiver_address": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2",
+			"receiver_signature": "3045022100ce8823c1824ffb8cc4f600541f6d043c11ce3558bb53bab86a01f75702c36a4602207c4fb147c1683a5148f2bb84074bb8f2ff980aa88089bde0e29150f528086bfa",
+			"sender_address": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5"
+		  },
+		  "ttl_cutoff_height": null,
+		  "tx": {
+			"body": {
+			  "inputs": [],
+			  "kernels": [
+				{
+				  "excess": "000000000000000000000000000000000000000000000000000000000000000000",
+				  "excess_sig": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+				  "features": "Plain",
+				  "fee": "8000000",
+				  "lock_height": "0"
+				}
+			  ],
+			  "outputs": [
+				{
+				  "commit": "08f722ae0f34741fe91c65f5afc20c75f68df2d54fb1706b2be64b8e04c2827a7b",
+				  "features": "Plain",
+				  "proof": "ef998812683edb4f1a0db39374cf22da6f9163f39eca5765ffd20857044df8b0681701581dce5146ee3e36c663c330e3095ee9461c1684b5268772385ff78b84090f54b0d5d2b312ce08e03c5694b6556020c26bf9d82cc48f1192051046c6d1cf4166f75ca0f561672befe8b5d0ca4be6b9a3fab1177ef003fa20f9a53df2ae635d0241cccb5c7d366a0dc75f0cacad2bcfd057161320fbf4c95de2e3238b730c55d5ec31bac85e5ede7c8caddb1db8cb73e2d3f275508e141b9f4413015305198e8d7483fed3be1f692d41c70aab7537822ecbc25aff17ad40c2301ca7a272d427ac0e8d237ff73c3226c1b4d2b7c287c3850683af0d519dd5da7c9fc23dea940ef48e185fbf65eb9ee5b4295de493f741fabf36c447de5551b791664c15688d64048ddb081d391e181e7b6377f3c7349fb9dea631f54d9ad0fdd4844bc3b1a1e5b4582ac4d802ee043989020e1e62b2b698a42ade36cb023bb0dd05936f2f41bc010cb5633c9856e1136a6f60f6ac2205b0e549a061d6c56c17d012ebb8fea7062e01b10931b1c250b8c3a4984ee8f9b3ca732250a5419b6a830519d0583fb5511495c6a64e5e2a6e3fa0aeb91094d8beb76ac78f9ab9059ab79c8aa96ff88249ba6a63f351bfe3458038c1979e4cab7b971ce510f410770f17904fbb20de7ca9a7f719680945476b47eefbb9057e8209866f1c60e0dbc190a4449f0b4f19fd096636e1ad9370b4e49867396c0a2e8cb17c5cf103895d0a60b843680fedf4be083e05e838245191db0965a0ab3a621c0708bb1300562c5695e39607deb28ea7cf6ff62ee381e586c58ce1dfabec5fa14a6df8ef5b6de324d01b530ff10e746ef8cae9687f6eb480e735a2c7c568c94b5b9dbe80220dd5ccf164287a957a777b65006c14e17f908deff9565dec15249e2097c02e49e20cdfaeb3d47f00f8838c6180"
+				}
+			  ]
+			},
+			"offset": "dd6abf5dbf217f680e98b18853c7ebe96259731dd943d64781efec6abbbb575f"
+		  },
+		  "version_info": {
+			"block_header_version": 2,
+			"orig_version": 3,
+			"version": 3
+		  }
+		}
+	  }
+	}
+	# "#
+	# ,false, 5, true, false, true);
+	```
+	```
+	# // Using Slatepacks for interaction
+	# grin_wallet_api::doctest_helper_json_rpc_foreign_assert_response!(
+	# r#"
+	{
+		"jsonrpc": "2.0",
+		"method": "receive_tx",
+		"id": 1,
+		"params": [
+			"BEGINSLATEPACK. 7CbrcQV3Dt8raU4 7KCxgqEWohqSjBn UMCzWJ4A7xx4DKF T7jgS4MBLb8j1Kc ZJe5vhfxLiN2Q5A ddDQbMYFWxXm1Sp 3mVoe8PYrHG1ZEd HfamrNB7ow9PNeq ykJyEC6bb7UhR1q NFpmDXNTUhDDRRB PSqqqGNFHogbN9g A5sHNhgKR5Zpg73 v5zrXDdPdMPXbJp HQy1c4xcKXv4W8w kULgseEZEqvm6V1 wjfKkWWvtWjG3RQ GZ5fi7rXht3A1MN Xgt6zmPfQz. ENDSLATEPACK.",
+			null,
+			"Thanks, Yeastplume"
+		]
+	}
+	# "#
+	# ,
+	# r#"
+	{
+	  "id": 1,
+	  "jsonrpc": "2.0",
+	  "result": {
+		"Ok": "BEGINSLATEPACK. 8aoJzJikuJH129d YGVyyRs38jcW1Cv ERXDwxAoELwVdVs aaRxhciV4Vtnq6J gmjsiaQ2n72vCNy 4vno51a413Djmn9 bH6XUuNN7ozUJ5r zqPVHMzTGGDJ8qp 4FW8bjbJehxBqL8 b4ovjZLDFmJRDGJ vaYBss4behebpsA pwWTo6cyd7Sd5dF bRyGwnrrjrcJ3uh KpMiX43P9Z2Uj8C 19ydhvjhweBhXRz HyAHt8yg5H7aCTS gAfe5fjLnUfrfhQ 9AabA6bFWWrJi6y Ujt2inNbj5xjn6z GK8ULyrFqUqEuaf CKfb4Y4TmdzP2Xv chgv6srBssJjYpn 1MFEgMQ4oNtDi3A VoHgaDLQXpYzZFc EPMh2fyJALjwLhR VFKQz1sdJfeF4Wf 4Hx1TpJZm9AURJs JXYbMsD9VhYQ9WS TcingaMkNQwYQKi nswyz6PrmNatJpS SAeeMtSd3edzQcw NpmDScuiaDAM3xT aWGcPMUPwZftF8B N4q158ek919KtCW nHawHhj5P2gh3NK hyaWXmdVxg3kUK2 6K7FUKDNFuCJGEq BSnpe9w2wGLMYXD TdhDNhHZZTutynq sbeqJDjoFvkycW4 PNbgikmjMNSprpz txs7UUnV9n7yArN tXB16MXGtpX4HCt ak2ez7vzT91J2By vp5pvXfQWNjRqfv mLm9exPxaKqpSN5 24uWNfRc6aPL8d1 EJftjkR9bREABfj KEJURXu3HZS8jX5 eGY7nAzrawhEB8n N1UjoZortvRH8ce jCWsWyJVkMfgNvQ a8atj9qGYyLMsmC dWvbtYzrnHJdMCt RfDhgqbXp2xTNs9 1M3x8qfkqbKuHDg wCvPx1zHLVjwzPe 8Vkrja91Hoxde7U Zod38uE9HLhBCjX FCZkMefzQhHjmE9 xmxRuDdoisPerje YcQ443fw2ypT4x1 hCqqBgAFrJDbgv6 vF9tNNJX6GMBTTp anLBvz3irFevs2p HMuRo3DyzJcNSdX 6ottHbYSxrZDx7e pc5XDLxaohi2GxJ k5e9YEegcS1XJgV 7NR7qh77AL2T6Aj rhcyk9i7QY7PYN5 sm8Dba6ND2YV3EQ uNSktaWEgy5M6GX efwjUDaxsXWP2rC shCf1EA4JhRUvsm BeYJV44p3Ujs6Dd moxGBvKydB57f5a zjgYnPKhYdmUMfq qi5AdYG4n2CYxWu tAh1N4SUk871fYz 9b2pq59LeXiDa46 X7sXdftR8YcZSyu fQ7zbyH2TPoW9rY cp6rC5MM9hSVjZE Hj61qR8ULJGZ43U 9fPXWVCH9KvLBsp ZbCroJnwQh4HH61 tbv9DT7z2ttmoJC jP4w73AwHuojU7b dVMzRkp7Zfg6B4g rK6D7iDFWjzDhmD 7G9cYHXT8nRBrfW VzB2v7wGCuqi4xa UYwAUQXyxqrPS8c FhbDWCPmWSkT2FK GP3bTXL6sDxVzkP QhqX3d8yn2ygMPo KRpT83y2Dq2amgG 7v5qNMX4TWoPo2A 21Wt8oMgYLvhwgd XuBvsQmgKtYfHpi qo1i. ENDSLATEPACK."
+	  }
+	}
+	# "#
+	# ,false, 5, true, false, true);
 	```
 	*/
 	fn receive_tx(
@@ -455,7 +612,7 @@ pub trait ForeignRpc {
 		  "height": "5",
 		  "lock_height": "0",
 		  "coin_type":"mwc",
-		  "network_type": "mainnet",
+		  "network_type": "automatedtests",
 		  "participant_data": [
 			{
 			  "id": "0",
@@ -485,12 +642,12 @@ pub trait ForeignRpc {
 	  "result": {
 		"Ok": {
 		  "amount": "2000000000",
+		  "coin_type": "mwc",
 		  "fee": "7000000",
 		  "height": "5",
 		  "id": "0436430c-2b02-624c-2032-570501212b00",
 		  "lock_height": "0",
-		  "coin_type":"mwc",
-		  "network_type": "mainnet",
+		  "network_type": "automatedtests",
 		  "num_participants": 2,
 		  "participant_data": [
 			{
@@ -555,7 +712,198 @@ pub trait ForeignRpc {
 	  }
 	}
 	# "#
-	# ,false, 5, false, true);
+	# ,false, 5, false, true, false);
+	```
+	```
+	# // Compact slate test case
+	# grin_wallet_api::doctest_helper_json_rpc_foreign_assert_response!(
+	# r#"
+	{
+		"jsonrpc": "2.0",
+		"method": "finalize_invoice_tx",
+		"id": 1,
+		"params": [{
+		  "version_info": {
+			"version": 3,
+			"orig_version": 3,
+			"block_header_version": 2
+		  },
+		  "num_participants": 2,
+		  "id": "0436430c-2b02-624c-2032-570501212b00",
+		  "tx": {
+			"offset": "4fab1aebc24b08f6bc78141c56e14230f6e93e07028ff0e401940bd8414025b6",
+			"body": {
+			  "inputs": [
+				{
+				  "features": "Coinbase",
+				  "commit": "098778ce2243fa34e5876c8cb7f6dbbbd6a5649c1561973a807a6811941c12363c"
+				},
+				{
+				  "features": "Coinbase",
+				  "commit": "0910c1752100733bae49e877286835aab76d5856ef8139b6c6e3f51798aa461b03"
+				}
+			  ],
+			  "outputs": [
+				{
+				  "features": "Plain",
+				  "commit": "082967b3fe580cd110355010ef45450314fb067720db01b0e6873bb083d76708c9",
+				  "proof": "828bb24121aa0332c872062a42a8333c3ef81f8ae37d24053d953217368b3cada90410a50509a0b9fcbb5aded41397fc00ca1ff5acdac20d48afb0a3281d21e7026d32fdc6c5157461a35f98a809ffa09187c1e170ea24652ad213b7e4c9878654ac3dd9a8915eaf742db53182fcb42d2d341fbdfe8bd31bd001f4ff2c1ca9f9b1531da29137214f211edb7a5eb8f494cb8945f8527dd25bf7e698515043db4249540720008a708db5342230d05b069c094688ccb7c07d4a4a2293ea76cf999c555dc0ddc757891c360db1901bbb4dc20cae997f875f8de482d8160e05d60f9b0135e0fc313d8f953db78f1ea252449dd81cfa22dd895512ed39d566f0924542b543d25fc9fc7a819d228f3b0ee5e381f088f54893e86437dafc49dd923b3e6dff956ca843f951910379531fac9bb5fd01a182dd32a4c597f92da3c01af37cb9b0ec984500884438e74e54d7e76fa1ae7241d5050b13376310b24761634a6f6eb7cf000082f50ed7c1899d7918023d4f877586f964932a7af72e7a4984ddecfdd1921a2e1b80b00d6bd2e64a3f4cb6915a27a8d17a69d163cf45220a13fcddd15dc2bb91ae4f1b6a67224ab3b23e8d7d785df178ec78a84cf42cea086426f563822c8a4271a0b89bb21f84b643dbf1de21b6395039d673a376492767199fa36ccd9a13628ce61695424091acc16059450d59bc59fa7879e7306f5727217211b0264a6a560f886d520e41406ef45b1668805b88d246c5b2ca5a1762042c85be34fcd420ac3843f32236d079b4bd57d6b8d8013d9d18f8efb55e8e443cd9e1af9b144e7a56c8c6be0138af3b4a6c99bee9109bed2bce2e5145e736b125a2ec19aaf3fff713f6897fdd4158ce2ab04706b062ca2847bf70259c0fc4b0d390dc7fdaf0362047f775a912bd22da9d40f04d9790bcd5ece4b36b74c6c340b48c2926b916e8a9"
+				},
+				{
+				  "features": "Plain",
+				  "commit": "096e1669267c22ecb38c466d73b8578261d8e91c14dd66702dd5bf34f4232e10db",
+				  "proof": "7d567b0895a1103d19446929da8b98f2086819507ddce4b9dbb5ce6327107744e74aba59ef1834937da1b86eb7c1c1b0bc11d1c5d5ec79d25bc1e52aed1656f60d46f6878ba5ca8639efdbb9203e378e91171c11527c4a34713f06dc22f58ca4a08e68d83ff897e61cfc145fe376fa428b55e25cf20d15f10b9054778229798b30fb4e45d817a5053b682dcf591481a3c8174cfbba81e31aa525d5b884ca7a016713178f26c0fe8ae1f88b5382f8e70c4d91fb3828c0f307d828aa028281d3551525e68d20827ab0e6785c6b5747e895dcd38429b44e62b7f6c1c921d87ae954a9dd6e967ac52e6cd13a1d4bb2f1434da25a0723ef9c869cc573019577552dd0e0f808f8cc57723b041320025f6433779fe907998a4ec7606bf884b2199253b502065bed8e0625c2df858d6508c1aa44deddc68d06d00d81e97720e23e15a3464ed4733fc547e9fb772e563a1dbcd27ac55e40f674f9006e7dd4465444f3eb7527cb01905dee69a51cf2fc1810c861dd0834e7649d594c3e1740d85343a6b63c8a9e0a0f63059031899b38dfd9a192034d54029bd35e683ccab46282519b26cae20d398b754357abe1cf0370890f2897b5d8ada4fb3da777a8f8f1daa4197a380e6734504117dd2a92ea1917f174c44c59e0b50c6b7a5f9eb14e6d96cb6b3e5dbcb3d0eaf0e4aac1b6616d674bb708b7559e37de608e8a828bee7f25f627e2f06d9a87e8d651ade39e1e65db7204b94abc0b7ca6fdd75aadeeac6a876b6297e38039734ebdfa9a555152b4293cb00e423a66d64f827afa4748dd6fdc1dc33332bffb820dacbf5a6d347042db985bbd9cf476dceb45d6978035ba03d25612243fc164c0a902017ce7ffd632d041fa3c56554739e78c6d725ecbfdaa0739d3649239fb53294b7a46ee6ed403bf3815f6c78f06a8ca4e3c9b066234f7574fb6ea8f17d199"
+				}
+			  ],
+			  "kernels": [
+				{
+				  "features": "Plain",
+				  "fee": "7000000",
+				  "lock_height": "0",
+				  "excess": "000000000000000000000000000000000000000000000000000000000000000000",
+				  "excess_sig": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+				}
+			  ]
+			}
+		  },
+		  "amount": "2000000000",
+		  "fee": "7000000",
+		  "height": "5",
+		  "lock_height": "0",
+		  "ttl_cutoff_height": null,
+		  "coin_type": "mwc",
+		  "network_type": "automatedtests",
+		  "participant_data": [
+			{
+			  "id": "0",
+			  "public_blind_excess": "02e89cce4499ac1e9bb498dab9e3fab93cc40cd3d26c04a0292e00f4bf272499ec",
+			  "public_nonce": "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f",
+			  "part_sig": null,
+			  "message": null,
+			  "message_sig": null
+			},
+			{
+			  "id": "1",
+			  "public_blind_excess": "02e3c128e436510500616fef3f9a22b15ca015f407c8c5cf96c9059163c873828f",
+			  "public_nonce": "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f",
+			  "part_sig": "8f07ddd5e9f5179cff19486034181ed76505baaad53e5d994064127b56c5841bb9128fbee3070329b28c635090138e2b78fe1fbb840117b2f65777508179be0a",
+			  "message": null,
+			  "message_sig": null
+			}
+		  ],
+		  "payment_proof": null,
+		  "compact_slate": true
+		}
+		]
+	}
+	# "#
+	# ,
+	# r#"
+		{
+		  "id": 1,
+		  "jsonrpc": "2.0",
+		  "result": {
+			"Ok": {
+			  "amount": "2000000000",
+			  "coin_type": "mwc",
+			  "compact_slate": true,
+			  "fee": "7000000",
+			  "height": "5",
+			  "id": "0436430c-2b02-624c-2032-570501212b00",
+			  "lock_height": "0",
+			  "network_type": "automatedtests",
+			  "num_participants": 2,
+			  "participant_data": [
+				{
+				  "id": "0",
+				  "message": null,
+				  "message_sig": null,
+				  "part_sig": "8f07ddd5e9f5179cff19486034181ed76505baaad53e5d994064127b56c5841be4f05245454b9681075ed2f92baefea88971d1b8192abdc79d08683e9ef18c98",
+				  "public_blind_excess": "02e89cce4499ac1e9bb498dab9e3fab93cc40cd3d26c04a0292e00f4bf272499ec",
+				  "public_nonce": "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f"
+				},
+				{
+				  "id": "1",
+				  "message": null,
+				  "message_sig": null,
+				  "part_sig": "8f07ddd5e9f5179cff19486034181ed76505baaad53e5d994064127b56c5841bb9128fbee3070329b28c635090138e2b78fe1fbb840117b2f65777508179be0a",
+				  "public_blind_excess": "02e3c128e436510500616fef3f9a22b15ca015f407c8c5cf96c9059163c873828f",
+				  "public_nonce": "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f"
+				}
+			  ],
+			  "payment_proof": null,
+			  "ttl_cutoff_height": null,
+			  "tx": {
+				"body": {
+				  "inputs": [
+					{
+					  "commit": "098778ce2243fa34e5876c8cb7f6dbbbd6a5649c1561973a807a6811941c12363c",
+					  "features": "Coinbase"
+					},
+					{
+					  "commit": "0910c1752100733bae49e877286835aab76d5856ef8139b6c6e3f51798aa461b03",
+					  "features": "Coinbase"
+					}
+				  ],
+				  "kernels": [
+					{
+					  "excess": "09eac5f5872fa5e08e0c29fd900f1b8f77ff3ad1d0d1c46aeb202cbf92363fe0af",
+					  "excess_sig": "66074d25a751c4743342c90ad8ead9454daa00d9b9aed29bca321036d16c4b4d9d03e203295399aab9ea354abcc18cd40170f1739e2bd4799460df8e1f6b4ba3",
+					  "features": "Plain",
+					  "fee": "7000000",
+					  "lock_height": "0"
+					}
+				  ],
+				  "outputs": [
+					{
+					  "commit": "082967b3fe580cd110355010ef45450314fb067720db01b0e6873bb083d76708c9",
+					  "features": "Plain",
+					  "proof": "828bb24121aa0332c872062a42a8333c3ef81f8ae37d24053d953217368b3cada90410a50509a0b9fcbb5aded41397fc00ca1ff5acdac20d48afb0a3281d21e7026d32fdc6c5157461a35f98a809ffa09187c1e170ea24652ad213b7e4c9878654ac3dd9a8915eaf742db53182fcb42d2d341fbdfe8bd31bd001f4ff2c1ca9f9b1531da29137214f211edb7a5eb8f494cb8945f8527dd25bf7e698515043db4249540720008a708db5342230d05b069c094688ccb7c07d4a4a2293ea76cf999c555dc0ddc757891c360db1901bbb4dc20cae997f875f8de482d8160e05d60f9b0135e0fc313d8f953db78f1ea252449dd81cfa22dd895512ed39d566f0924542b543d25fc9fc7a819d228f3b0ee5e381f088f54893e86437dafc49dd923b3e6dff956ca843f951910379531fac9bb5fd01a182dd32a4c597f92da3c01af37cb9b0ec984500884438e74e54d7e76fa1ae7241d5050b13376310b24761634a6f6eb7cf000082f50ed7c1899d7918023d4f877586f964932a7af72e7a4984ddecfdd1921a2e1b80b00d6bd2e64a3f4cb6915a27a8d17a69d163cf45220a13fcddd15dc2bb91ae4f1b6a67224ab3b23e8d7d785df178ec78a84cf42cea086426f563822c8a4271a0b89bb21f84b643dbf1de21b6395039d673a376492767199fa36ccd9a13628ce61695424091acc16059450d59bc59fa7879e7306f5727217211b0264a6a560f886d520e41406ef45b1668805b88d246c5b2ca5a1762042c85be34fcd420ac3843f32236d079b4bd57d6b8d8013d9d18f8efb55e8e443cd9e1af9b144e7a56c8c6be0138af3b4a6c99bee9109bed2bce2e5145e736b125a2ec19aaf3fff713f6897fdd4158ce2ab04706b062ca2847bf70259c0fc4b0d390dc7fdaf0362047f775a912bd22da9d40f04d9790bcd5ece4b36b74c6c340b48c2926b916e8a9"
+					},
+					{
+					  "commit": "096e1669267c22ecb38c466d73b8578261d8e91c14dd66702dd5bf34f4232e10db",
+					  "features": "Plain",
+					  "proof": "7d567b0895a1103d19446929da8b98f2086819507ddce4b9dbb5ce6327107744e74aba59ef1834937da1b86eb7c1c1b0bc11d1c5d5ec79d25bc1e52aed1656f60d46f6878ba5ca8639efdbb9203e378e91171c11527c4a34713f06dc22f58ca4a08e68d83ff897e61cfc145fe376fa428b55e25cf20d15f10b9054778229798b30fb4e45d817a5053b682dcf591481a3c8174cfbba81e31aa525d5b884ca7a016713178f26c0fe8ae1f88b5382f8e70c4d91fb3828c0f307d828aa028281d3551525e68d20827ab0e6785c6b5747e895dcd38429b44e62b7f6c1c921d87ae954a9dd6e967ac52e6cd13a1d4bb2f1434da25a0723ef9c869cc573019577552dd0e0f808f8cc57723b041320025f6433779fe907998a4ec7606bf884b2199253b502065bed8e0625c2df858d6508c1aa44deddc68d06d00d81e97720e23e15a3464ed4733fc547e9fb772e563a1dbcd27ac55e40f674f9006e7dd4465444f3eb7527cb01905dee69a51cf2fc1810c861dd0834e7649d594c3e1740d85343a6b63c8a9e0a0f63059031899b38dfd9a192034d54029bd35e683ccab46282519b26cae20d398b754357abe1cf0370890f2897b5d8ada4fb3da777a8f8f1daa4197a380e6734504117dd2a92ea1917f174c44c59e0b50c6b7a5f9eb14e6d96cb6b3e5dbcb3d0eaf0e4aac1b6616d674bb708b7559e37de608e8a828bee7f25f627e2f06d9a87e8d651ade39e1e65db7204b94abc0b7ca6fdd75aadeeac6a876b6297e38039734ebdfa9a555152b4293cb00e423a66d64f827afa4748dd6fdc1dc33332bffb820dacbf5a6d347042db985bbd9cf476dceb45d6978035ba03d25612243fc164c0a902017ce7ffd632d041fa3c56554739e78c6d725ecbfdaa0739d3649239fb53294b7a46ee6ed403bf3815f6c78f06a8ca4e3c9b066234f7574fb6ea8f17d199"
+					}
+				  ]
+				},
+				"offset": "e88c17b8cdcb6606c3d263a8fb4be8fd6bd9d435852c6ff78602385bb31a8849"
+			  },
+			  "version_info": {
+				"block_header_version": 2,
+				"orig_version": 3,
+				"version": 3
+			  }
+			}
+		  }
+		}
+	# "#
+	# ,false, 5, false, true, true);
+	```
+	```
+	# // Slatepack input/outputs test
+	# grin_wallet_api::doctest_helper_json_rpc_foreign_assert_response!(
+	# r#"
+	{
+		"jsonrpc": "2.0",
+		"method": "finalize_invoice_tx",
+		"id": 1,
+		"params": [
+			"BEGINSLATEPACK. LvPf4wqFUuB8M3g aaNzvKb37KqfVFr 6jpq8kmuqbPVaQz sDENZBy3iG8b9Yd nVNDcfaq9k7XWV3 FxdSpnKAbA5NEQu 8CyFLxvWrjxoCiN Af1FrDumnURdmTq LzX6gr8b5D3jGxS ySB8E9ZJPPpJkTc xFLx4ZaFJFR5cE2 ansyD47Gm27UtH5 s1tBmUimic4fYAa HpQg17AehGfsyGw KDtr4iefPeSX4rZ C43a1JjStsKh1D1 DtF4NCfvQgAKcHR ZgTPYu5ydkWFdUh Jzi2Fyo6GVeWjRs bRNJWY65MGyRJEg 1w8GKmfnzcDSuLS c6ydDnD8jggpsbY ppbRkQLEZAviA21 PQ5o1HQTbzAaWhw 3Kew6arGvqzeqb3 Uya3Gz4ZEvmSctX LYueKexF8F3BgGF 44HWEisMMBrZc1E bePZAvj3CRTgghp ooeHmXJrr2ArnDd d9hrv76TjE1qhJM DHg7hdZiTEUFsKv FZYDkxfLPnBiup7 ELxE8Q6gjDGAA6g SJLBkCjpMuNhvqV uqejrzdUbuDqmjr NMVgS7xxLVumhra ExDSt9VYwsUXr5T rcqp9u9rbM1x276 ioxNvB27mZEckKp KkGaQE5ER6n73DL odWQo1feFE75G9V m5TLfkceg17wskY cnr3VWQKtVevvMm TPzGQWCgRMsz4dy r4pk3E1W5u7Li7u QEhKavgibXCxLkm imxvaNX8SqFWDPx vieyFjKjL3vQKCo bJ21DFpJEuXUM5G t4CMiM3SjyPwzMQ TxufrTfRNVC3TJU nfqntgL7jHzConR UsB4PprYA66NAY4 FtcdQb97BpK5RJt YLqrnYBGohgWu7K uEN2UcuU51DBrzg sg5GDWm6qQKX8Bb EntaFR5PjXXRP9C sisxy4AVmzVzxwk PZXjJVhwrb2tZiq UFRHMUo3hY5uEWH afaQZTC819AUU2e JjoPKqNPjwQLQTk tr5tyKSbLHKaA2u RqfzDddAxzdCyVd VbcvrvP6tHmtNWa jn7ZMMWAMevG2D7 g7iz23JzkVbS1Ae ijGQYenDMrJMSdw 5vAntPTFkVGkaH6 5AoP1ea2dXRXjiJ vTYfkkh6HyDVZyS 4hjt7Bv65urXomi SFb3hru4fVVztd4 6D7obuQTKzMp88C qAorxgc8hU89sb4 XMza55dbasVRkcf qyeBJ6Brjnbs6Mg CTSjnjX5U4bHm2H P2BUKvL3q81CDEt Df8UVyAaWdNbjHS qgbBfb6wjGAE9vK bDgARAMUzXR1qBq aGoMEtoeCjzre2b nrFDzJbXrhc1bUe TsRzDzEsLVdacx2 zg6gmwc5g11mSfx qKWvmmVBtvtsEz6 xyjpWYtQronDsSx dvxkGwr4tYHi3w4 qsMT5ynFY5rN6Uf nMfUL4YnHQewT2A DHdq2i8EAtmmZaW 4jgfnCSspjkpeUC m8gKSNyUmHzAmue KTzr9xvPWPEHPjd 71p3ivEdVYVJUGc PjcgitcixwmCNfR sjDoKuaGDdDRkHL W9yQBydWT2p6EwA YGaoshM46mUufm8 RvbAXf8JBh6fa5o JHQufEnXw8QooEe WgJNoD1aLLEUnv1 Eq3HHBmgYJS8K1a YCL34WFwhFXqng4 qJCk7j8cpXAzmcL h9bjx8dTrqLoFsB b7zuwcyf6xV9BoY diUpeJ988dQz4cA uEbBcmFXzcFttXA uhup2sa6PWZgDwo m14769GB7znUFvL GjWNXpswRe5cig9 G2GKXBubiDUmh2p xCSKasttCBCRx7J MdQCZn2u5S7uAzz N8tPVAR5ZDK7647 e4XoPxNKYXi7xp9 bzr3Ft7ieEkn67h JwwM9PMj4CsqSRH 5stAyu37oNp8p4j X9zZkrwDav8QVz5 fMShDDXVmHCrDyt C21nutrMmG7QtDw tDE44d5TVTsQXzk 37H9BKshGnjgm8G 1NXG1s2Mqh1h33y KPetA8TByPfNDgv jK9N85TM1a1e9fU kESEf7QaQ4dEjHQ VXivVhXgiFa1Fvx JXDZTVDxpaPPPkF 9kavi845vZ5mF4y XGTancPuajYU9iK Bu8DbPa1z8bfjCe LGdnRhzwBz1k3o7 7seBdjz312uQ5no Nrq9Hq6MBGZFToc HtrZGcCAjcNYKJj SshfMYoZbau7RMX 7pzPV24Qk2PnkMt Tyr5y7oB4ww4GRE AMw3DefxMbtVrVi bP6vBZ2gcX7LfFw Xns4KUPFAiwJG2U tsKg2mguiBzhQgR URNkpDpoJHhjqDW hEavtM8f5drLhKq MyMSXEPvoyGrDGD xZVPs9zzT6GaUKw re7xbS9ruiH32b4 AESBaRA2ghJWJGi xqWbkci6aBrpAvj 8w7UeUqsrjR8eoh QYdm9iSE1AbhCyh PjwWoGXNobte6ED EBEp7EEw9LQ2GMh 5aJ9cZS3wSLYMju b4aXSraUjWYkmeL 9HskSNAVX945CZ1 UCbrssJBq8z8yXx gLHXUcBJJPgb1vx rNVEuezTDuQvDDa vkrFC3y5a3w4DH3 5JrSFoobxCh4zTW NfufAJULWr5uKYN 9RcJoLpzop2b9vi 1HDU89XFiwAXVEK rrRNjHQZB. ENDSLATEPACK."
+		]
+	}
+	# "#
+	# ,
+	# r#"
+		{
+		  "id": 1,
+		  "jsonrpc": "2.0",
+		  "result": {
+			"Ok": "BEGINSLATEPACK. 7LoYEkkmDC5HfWa 47hMisjgDaGFZcT 6CvYfuqbMHNCH72 x4uxtLQujK7kUhk b5y65XPkfRSmGEB yVZp36dx4NQdyor hxo6WhU62k5TF3K VbG4V19jSzZimqK KwWXHo2MnawU9kv bHn8CorPTQV1oey bpUEczcQeRqdXDF yTGz7YbKu6VNZwH UYNzcvYQ9BhgWrG QrfdAG8muUvtYUT k7AKZvgHuLvxPrq keDFxCNbtBUChNf 3EbtUmTvf2RT1yz xEXoattRqG1Ei7z 7fCNFngAK85gWgN qwCo75GfmAF91Vb sGA4JvbG6q5KCXe dzr865igjiuadMn GF2BrB3beZzWwF6 VYTfvqf3DxGvwf1 5oUY7uKFGKMegMs b9rRX31AKXMQZSK 56jW2eeqLVtEYUL jJsABaQtRE2xD4T 2SUzhKzpQNVx4JM t5PcShaguHX2otg aCJj7Ch3JKo1KPy pstULk3auy7rnKK jZpPWEYK5ntDnYi xDGPTVCtyG6UcPN Phaq6vkr9PsrAxN jLQGkCEFCnH8EmQ UhoZJyEwVmEvrHJ riiG6o5zEmuKPXR h9vQxGG2GHiYFjn zEFprxqJrsKSmez Tp74H9iDdZ9DNUJ RUdK9VHX6Axtck7 whcp3pvdto8Jvp8 v424mQ9YyMoB9Uy cePBE3oJML8WmhT VzhT9K7wp27w1K8 cuZ2XjyJofLQkof 8dHNWa5HgeoLrJL YzMdF5wVAvAzuHb UyBenHRqmiMwHYc LPNSFzFfSLQP2zC MYea9U4y2KhFtPM XpcZTxbM7hURcgf JvzGVigbGWDL7ar S48w5gEtspL4fjk 24SBKE1tUo2rgjN Veb3nFzs4xxrxKp VBbdV7yNxEuXNHu HWN3utpTR5FsNP1 1HGbb8BacoGQCLh Jzmc4o9xeRsvJLu LR7jhsgSZNPt8XX TYGY7sw5EKAqUzV GWxBVLsvHyb5DS4 MiBafcQC9x6bWcb J2kocdkHeM4zN2A BJNcRJttBNYxivV ecyJTUyd3Hh2xR3 dinCwPgHnCxrFha kBtFm3wnzWwRKnM 8UXAKvSiULiXvYs f4P2wjcTbH6Rmyu K3PeHen3zV77pvG AW4p7fsobHd1qGo DnfEPJvFUHF4mLB mzn91QjDu8sMpkn wD6xjcf1Jgafsyd 9hVBwSL7MozEdY9 o36UCtQWc3Mhwvk 7VbfUVqrgBwNJ5P EYjWriYfDEQXkdV YyKQmUq8aNNv6A2 byxgcyzJVFXnu9e uWPQhRC29eZ7TkJ ckpE51UsMqDgszv BcZfAKmuCDms2Ad JrfiWnVahdUuLHa 79xdAYufT82Sswg YfEdM2oWwCVDyzJ c5C7rcbMQQZYceX vUm8z51ZCE8ousG jao6bTByZuxT2Co HquXhdUusrZUJh5 QLPphgknaJNbske ptwNUDSktKLVNcv dBRWDLAS2vTdgwB jzWmLoa8rvWVa8C m2yQUWqoR8qMnBW 8PmfyakcxMgbZkv x7U2gHm4jPcYrBD N5uTJXeHys7r5Mv m3RaHH3zBkxFrDs 9o7nJp3FuHeYRhz qGaNHcxawFR68Rj MaruQT61Zc3U283 DMwept1jbLKAW97 zM83jki5xZ9MZQ3 hw6XLFJmCRhUFv5 UTJSrCZ7ZJ7kBd4 2ipBQX81isDnWGc gYN1AB4iqZmteLH uMZGS7DWvQ2ideV f1QdA9AXps1SVGg caWZaSjoJJnYy1S kVXmq2paaG9FH5D mmrkc89UU6dmYDZ XKUhmm8Z6RMbSWD 4DPHkE22qmGM7Vw LmGUJX5Sx5QC5nu 33Mm7hAeyPx8Tfy C3WhL9YSXXmwUKk xWi2hQkkJjYv7x8 HDTL9nZuYkgGTMR M4eVZtSv2AreYyy vHmCTCkBsxx8GWr SqKxb8RvZktDJ6z gb2TjtPkg721WSy EVtmFQLGAB4BjVj t5eEHJw83WLPPG7 wzWwNDhCx6CoyXa 5wasVXbzP6rdvMt SzLoGcKmjvnMM16 AFFXFwwmxELjF3X nQbzpT1gFVTraai B37EVKwqaPkaDoF 5UGehnMbmSxLVtR RvxarUrJcD8NDe5 3426yqD98DMVeHw z625MwRXio56ezF xAF4UXgMdCjE1pQ FaquMh4oACvy5iN PHv4chvUkFGkG5K mzbqfn7RJYhkXVW UwjyRw4aiHJHyUF DdN27xSByrx1c5J VnGiLRjjAuEnqeR eaAajmFJs52njjp x9gqvb1x42tXua9 DKEMAx5HmcnE4V5 1mpqxdQSGqdfyMb yDfzVLAoitMYjX2 FaNJytC6eJVmcsW Bhijd3FyPLjxyVV 6JSp9Sw6bYXuY1B GvMiX15igrNnuU1 igrhPWBv1Q5ph4B jX9U8zZ1PsEfxt7 pBZXCJkf8ivStrY 3kWHr93tCYbPL7W 1tEUCo4Hb3oF4F1 pQV6V4urp5kgkPa oHZuFtVyyTAemWC Fi77iaPbCNsWKCM reKP93Eh4rJCFMC P5A63sQm3Zdyu7S Hhf8X4u8mwYesYs c67HPZAtdUWbdxV 1p26PABewf2yryy VSxw6X2xWhdjvNt WbDa8eXx9Xfhf8g 5U48MyCXYp77aom 96xqd2cRuJGv7Yn fSMtwY1KqzdnKju YTsA5ybRiWYhSAp WqVRr1ccgW38DcN xJxk8JvWKXkzxEp NjHUDzV4CYx9wSN jy2z1g93eFAojML XoPpE3116JukTre aqNWVurZUMmSJdP UdenCiDrN4L2qs8 69kv79VxfSR6XmX 4ZfRmzGx7A. ENDSLATEPACK."
+		  }
+		}
+	# "#
+	# ,false, 5, false, true, true);
 	```
 	*/
 	fn finalize_invoice_tx(&self, slate: VersionedSlate) -> Result<VersionedSlate, ErrorKind>;
@@ -639,6 +987,7 @@ where
 			SlatePurpose::SendResponse,
 			sender, // sending back to the sender
 			None,
+			self.doctest_mode,
 		)
 		.map_err(|e| {
 			ErrorKind::SlatepackEncodeError(format!("Unable to encode the slatepack, {}", e))
@@ -677,6 +1026,7 @@ where
 			SlatePurpose::FullSlate,
 			sender, // sending back to the sender
 			None,
+			self.doctest_mode,
 		)
 		.map_err(|e| {
 			ErrorKind::SlatepackEncodeError(format!("Unable to encode the slatepack, {}", e))
@@ -710,6 +1060,7 @@ pub fn run_doctest_foreign(
 	blocks_to_mine: u64,
 	init_tx: bool,
 	init_invoice_tx: bool,
+	compact_slate: bool,
 ) -> Result<Option<serde_json::Value>, String> {
 	use easy_jsonrpc_mw::Handler;
 	use grin_wallet_impls::test_framework::{self, LocalWalletClient, WalletProxy};
@@ -848,15 +1199,41 @@ pub fn run_doctest_foreign(
 		assert!(wallet_refreshed);
 	}
 
+	let (w1_tor_secret, w1_tor_pubkey) = {
+		let mut w_lock = wallet1.lock();
+		let w = w_lock.lc_provider().unwrap().wallet_inst().unwrap();
+		let k = w.keychain((&mask1).as_ref()).unwrap();
+		let secret = proofaddress::payment_proof_address_dalek_secret(&k, None).unwrap();
+		let tor_pk = DalekPublicKey::from(&secret);
+		(secret, tor_pk)
+	};
+	let w1_slatepack_address = ProvableAddress::from_tor_pub_key(&w1_tor_pubkey);
+
+	let (w2_tor_secret, w2_tor_pubkey) = {
+		let mut w_lock = wallet2.lock();
+		let w = w_lock.lc_provider().unwrap().wallet_inst().unwrap();
+		let k = w.keychain((&mask2).as_ref()).unwrap();
+		let secret = proofaddress::payment_proof_address_dalek_secret(&k, None).unwrap();
+		let tor_pk = DalekPublicKey::from(&secret);
+		(secret, tor_pk)
+	};
+	let w2_slatepack_address = ProvableAddress::from_tor_pub_key(&w2_tor_pubkey);
+
 	if init_invoice_tx {
 		let amount = 2_000_000_000;
 		let mut slate = {
 			let mut w_lock = wallet2.lock();
 			let w = w_lock.lc_provider().unwrap().wallet_inst().unwrap();
-			let args = IssueInvoiceTxArgs {
+			let mut args = IssueInvoiceTxArgs {
 				amount,
 				..Default::default()
 			};
+
+			if compact_slate {
+				// Address of this wallet. Self and encrypt to self is totally valid case
+				args.slatepack_recipient = Some(w1_slatepack_address.clone());
+			}
+
 			api_impl::owner::issue_invoice_tx(&mut **w, (&mask2).as_ref(), &args, true, 1).unwrap()
 		};
 		api_impl::owner::update_wallet_state(wallet1.clone(), (&mask1).as_ref(), &None).unwrap();
@@ -885,6 +1262,23 @@ pub fn run_doctest_foreign(
 		println!("INIT INVOICE SLATE");
 		// Spit out slate for input to finalize_invoice_tx
 		println!("{}", serde_json::to_string_pretty(&slate).unwrap());
+
+		if compact_slate {
+			let vslate = VersionedSlate::into_version(
+				slate,
+				SlateVersion::SP,
+				SlatePurpose::InvoiceResponse,
+				w1_tor_pubkey.clone(),
+				Some(w2_tor_pubkey.clone()),
+				&w1_tor_secret,
+				true,
+			)
+			.unwrap();
+			println!(
+				"Slatepack: {}",
+				serde_json::to_string_pretty(&vslate).unwrap()
+			);
+		}
 	}
 
 	api_impl::owner::update_wallet_state(wallet1.clone(), (&mask1).as_ref(), &None).unwrap();
@@ -892,7 +1286,7 @@ pub fn run_doctest_foreign(
 		let amount = 2_000_000_000;
 		let mut w_lock = wallet1.lock();
 		let w = w_lock.lc_provider().unwrap().wallet_inst().unwrap();
-		let args = InitTxArgs {
+		let mut args = InitTxArgs {
 			src_acct_name: None,
 			amount,
 			minimum_confirmations: 2,
@@ -901,11 +1295,34 @@ pub fn run_doctest_foreign(
 			selection_strategy_is_use_all: true,
 			..Default::default()
 		};
+
+		if compact_slate {
+			// Address of this wallet. Self and encrypt to self is totally valid case
+			args.slatepack_recipient = Some(w2_slatepack_address.clone());
+		}
+
 		let slate =
 			api_impl::owner::init_send_tx(&mut **w, (&mask1).as_ref(), &args, true, 1).unwrap();
 		println!("INIT SLATE");
 		// Spit out slate for input to finalize_tx
 		println!("{}", serde_json::to_string_pretty(&slate).unwrap());
+
+		if compact_slate {
+			let vslate = VersionedSlate::into_version(
+				slate,
+				SlateVersion::SP,
+				SlatePurpose::SendInitial,
+				w2_tor_pubkey.clone(),
+				Some(w1_tor_pubkey.clone()),
+				&w2_tor_secret,
+				true,
+			)
+			.unwrap();
+			println!(
+				"Slatepack: {}",
+				serde_json::to_string_pretty(&vslate).unwrap()
+			);
+		}
 	}
 
 	let mut api_foreign = match init_invoice_tx {
@@ -922,7 +1339,7 @@ pub fn run_doctest_foreign(
 #[doc(hidden)]
 #[macro_export]
 macro_rules! doctest_helper_json_rpc_foreign_assert_response {
-	($request:expr, $expected_response:expr, $use_token:expr, $blocks_to_mine:expr, $init_tx:expr, $init_invoice_tx:expr) => {
+	($request:expr, $expected_response:expr, $use_token:expr, $blocks_to_mine:expr, $init_tx:expr, $init_invoice_tx:expr, $compact_slate:expr) => {
 		// create temporary wallet, run jsonrpc request on owner api of wallet, delete wallet, return
 		// json response.
 		// In order to prevent leaking tempdirs, This function should not panic.
@@ -948,6 +1365,7 @@ macro_rules! doctest_helper_json_rpc_foreign_assert_response {
 			$blocks_to_mine,
 			$init_tx,
 			$init_invoice_tx,
+			$compact_slate,
 			)
 		.unwrap()
 		.unwrap();
@@ -960,4 +1378,10 @@ macro_rules! doctest_helper_json_rpc_foreign_assert_response {
 				);
 			}
 	};
+}
+
+// placeholder for doc tests.
+#[test]
+fn foreign_api_v3_test() {
+	//use crate as grin_wallet_api;
 }

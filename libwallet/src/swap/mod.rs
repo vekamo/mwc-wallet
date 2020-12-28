@@ -1270,6 +1270,8 @@ mod tests {
 	#[test]
 	#[serial]
 	fn test_swap_serde() {
+		global::set_local_chain_type(global::ChainTypes::Floonet);
+
 		// Seller context
 		let ctx_sell_str = read_to_string("swap_test/context_sell.json").unwrap();
 		let ctx_sell: Context = serde_json::from_str(&ctx_sell_str).unwrap();

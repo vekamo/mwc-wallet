@@ -59,8 +59,8 @@
         "fee": "7000000",
         "height": "300000",
         "lock_height": "0",
-        "coin_type": null,
-        "network_type": null,
+        "coin_type": "mwc",
+        "network_type": "floonet",
         "participant_data": [
           {
             "id": "0",
@@ -106,8 +106,8 @@
         "fee": "4000000",
         "height": "300000",
         "lock_height": "300280",
-        "coin_type": null,
-        "network_type": null,
+        "coin_type": "mwc",
+        "network_type": "floonet",
         "participant_data": [
           {
             "id": "0",

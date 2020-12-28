@@ -33,8 +33,8 @@ use crate::libwallet::swap::types::{Action, SwapTransactionsConfirmations};
 use crate::libwallet::swap::{message::Message, swap::Swap, swap::SwapJournalRecord};
 use crate::libwallet::{
 	AcctPathMapping, Error, ErrorKind, InitTxArgs, IssueInvoiceTxArgs, NodeClient,
-	NodeHeightResult, OutputCommitMapping, PaymentProof, Slate, SlatePurpose, SwapStartArgs,
-	TxLogEntry, VersionedSlate, WalletInfo, WalletInst, WalletLCProvider,
+	NodeHeightResult, OutputCommitMapping, PaymentProof, Slate, SlatePurpose, SlateVersion,
+	SwapStartArgs, TxLogEntry, VersionedSlate, WalletInfo, WalletInst, WalletLCProvider,
 };
 use crate::util::logger::LoggingConfig;
 use crate::util::secp::key::SecretKey;
@@ -1002,7 +1002,14 @@ where
 	) -> Result<(), Error> {
 		let mut w_lock = self.wallet_inst.lock();
 		let w = w_lock.lc_provider()?.wallet_inst()?;
-		owner::tx_lock_outputs(&mut **w, keychain_mask, slate, address, participant_id)
+		owner::tx_lock_outputs(
+			&mut **w,
+			keychain_mask,
+			slate,
+			address,
+			participant_id,
+			self.doctest_mode,
+		)
 	}
 
 	/// Finalizes a transaction, after all parties
@@ -1072,7 +1079,8 @@ where
 	) -> Result<Slate, Error> {
 		let mut w_lock = self.wallet_inst.lock();
 		let w = w_lock.lc_provider()?.wallet_inst()?;
-		let (slate_res, _context) = owner::finalize_tx(&mut **w, keychain_mask, &slate, true)?;
+		let (slate_res, _context) =
+			owner::finalize_tx(&mut **w, keychain_mask, &slate, true, self.doctest_mode)?;
 
 		Ok(slate_res)
 	}
@@ -2512,9 +2520,11 @@ where
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		slate: &Slate,
+		version: Option<SlateVersion>,
 		content: SlatePurpose,
 		slatepack_recipient: Option<DalekPublicKey>,
 		address_index: Option<u32>,
+		use_test_rng: bool,
 	) -> Result<VersionedSlate, Error> {
 		let mut w_lock = self.wallet_inst.lock();
 		let w = w_lock.lc_provider()?.wallet_inst()?;
@@ -2522,10 +2532,11 @@ where
 			&mut **w,
 			keychain_mask,
 			slate,
-			None,
+			version,
 			content,
 			slatepack_recipient,
 			address_index,
+			use_test_rng,
 		)
 	}
 }

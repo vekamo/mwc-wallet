@@ -103,6 +103,7 @@ Proof flag          | 1 bit     | Optional, 1 if proof data present, 0 if not
 Proof Sender Address    | variable | Optional, the sender address saved as binary Dalek PK or secp256k1 PK
 Proof Receiver address  | variable | Optional, the receiver address saved as binary Dalek PK or secp256k1 PK
 Proof Signature flag    | 1 bit  | Optional, 1 if signature data present, 0 if not
+Proof Signature len delta | 4 bit   | Optional, length can be longet then 64 byte (can be 70). Len is 64 + this_value 
 Proof Signature         | 64 bytes | Optional, signature data
 Future usage        | any       | Here we can write encrypted frontward compatible data.
 CRC32               | last 4 bytes | The check sum for Unencrypoted and Encrypted data. It allow to verify is unencrypted or encrypted data was adjusted

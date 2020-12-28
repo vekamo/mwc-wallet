@@ -45,7 +45,6 @@ use std::sync::Arc;
 const USER_MESSAGE_MAX_LEN: usize = 1000; // We can keep messages as long as we need unless the slate will be too large to operate. 1000 symbols should be enough to keep everybody happy
 use crate::proof::crypto;
 use crate::proof::proofaddress;
-use grin_core::global;
 use grin_wallet_util::grin_core::core::Committed;
 
 /// List of accounts
@@ -537,13 +536,6 @@ where
 		batch.commit()?;
 	}
 
-	slate.coin_type = Some("mwc".to_string());
-	if global::is_floonet() {
-		slate.network_type = Some("floonet".to_string());
-	} else {
-		slate.network_type = Some("mainnet".to_string());
-	}
-
 	Ok(slate)
 }
 
@@ -728,7 +720,14 @@ where
 			}
 		}
 
-		selection::repopulate_tx(&mut *w, keychain_mask, &mut ret_slate, &context, false)?;
+		selection::repopulate_tx(
+			&mut *w,
+			keychain_mask,
+			&mut ret_slate,
+			&context,
+			false,
+			use_test_rng,
+		)?;
 	}
 
 	// Save the aggsig context in our DB for when we
@@ -750,6 +749,7 @@ pub fn tx_lock_outputs<'a, T: ?Sized, C, K>(
 	slate: &Slate,
 	address: Option<String>,
 	participant_id: usize,
+	use_test_rng: bool,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<'a, C, K>,
@@ -762,7 +762,14 @@ where
 	let mut sl = slate.clone();
 
 	if slate.compact_slate {
-		selection::repopulate_tx(&mut *w, keychain_mask, &mut sl, &context, true)?;
+		selection::repopulate_tx(
+			&mut *w,
+			keychain_mask,
+			&mut sl,
+			&context,
+			true,
+			use_test_rng,
+		)?;
 
 		if sl.participant_data.len() == 1 {
 			// purely for invoice workflow, payer needs the excess back temporarily for storage
@@ -789,6 +796,7 @@ pub fn finalize_tx<'a, T: ?Sized, C, K>(
 	keychain_mask: Option<&SecretKey>,
 	slate: &Slate,
 	refresh_from_node: bool,
+	use_test_rng: bool,
 ) -> Result<(Slate, Context), Error>
 where
 	T: WalletBackend<'a, C, K>,
@@ -826,7 +834,7 @@ where
 			args.selection_strategy_is_use_all,
 			parent_key_id.clone(),
 			0,
-			false,
+			use_test_rng,
 			true,
 			&args.outputs,
 			1,
@@ -847,14 +855,21 @@ where
 		}
 
 		// Now do the actual locking
-		tx_lock_outputs(w, keychain_mask, &sl, args.address, 0)?;
+		tx_lock_outputs(w, keychain_mask, &sl, args.address, 0, use_test_rng)?;
 	}
 
 	if slate.compact_slate {
 		// Add our contribution to the offset
 		sl.adjust_offset(&keychain, &mut context)?;
 
-		selection::repopulate_tx(&mut *w, keychain_mask, &mut sl, &context, true)?;
+		selection::repopulate_tx(
+			&mut *w,
+			keychain_mask,
+			&mut sl,
+			&context,
+			true,
+			use_test_rng,
+		)?;
 	}
 
 	tx::complete_tx(&mut *w, keychain_mask, &mut sl, 0, &context)?;

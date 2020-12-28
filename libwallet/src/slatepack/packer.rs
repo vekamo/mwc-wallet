@@ -52,6 +52,7 @@ impl Slatepacker {
 		sender: DalekPublicKey,
 		recipient: DalekPublicKey,
 		secret: &DalekSecretKey,
+		use_test_rng: bool,
 	) -> Result<String, Error> {
 		let pack = Slatepack {
 			sender: sender,
@@ -60,7 +61,7 @@ impl Slatepacker {
 			slate: slate,
 		};
 
-		let slate_bin = pack.to_binary(slate_version, secret)?;
+		let slate_bin = pack.to_binary(slate_version, secret, use_test_rng)?;
 
 		SlatepackArmor::encode(&slate_bin)
 	}
@@ -189,8 +190,6 @@ fn slatepack_io_test() {
 		height: 67,
 		lock_height: 0,
 		ttl_cutoff_height: Some(54),
-		coin_type: None, // N/A for slatepack
-		network_type: None, // N/A  build in at SP
 		participant_data: vec![
 			ParticipantData {
 				id: 0,
@@ -233,6 +232,7 @@ fn slatepack_io_test() {
 		dalek_pk.clone(),
 		dalek_pk2.clone(), // sending to self, should be fine...
 		&dalek_sk,
+		true,
 	)
 	.unwrap();
 	println!("slatepack_string = {}", slatepack_string);

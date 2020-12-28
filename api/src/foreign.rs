@@ -490,7 +490,13 @@ where
 				Some(slate),
 			)?;
 		}
-		foreign::finalize_invoice_tx(&mut **w, (&self.keychain_mask).as_ref(), slate, true)
+		foreign::finalize_invoice_tx(
+			&mut **w,
+			(&self.keychain_mask).as_ref(),
+			slate,
+			true,
+			self.doctest_mode,
+		)
 	}
 
 	pub fn receive_swap_message(&self, swap_message: &String) -> Result<(), Error> {
@@ -525,6 +531,7 @@ where
 		content: SlatePurpose,
 		slatepack_recipient: Option<DalekPublicKey>,
 		address_index: Option<u32>,
+		use_test_rng: bool,
 	) -> Result<VersionedSlate, Error> {
 		let mut w_lock = self.wallet_inst.lock();
 		let w = w_lock.lc_provider()?.wallet_inst()?;
@@ -536,6 +543,7 @@ where
 			content,
 			slatepack_recipient,
 			address_index,
+			use_test_rng,
 		)?;
 		Ok(vslate)
 	}

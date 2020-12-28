@@ -214,6 +214,7 @@ impl Slatepack {
 		&self,
 		slate_version: SlateVersion,
 		secret: &DalekSecretKey,
+		use_test_rng: bool,
 	) -> Result<Vec<u8>, Error> {
 		if !self.slate.compact_slate {
 			return Err(ErrorKind::SlatepackEncodeError(
@@ -346,7 +347,7 @@ impl Slatepack {
 			w.write(32, crc32)?;
 		}
 		let (encrypted_data, nonce) =
-			Self::encrypt_payload(encrypted_data, secret, &self.recipient)?;
+			Self::encrypt_payload(encrypted_data, secret, &self.recipient, use_test_rng)?;
 
 		// We have to destroy prev instance of w_pack in order to read from the pack_binary for crc32.
 		let mut w_pack = BitWriter::endian(&mut pack_binary, BigEndian);
@@ -595,24 +596,20 @@ impl Slatepack {
 		}
 
 		if write_participan_data_0 {
-			let part_data =
-				slate
-					.participant_data
-					.get(0)
-					.ok_or(ErrorKind::SlatepackEncodeError(
-						"Not found slate participant data".to_string(),
-					))?;
-			Self::write_participant_data(part_data, w)?;
+			let part_data = slate
+				.participant_with_id(0)
+				.ok_or(ErrorKind::SlatepackEncodeError(
+					"Not found slate participant data".to_string(),
+				))?;
+			Self::write_participant_data(&part_data, w)?;
 		}
 		if write_participan_data_1 {
-			let part_data =
-				slate
-					.participant_data
-					.get(1)
-					.ok_or(ErrorKind::SlatepackEncodeError(
-						"Not found slate participant data".to_string(),
-					))?;
-			Self::write_participant_data(part_data, w)?;
+			let part_data = slate
+				.participant_with_id(1)
+				.ok_or(ErrorKind::SlatepackEncodeError(
+					"Not found slate participant data".to_string(),
+				))?;
+			Self::write_participant_data(&part_data, w)?;
 		}
 
 		if write_proof_addresses {
@@ -644,12 +641,17 @@ impl Slatepack {
 							e
 						))
 					})?;
-					if sign_v.len() != 64 {
+					// Signature length can be different (so far it is 64 bytes or 70) because the PK might be from different families.
+					// That is why let's save the size
+					let sign_len = sign_v.len();
+					if sign_len < 64 || sign_len >= 64 + 16 {
 						return Err(ErrorKind::SlatepackEncodeError(
 							"Invalid Signature length".to_string(),
 						)
 						.into());
 					}
+					let sign_len: u32 = sign_len as u32 - 64;
+					w.write(4, sign_len)?;
 					w.write_bytes(&sign_v)?;
 				}
 				None => w.write(1, 0)?,
@@ -913,7 +915,8 @@ impl Slatepack {
 
 		if read_proof_signature {
 			if r.read::<u8>(1)? == 1 {
-				let mut signature: [u8; 64] = [0; 64];
+				let sign_len = r.read::<u32>(4)? + 64;
+				let mut signature: Vec<u8> = vec![0; sign_len as usize];
 				r.read_bytes(&mut signature)?;
 
 				match &mut slate.payment_proof {
@@ -940,6 +943,7 @@ impl Slatepack {
 		payload: Vec<u8>,
 		secret: &DalekSecretKey,
 		recipient: &DalekPublicKey,
+		use_test_rng: bool,
 	) -> Result<(Vec<u8>, [u8; 12]), Error> {
 		// https://github.com/dalek-cryptography/x25519-dalek
 		// convert to xDalek PK & Secret
@@ -947,7 +951,12 @@ impl Slatepack {
 		let secret = proofaddress::tor_secret_2_slatepack_secret(&secret);
 		let shared_secret = secret.diffie_hellman(&recipient);
 
-		let nonce: [u8; 12] = thread_rng().gen();
+		let nonce: [u8; 12] = if use_test_rng {
+			[1; 12]
+		} else {
+			thread_rng().gen()
+		};
+
 		let mut enc_bytes = payload;
 
 		let unbound_key = aead::UnboundKey::new(&aead::CHACHA20_POLY1305, shared_secret.as_bytes())

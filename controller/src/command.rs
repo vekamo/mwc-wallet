@@ -452,7 +452,7 @@ where
 						slatepack_sender,
 						recipient,
 					)
-					.put_tx(&slate, &slatepack_secret)
+					.put_tx(&slate, &slatepack_secret, false)
 					.map_err(|e| {
 						ErrorKind::IO(format!("Unable to store the file at {}, {}", args.dest, e))
 					})?;
@@ -571,7 +571,7 @@ where
 			DalekPublicKey::from(&slatepack_secret),
 			sender,
 		)
-		.put_tx(&slate, &slatepack_secret)?;
+		.put_tx(&slate, &slatepack_secret, false)?;
 		info!(
 			"Response file {}.response generated, and can be sent back to the transaction originator.",
 			args.input
@@ -690,8 +690,11 @@ where
 			};
 
 			// save to a destination not as a slatepack
-			PathToSlatePutter::build_plain((&args.dest.unwrap()).into())
-				.put_tx(&slate, &slatepack_secret)?;
+			PathToSlatePutter::build_plain((&args.dest.unwrap()).into()).put_tx(
+				&slate,
+				&slatepack_secret,
+				false,
+			)?;
 
 			Ok(())
 		})?;
@@ -742,7 +745,7 @@ where
 			tor_address,
 			recipient,
 		)
-		.put_tx(&slate, &slatepack_secret)?;
+		.put_tx(&slate, &slatepack_secret, false)?;
 		Ok(())
 	})?;
 	Ok(())
@@ -848,8 +851,11 @@ where
 			match args.method.as_str() {
 				"file" => {
 					// Process invoice slate is not required to send anywhere. Let's write it for our records.
-					PathToSlatePutter::build_plain((&args.dest).into())
-						.put_tx(&slate, &slatepack_secret)?;
+					PathToSlatePutter::build_plain((&args.dest).into()).put_tx(
+						&slate,
+						&slatepack_secret,
+						false,
+					)?;
 					api.tx_lock_outputs(m, &slate, Some(String::from("file")), 1)?;
 				}
 				"self" => {

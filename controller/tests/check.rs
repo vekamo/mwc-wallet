@@ -201,7 +201,7 @@ fn scan_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 
 		// output tx file
 		let send_file = format!("{}/part_tx_1.tx", test_dir);
-		PathToSlatePutter::build_plain(send_file.into()).put_tx(&slate, &sec_key)?;
+		PathToSlatePutter::build_plain(send_file.into()).put_tx(&slate, &sec_key, true)?;
 		api.tx_lock_outputs(m, &slate, None, 0)?;
 		Ok(())
 	})?;

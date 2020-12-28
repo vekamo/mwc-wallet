@@ -66,7 +66,12 @@ pub trait SlateReceiver {
 /// Posts slates to be read later by a corresponding getter
 pub trait SlatePutter {
 	/// Send a transaction asynchronously
-	fn put_tx(&self, slate: &Slate, slatepack_secret: &DalekSecretKey) -> Result<(), Error>;
+	fn put_tx(
+		&self,
+		slate: &Slate,
+		slatepack_secret: &DalekSecretKey,
+		use_test_rng: bool,
+	) -> Result<(), Error>;
 }
 
 /// SlateGetter, get_tx response

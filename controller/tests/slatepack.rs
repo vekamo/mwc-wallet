@@ -47,7 +47,7 @@ fn output_slatepack(
 	sender_secret: &DalekSecretKey,
 ) -> Result<(), libwallet::Error> {
 	PathToSlatePutter::build_encrypted(file_name.into(), content, sender, recipients)
-		.put_tx(&slate, &sender_secret)
+		.put_tx(&slate, &sender_secret, true)
 		.map_err(|e| {
 			libwallet::ErrorKind::GenericError(format!("Unable to store the slate, {}", e))
 		})?;

@@ -69,7 +69,12 @@ impl PathToSlateGetter {
 }
 
 impl SlatePutter for PathToSlatePutter {
-	fn put_tx(&self, slate: &Slate, slatepack_secret: &DalekSecretKey) -> Result<(), Error> {
+	fn put_tx(
+		&self,
+		slate: &Slate,
+		slatepack_secret: &DalekSecretKey,
+		use_test_rng: bool,
+	) -> Result<(), Error> {
 		let file_name = self.path_buf.to_str().unwrap_or("INVALID PATH");
 		let mut pub_tx = File::create(&self.path_buf).map_err(|e| {
 			ErrorKind::IO(format!("Unable to create proof file {}, {}", file_name, e))
@@ -92,6 +97,7 @@ impl SlatePutter for PathToSlatePutter {
 					self.sender.clone().unwrap(),
 					self.recipient.clone(),
 					slatepack_secret,
+					use_test_rng,
 				)
 				.map_err(|e| {
 					ErrorKind::GenericError(format!("Unable to build a slatepack, {}", e))

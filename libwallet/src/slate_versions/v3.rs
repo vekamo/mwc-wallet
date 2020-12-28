@@ -17,6 +17,7 @@
 //! * Addition of payment_proof (PaymentInfo struct)
 //! * Addition of a u64 ttl_cutoff_height field
 
+use crate::error::{Error, ErrorKind};
 use crate::grin_core::core::transaction::OutputFeatures;
 use crate::grin_core::libtx::secp_ser;
 use crate::grin_core::map_vec;
@@ -28,8 +29,11 @@ use crate::grin_util::secp::Signature;
 use crate::proof::proofaddress;
 use crate::proof::proofaddress::ProvableAddress;
 use crate::slate::CompatKernelFeatures;
+use grin_core::global;
 use uuid::Uuid;
 
+use crate::grin_core::core::transaction::Transaction;
+use crate::slate::{ParticipantData, PaymentInfo, Slate, VersionCompatInfo};
 use crate::slate_versions::v2::{
 	InputV2, OutputV2, ParticipantDataV2, SlateV2, TransactionBodyV2, TransactionV2, TxKernelV2,
 	VersionCompatInfoV2,
@@ -78,6 +82,50 @@ pub struct SlateV3 {
 	/// Support for compact slates.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub compact_slate: Option<bool>,
+}
+
+impl SlateV3 {
+	pub fn to_slate(self) -> Result<Slate, Error> {
+		if self.coin_type.unwrap_or("mwc".to_string()) != "mwc" {
+			return Err(
+				ErrorKind::SlateDeser("slate doesn't belong to MWC network".to_string()).into(),
+			);
+		}
+
+		if let Some(network) = self.network_type {
+			if network != global::get_network_name() {
+				return Err(ErrorKind::SlateDeser(format!(
+					"slate from {} network, expected {} network",
+					network,
+					global::get_network_name()
+				))
+				.into());
+			}
+		}
+
+		let participant_data = map_vec!(self.participant_data, |data| ParticipantData::from(data));
+		let version_info = VersionCompatInfo::from(&self.version_info);
+		let payment_proof = match self.payment_proof {
+			Some(p) => Some(PaymentInfo::from(&p)),
+			None => None,
+		};
+		let tx = Transaction::from(self.tx);
+		Ok(Slate {
+			compact_slate: self.compact_slate.unwrap_or(false),
+			offset: tx.offset.clone(),
+			num_participants: self.num_participants,
+			id: self.id,
+			tx,
+			amount: self.amount,
+			fee: self.fee,
+			height: self.height,
+			lock_height: self.lock_height,
+			ttl_cutoff_height: self.ttl_cutoff_height,
+			participant_data,
+			version_info,
+			payment_proof,
+		})
+	}
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -95,6 +95,7 @@ impl VersionedSlate {
 		sender: DalekPublicKey,
 		recipient: Option<DalekPublicKey>,
 		secret: &DalekSecretKey,
+		use_test_rng: bool,
 	) -> Result<VersionedSlate, Error> {
 		match version {
 			SlateVersion::SP => {
@@ -112,6 +113,7 @@ impl VersionedSlate {
 					sender,
 					recipient.unwrap(),
 					secret,
+					use_test_rng,
 				)?;
 				Ok(VersionedSlate::SP(armored_slatepack))
 			}
@@ -146,10 +148,10 @@ impl VersionedSlate {
 				let packer = Slatepacker::decrypt_slatepack(arm_slatepack.as_bytes(), dec_key)?;
 				Ok(packer)
 			}
-			VersionedSlate::V3(s) => Ok(Slatepacker::wrap_slate(Slate::from(s.clone()))),
+			VersionedSlate::V3(s) => Ok(Slatepacker::wrap_slate(s.clone().to_slate()?)),
 			VersionedSlate::V2(s) => {
 				let s = SlateV3::from(s.clone());
-				Ok(Slatepacker::wrap_slate(Slate::from(s)))
+				Ok(Slatepacker::wrap_slate(s.to_slate()?))
 			}
 		}
 	}
@@ -160,10 +162,10 @@ impl VersionedSlate {
 			VersionedSlate::SP(_) => {
 				return Err(ErrorKind::GenericError("Slate is encrypted".to_string()).into())
 			}
-			VersionedSlate::V3(s) => Ok(Slate::from(s.clone())),
+			VersionedSlate::V3(s) => Ok(s.clone().to_slate()?),
 			VersionedSlate::V2(s) => {
 				let s = SlateV3::from(s.clone());
-				Ok(Slate::from(s))
+				Ok(s.to_slate()?)
 			}
 		}
 	}

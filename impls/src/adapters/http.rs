@@ -430,6 +430,7 @@ impl SlateSender for HttpDataSender {
 					tor_pk,
 					recipient,
 					slatepack_secret,
+					false,
 				)?
 			}
 			SlateVersion::V3B => {

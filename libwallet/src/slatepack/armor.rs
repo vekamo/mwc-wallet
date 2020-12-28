@@ -93,7 +93,7 @@ impl SlatepackArmor {
 	pub fn encode(slatepack_bytes: &Vec<u8>) -> Result<String, Error> {
 		let encoded_slatepack = base58check(&slatepack_bytes)?;
 		let formatted_slatepack = format_slatepack(&format!("{}{}", HEADER, encoded_slatepack))?;
-		Ok(format!("{}{}\n", formatted_slatepack, FOOTER))
+		Ok(format!("{}{}", formatted_slatepack, FOOTER))
 	}
 }
 

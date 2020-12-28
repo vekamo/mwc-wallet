@@ -278,6 +278,7 @@ pub fn finalize_invoice_tx<'a, T: ?Sized, C, K>(
 	keychain_mask: Option<&SecretKey>,
 	slate: &Slate,
 	refresh_from_node: bool,
+	use_test_rng: bool,
 ) -> Result<Slate, Error>
 where
 	T: WalletBackend<'a, C, K>,
@@ -297,7 +298,14 @@ where
 		let mut temp_ctx = context.clone();
 		temp_ctx.sec_key = context.initial_sec_key.clone();
 		temp_ctx.sec_nonce = context.initial_sec_nonce.clone();
-		selection::repopulate_tx(&mut *w, keychain_mask, &mut sl, &temp_ctx, false)?;
+		selection::repopulate_tx(
+			&mut *w,
+			keychain_mask,
+			&mut sl,
+			&temp_ctx,
+			false,
+			use_test_rng,
+		)?;
 	}
 
 	// Participant id 0 for mwc713 compatibility
@@ -373,6 +381,7 @@ pub fn encrypt_slate<'a, T: ?Sized, C, K>(
 	content: SlatePurpose,
 	slatepack_recipient: Option<DalekPublicKey>,
 	address_index: Option<u32>,
+	use_test_rng: bool,
 ) -> Result<VersionedSlate, Error>
 where
 	T: WalletBackend<'a, C, K>,
@@ -403,6 +412,7 @@ where
 			slatepack_pk,
 			slatepack_recipient,
 			&slatepack_secret,
+			use_test_rng,
 		)?)
 	}
 }
