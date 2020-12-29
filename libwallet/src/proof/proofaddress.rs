@@ -56,6 +56,7 @@ pub fn get_address_index() -> u32 {
 pub struct ProvableAddress {
 	/// Public key that is an address
 	#[serde(rename = "address")]
+	#[serde(alias = "public_key")]
 	pub public_key: String,
 	/// Place holder for mwc713 backcompability. Value is empty string
 	#[serde(skip_serializing_if = "Option::is_none")]
