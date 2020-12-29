@@ -65,13 +65,13 @@ pub trait SlateReceiver {
 
 /// Posts slates to be read later by a corresponding getter
 pub trait SlatePutter {
-	/// Send a transaction asynchronously
+	/// Send a transaction synchronously. Return content that was stored/sent
 	fn put_tx(
 		&self,
 		slate: &Slate,
 		slatepack_secret: &DalekSecretKey,
 		use_test_rng: bool,
-	) -> Result<(), Error>;
+	) -> Result<String, Error>;
 }
 
 /// SlateGetter, get_tx response
@@ -84,7 +84,7 @@ pub enum SlateGetData {
 
 /// Checks for a transaction from a corresponding SlatePutter, returns the transaction if it exists
 pub trait SlateGetter {
-	/// Receive a transaction async. (Actually just read it from wherever and return the slate)
+	/// Receive a transaction sync. Just read it from wherever and return the slate.
 	fn get_tx(&self, slatepack_secret: &DalekSecretKey) -> Result<SlateGetData, Error>;
 }
 

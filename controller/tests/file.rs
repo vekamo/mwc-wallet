@@ -137,7 +137,7 @@ fn file_exchange_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> 
 		}
 
 		// output tx file
-		PathToSlatePutter::build_plain((&send_file).into()).put_tx(
+		PathToSlatePutter::build_plain(Some((&send_file).into())).put_tx(
 			&mut slate,
 			&wallet1_slatepack_secret,
 			true,
@@ -152,7 +152,7 @@ fn file_exchange_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> 
 		w.set_parent_key_id_by_name("account1")?;
 	}
 
-	let mut slate = PathToSlateGetter::build((&send_file).into())
+	let mut slate = PathToSlateGetter::build_form_path((&send_file).into())
 		.get_tx(&wallet1_slatepack_secret)?
 		.to_slate()?
 		.0;
@@ -171,7 +171,7 @@ fn file_exchange_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> 
 	// wallet 2 receives file, completes, sends file back
 	wallet::controller::foreign_single_use(wallet2.clone(), mask2_i.clone(), |api| {
 		slate = api.receive_tx(&slate, None, None, Some(sender2_message.clone()))?;
-		PathToSlatePutter::build_plain((&receive_file).into()).put_tx(
+		PathToSlatePutter::build_plain(Some((&receive_file).into())).put_tx(
 			&slate,
 			&wallet1_slatepack_secret,
 			true,
@@ -181,7 +181,7 @@ fn file_exchange_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> 
 
 	// wallet 1 finalises and posts
 	wallet::controller::owner_single_use(Some(wallet1.clone()), mask1, None, |api, m| {
-		let mut slate = PathToSlateGetter::build(receive_file.into())
+		let mut slate = PathToSlateGetter::build_form_path(receive_file.into())
 			.get_tx(&wallet1_slatepack_secret)?
 			.to_slate()?
 			.0;

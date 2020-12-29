@@ -447,7 +447,7 @@ where
 			match args.method.as_str() {
 				"file" => {
 					PathToSlatePutter::build_encrypted(
-						(&args.dest).into(),
+						Some((&args.dest).into()),
 						SlatePurpose::SendInitial,
 						slatepack_sender,
 						recipient,
@@ -548,7 +548,8 @@ where
 			slatepack_secret
 		};
 
-		let slate_pkg = PathToSlateGetter::build((&args.input).into()).get_tx(&slatepack_secret)?;
+		let slate_pkg =
+			PathToSlateGetter::build_form_path((&args.input).into()).get_tx(&slatepack_secret)?;
 
 		let (mut slate, sender, _recipient) = slate_pkg.to_slate()?;
 
@@ -566,7 +567,7 @@ where
 		)?;
 
 		PathToSlatePutter::build_encrypted(
-			format!("{}.response", args.input).into(),
+			Some(format!("{}.response", args.input).into()),
 			SlatePurpose::SendResponse,
 			DalekPublicKey::from(&slatepack_secret),
 			sender,
@@ -614,7 +615,8 @@ where
 			slatepack_secret
 		};
 
-		let slate_pkg = PathToSlateGetter::build((&args.input).into()).get_tx(&slatepack_secret)?;
+		let slate_pkg =
+			PathToSlateGetter::build_form_path((&args.input).into()).get_tx(&slatepack_secret)?;
 
 		slate = slate_pkg.to_slate()?.0;
 
@@ -690,7 +692,7 @@ where
 			};
 
 			// save to a destination not as a slatepack
-			PathToSlatePutter::build_plain((&args.dest.unwrap()).into()).put_tx(
+			PathToSlatePutter::build_plain(Some((&args.dest.unwrap()).into())).put_tx(
 				&slate,
 				&slatepack_secret,
 				false,
@@ -740,7 +742,7 @@ where
 		};
 
 		PathToSlatePutter::build_encrypted(
-			(&args.dest).into(),
+			Some((&args.dest).into()),
 			SlatePurpose::InvoiceInitial,
 			tor_address,
 			recipient,
@@ -785,7 +787,8 @@ where
 		slatepack_secret
 	};
 
-	let slate_pkg = PathToSlateGetter::build((&args.input).into()).get_tx(&slatepack_secret)?;
+	let slate_pkg =
+		PathToSlateGetter::build_form_path((&args.input).into()).get_tx(&slatepack_secret)?;
 
 	let (slate, sender_pk, _recepient) = slate_pkg.to_slate()?;
 
@@ -851,7 +854,7 @@ where
 			match args.method.as_str() {
 				"file" => {
 					// Process invoice slate is not required to send anywhere. Let's write it for our records.
-					PathToSlatePutter::build_plain((&args.dest).into()).put_tx(
+					PathToSlatePutter::build_plain(Some((&args.dest).into())).put_tx(
 						&slate,
 						&slatepack_secret,
 						false,
@@ -1040,7 +1043,7 @@ where
 	};
 
 	// Post expected to be internal api call, so there is no reasons to work with slatepacks.
-	let slate = PathToSlateGetter::build((&args.input).into())
+	let slate = PathToSlateGetter::build_form_path((&args.input).into())
 		.get_tx(&slatepack_secret)?
 		.to_slate()?
 		.0;

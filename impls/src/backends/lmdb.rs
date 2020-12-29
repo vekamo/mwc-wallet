@@ -310,11 +310,6 @@ where
 		Box::new(self.db.iter(&[OUTPUT_PREFIX]).unwrap().map(|o| o.1))
 	}
 
-	fn get_tx_log_entry(&self, u: &Uuid) -> Result<Option<TxLogEntry>, Error> {
-		let key = to_key(TX_LOG_ENTRY_PREFIX, &mut u.as_bytes().to_vec());
-		self.db.get_ser(&key).map_err(|e| e.into())
-	}
-
 	fn tx_log_iter<'a>(&'a self) -> Box<dyn Iterator<Item = TxLogEntry> + 'a> {
 		Box::new(self.db.iter(&[TX_LOG_ENTRY_PREFIX]).unwrap().map(|o| o.1))
 	}

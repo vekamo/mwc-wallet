@@ -26,20 +26,23 @@ use std::path::PathBuf;
 
 #[derive(Clone)]
 pub struct PathToSlatePutter {
-	path_buf: PathBuf,
+	path_buf: Option<PathBuf>,
 	content: Option<SlatePurpose>,
 	sender: Option<DalekPublicKey>,
 	recipient: Option<DalekPublicKey>,
 }
 
 pub struct PathToSlateGetter {
-	path_buf: PathBuf,
+	// Path to file
+	path_buf: Option<PathBuf>,
+	// Or the string to read from
+	slate_str: Option<String>,
 }
 
 impl PathToSlatePutter {
 	// Build sender that can save slatepacks
 	pub fn build_encrypted(
-		path_buf: PathBuf,
+		path_buf: Option<PathBuf>,
 		content: SlatePurpose,
 		sender: DalekPublicKey,
 		recipient: Option<DalekPublicKey>,
@@ -52,7 +55,7 @@ impl PathToSlatePutter {
 		}
 	}
 
-	pub fn build_plain(path_buf: PathBuf) -> Self {
+	pub fn build_plain(path_buf: Option<PathBuf>) -> Self {
 		Self {
 			path_buf,
 			content: None,
@@ -63,8 +66,18 @@ impl PathToSlatePutter {
 }
 
 impl PathToSlateGetter {
-	pub fn build(path_buf: PathBuf) -> Self {
-		Self { path_buf }
+	pub fn build_form_path(path_buf: PathBuf) -> Self {
+		Self {
+			path_buf: Some(path_buf),
+			slate_str: None,
+		}
+	}
+
+	pub fn build_form_str(slate_str: String) -> Self {
+		Self {
+			path_buf: None,
+			slate_str: Some(slate_str),
+		}
 	}
 }
 
@@ -74,12 +87,7 @@ impl SlatePutter for PathToSlatePutter {
 		slate: &Slate,
 		slatepack_secret: &DalekSecretKey,
 		use_test_rng: bool,
-	) -> Result<(), Error> {
-		let file_name = self.path_buf.to_str().unwrap_or("INVALID PATH");
-		let mut pub_tx = File::create(&self.path_buf).map_err(|e| {
-			ErrorKind::IO(format!("Unable to create proof file {}, {}", file_name, e))
-		})?;
-
+	) -> Result<String, Error> {
 		let out_slate = {
 			if self.recipient.is_some() {
 				if self.sender.is_none() || self.content.is_none() {
@@ -122,46 +130,65 @@ impl SlatePutter for PathToSlatePutter {
 				})?
 			}
 		};
-		pub_tx
-			.write_all(out_slate.as_string()?.as_bytes())
-			.map_err(|e| {
+
+		let slate_str = out_slate.as_string()?;
+
+		if let Some(path_buf) = &self.path_buf {
+			let file_name = path_buf.to_str().unwrap_or("INVALID PATH");
+			let mut pub_tx = File::create(&path_buf).map_err(|e| {
+				ErrorKind::IO(format!("Unable to create proof file {}, {}", file_name, e))
+			})?;
+
+			pub_tx.write_all(slate_str.as_bytes()).map_err(|e| {
 				ErrorKind::IO(format!(
-					"Unable to store data at proof file {}, {}",
+					"Unable to store slate at file {}, {}",
 					file_name, e
 				))
 			})?;
 
-		pub_tx.sync_all().map_err(|e| {
-			ErrorKind::IO(format!(
-				"Unable to store data at proof file {}, {}",
-				file_name, e
-			))
-		})?;
+			pub_tx.sync_all().map_err(|e| {
+				ErrorKind::IO(format!(
+					"Unable to store slate at file {}, {}",
+					file_name, e
+				))
+			})?;
+		}
 
-		Ok(())
+		Ok(slate_str)
 	}
 }
 
 impl SlateGetter for PathToSlateGetter {
 	fn get_tx(&self, slatepack_secret: &DalekSecretKey) -> Result<SlateGetData, Error> {
-		let file_name = self.path_buf.to_str().unwrap_or("INVALID PATH");
-		let mut pub_tx_f = File::open(&self.path_buf).map_err(|e| {
-			ErrorKind::IO(format!("Unable to open proof file {}, {}", file_name, e))
-		})?;
-		let mut content = String::new();
-		pub_tx_f.read_to_string(&mut content).map_err(|e| {
-			ErrorKind::IO(format!(
-				"Unable to read data from file {}, {}",
-				file_name, e
-			))
-		})?;
+		let content = match &self.slate_str {
+			Some(str) => str.clone(),
+			None => {
+				// Reading from the file
+				if let Some(path_buf) = &self.path_buf {
+					let file_name = path_buf.to_str().unwrap_or("INVALID PATH");
+					let mut pub_tx_f = File::open(&path_buf).map_err(|e| {
+						ErrorKind::IO(format!("Unable to open file {}, {}", file_name, e))
+					})?;
+					let mut content = String::new();
+					pub_tx_f.read_to_string(&mut content).map_err(|e| {
+						ErrorKind::IO(format!(
+							"Unable to read data from file {}, {}",
+							file_name, e
+						))
+					})?;
+					content
+				} else {
+					return Err(ErrorKind::GenericError(
+						"PathToSlateGetter, not defined slate string or file".to_string(),
+					)
+					.into());
+				}
+			}
+		};
 
 		if Slate::deserialize_is_plain(&content) {
 			let slate = Slate::deserialize_upgrade_plain(&content).map_err(|e| {
-				ErrorKind::IO(format!(
-					"Unable to build slate from json, file {}, {}",
-					file_name, e
-				))
+				ErrorKind::IO(format!("Unable to build slate from the content, {}", e))
 			})?;
 			Ok(SlateGetData::PlainSlate(slate))
 		} else {

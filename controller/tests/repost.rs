@@ -129,7 +129,7 @@ fn file_repost_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 		};
 
 		let slate = api.init_send_tx(m, &args, 1)?;
-		PathToSlatePutter::build_plain((&send_file).into()).put_tx(&slate, &sec_key, true)?;
+		PathToSlatePutter::build_plain(Some((&send_file).into())).put_tx(&slate, &sec_key, true)?;
 		api.tx_lock_outputs(m, &slate, None, 0)?;
 		Ok(())
 	})?;
@@ -152,12 +152,13 @@ fn file_repost_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 			sec_key
 		};
 
-		slate = PathToSlateGetter::build((&send_file).into())
+		slate = PathToSlateGetter::build_form_path((&send_file).into())
 			.get_tx(&sec_key)?
 			.to_slate()?
 			.0;
 		slate = api.receive_tx(&slate, None, None, None)?;
-		PathToSlatePutter::build_plain((&receive_file).into()).put_tx(&slate, &sec_key, true)?;
+		PathToSlatePutter::build_plain(Some((&receive_file).into()))
+			.put_tx(&slate, &sec_key, true)?;
 		Ok(())
 	})?;
 
@@ -177,7 +178,7 @@ fn file_repost_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 			sec_key
 		};
 
-		slate = PathToSlateGetter::build((&receive_file).into())
+		slate = PathToSlateGetter::build_form_path((&receive_file).into())
 			.get_tx(&sec_key)?
 			.to_slate()?
 			.0;
