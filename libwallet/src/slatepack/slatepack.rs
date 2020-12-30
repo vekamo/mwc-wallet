@@ -111,7 +111,11 @@ impl Slatepack {
 	/// Decode and decrypt the Slatepack
 	/// Note:  from_binary & to_binary - are NOT serializers, minimum amount of the data is transported.
 	/// from_binary & to_binary are symmetrical
-	pub fn from_binary(data: &Vec<u8>, encrypted: bool, secret: &DalekSecretKey) -> Result<Self, Error> {
+	pub fn from_binary(
+		data: &Vec<u8>,
+		encrypted: bool,
+		secret: &DalekSecretKey,
+	) -> Result<Self, Error> {
 		if encrypted && data.len() < SLATE_PACK_PLAIN_DATA_SIZE {
 			return Err(
 				ErrorKind::SlatepackDecodeError("Slatapack data is too short".to_string()).into(),
@@ -132,19 +136,24 @@ impl Slatepack {
 		}
 
 		let (payload, sender, recipient) = if encrypted {
-
 			// Sender address, so other party can open the message
 			debug_assert!(PUBLIC_KEY_LENGTH == 32);
 			let mut data: [u8; 32] = [0; 32];
 			r.read_bytes(&mut data)?;
 			let sender = DalekPublicKey::from_bytes(&data).map_err(|e| {
-				ErrorKind::SlatepackDecodeError(format!("Unable to read a sender public key, {}", e))
+				ErrorKind::SlatepackDecodeError(format!(
+					"Unable to read a sender public key, {}",
+					e
+				))
 			})?;
 			// Receiver address, so this wallet open the message if it is in the archive
 			let mut data: [u8; 32] = [0; 32];
 			r.read_bytes(&mut data)?;
 			let recipient = DalekPublicKey::from_bytes(&data).map_err(|e| {
-				ErrorKind::SlatepackDecodeError(format!("Unable to read a sender public key, {}", e))
+				ErrorKind::SlatepackDecodeError(format!(
+					"Unable to read a sender public key, {}",
+					e
+				))
 			})?;
 
 			let mut nonce: [u8; 12] = [0; 12];
@@ -153,19 +162,23 @@ impl Slatepack {
 			let enc_len: u32 = r.read(16)?;
 			let mut data_to_decrypt: Vec<u8> = vec![0; enc_len as usize];
 			r.read_bytes(&mut data_to_decrypt)?;
-			let payload =
-				match Self::decrypt_payload(data_to_decrypt.clone(), nonce.clone(), secret, &sender) {
-					Ok(payload) => payload,
-					Err(e) => {
-						// Try recipient PK.  May be we are open what was stored before.
-						let res = Self::decrypt_payload(data_to_decrypt, nonce, secret, &recipient);
-						if res.is_err() {
-							// in case of error we want to return the parent error.
-							return Err(e);
-						}
-						res.unwrap()
+			let payload = match Self::decrypt_payload(
+				data_to_decrypt.clone(),
+				nonce.clone(),
+				secret,
+				&sender,
+			) {
+				Ok(payload) => payload,
+				Err(e) => {
+					// Try recipient PK.  May be we are open what was stored before.
+					let res = Self::decrypt_payload(data_to_decrypt, nonce, secret, &recipient);
+					if res.is_err() {
+						// in case of error we want to return the parent error.
+						return Err(e);
 					}
-				};
+					res.unwrap()
+				}
+			};
 
 			// Let's check the payload CRC first (crc32 is last 4 bytes.)
 			{
@@ -177,13 +190,12 @@ impl Slatepack {
 					return Err(ErrorKind::SlatepackDecodeError(
 						"Slatepack content is not consistent".to_string(),
 					)
-						.into());
+					.into());
 				}
 			}
 
 			(payload, Some(sender), Some(recipient))
-		}
-		else {
+		} else {
 			let enc_len: u32 = r.read(16)?;
 			let mut payload: Vec<u8> = vec![0; enc_len as usize];
 			r.read_bytes(&mut payload)?;
@@ -249,7 +261,10 @@ impl Slatepack {
 			for pd in &self.slate.participant_data {
 				// messages are not acceptable because we don't transfer the signatures for them.
 				if pd.message.is_some() {
-					return Err(ErrorKind::SlatepackEncodeError("Non encrypted slates can't contain participant message".to_string()).into());
+					return Err(ErrorKind::SlatepackEncodeError(
+						"Non encrypted slates can't contain participant message".to_string(),
+					)
+					.into());
 				}
 			}
 		}
@@ -354,7 +369,10 @@ impl Slatepack {
 			// recipient is define, so we can do encryption
 
 			if self.sender.is_none() {
-				return Err(ErrorKind::SlatepackEncodeError("Not found expected sender value".to_string()).into());
+				return Err(ErrorKind::SlatepackEncodeError(
+					"Not found expected sender value".to_string(),
+				)
+				.into());
 			}
 			let sender = self.sender.clone().unwrap();
 			// Sender address, so other party can open the message
@@ -363,7 +381,7 @@ impl Slatepack {
 			// Receiver address, so this wallet open the message if it is in the archive
 			debug_assert!(recipient.as_bytes().len() == 32);
 			w_pack.write_bytes(recipient.as_bytes())?; // 32 bytes unencrypted - recipient. Primary reason - we want to be able to read what we write.
-			// expected to be aligned
+										   // expected to be aligned
 
 			// Do CRC and encryption. CRC we want to be encrypted
 			{
@@ -392,15 +410,14 @@ impl Slatepack {
 				return Err(ErrorKind::SlatepackEncodeError(
 					"Slate too large for encoding".to_string(),
 				)
-					.into());
+				.into());
 			}
 			w_pack.write(16, enc_len as u32)?; // Need to keep byte aligned
 			w_pack.write_bytes(&encrypted_data)?;
 			// expected to be aligned
 
 			Ok((pack_binary, true))
-		}
-		else {
+		} else {
 			// Non encrypted data. Just a plain binary format, not CRC any other control.
 			w.byte_align()?;
 
@@ -416,7 +433,6 @@ impl Slatepack {
 
 			Ok((pack_binary, false))
 		}
-
 	}
 
 	fn write_u64<W: io::Write, E: Endianness>(

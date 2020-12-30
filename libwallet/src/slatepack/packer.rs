@@ -257,10 +257,11 @@ fn slatepack_io_test() {
 	.unwrap();
 	println!("slatepack binary = {}", slatepack_string_binary);
 
-	assert!( slatepack_string_encrypted.len() > slatepack_string_binary.len() );
+	assert!(slatepack_string_encrypted.len() > slatepack_string_binary.len());
 
 	// Testing if can open from a backup
-	let slatepack = Slatepacker::decrypt_slatepack(slatepack_string_encrypted.as_bytes(), &dalek_sk).unwrap();
+	let slatepack =
+		Slatepacker::decrypt_slatepack(slatepack_string_encrypted.as_bytes(), &dalek_sk).unwrap();
 	let res_slate = slatepack.to_result_slate();
 	let slate2_str = format!("{:?}", res_slate);
 	println!("res_slate = {:?}", slate2_str);
@@ -277,12 +278,14 @@ fn slatepack_io_test() {
 	assert_eq!(slate_enc_str, slate2_str);
 
 	// Testing if can decode form the binary
-	let slatepack =
-		Slatepacker::decrypt_slatepack(slatepack_string_binary.as_bytes(), &DalekSecretKey::from_bytes(&[1; 32]).unwrap()).unwrap();
+	let slatepack = Slatepacker::decrypt_slatepack(
+		slatepack_string_binary.as_bytes(),
+		&DalekSecretKey::from_bytes(&[1; 32]).unwrap(),
+	)
+	.unwrap();
 	let res_slate = slatepack.to_result_slate();
 	let slate3_str = format!("{:?}", res_slate);
 	println!("slate3_str = {:?}", slate3_str);
 
 	assert_eq!(slate_bin_str, slate3_str);
-
 }

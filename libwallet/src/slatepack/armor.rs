@@ -50,7 +50,7 @@ pub struct SlatepackArmor;
 
 impl SlatepackArmor {
 	/// Decode an armored Slatepack
-	pub fn decode(armor_bytes: &[u8]) -> Result<(Vec<u8>,bool), Error> {
+	pub fn decode(armor_bytes: &[u8]) -> Result<(Vec<u8>, bool), Error> {
 		// Collect the bytes up to the first period, this is the header
 		let header_bytes = armor_bytes
 			.iter()
@@ -78,7 +78,10 @@ impl SlatepackArmor {
 			.collect::<Vec<u8>>();
 		let fenc = check_footer(&footer_bytes)?;
 		if henc != fenc {
-			return Err(ErrorKind::SlatepackDecodeError("Non matched armor header and footer".to_string()).into());
+			return Err(ErrorKind::SlatepackDecodeError(
+				"Non matched armor header and footer".to_string(),
+			)
+			.into());
 		}
 		// Clean up the payload bytes to be deserialized
 		let clean_payload = payload_bytes
@@ -102,8 +105,8 @@ impl SlatepackArmor {
 	pub fn encode(slatepack_bytes: &Vec<u8>, encrypted: bool) -> Result<String, Error> {
 		let encoded_slatepack = base58check(&slatepack_bytes)?;
 
-		let header = if encrypted {HEADER_ENC} else {HEADER_BIN};
-		let footer = if encrypted {FOOTER_ENC} else {FOOTER_BIN};
+		let header = if encrypted { HEADER_ENC } else { HEADER_BIN };
+		let footer = if encrypted { FOOTER_ENC } else { FOOTER_BIN };
 
 		let formatted_slatepack = format_slatepack(&format!("{}{}", header, encoded_slatepack))?;
 		Ok(format!("{}{}", formatted_slatepack, footer))

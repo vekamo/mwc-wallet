@@ -33,11 +33,11 @@ use crate::util::secp::pedersen;
 use crate::util::{static_secp_instance, ZeroingString};
 use crate::{ECDHPubkey, Owner, Token};
 use easy_jsonrpc_mw;
+use ed25519_dalek::PublicKey as DalekPublicKey;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use rand::thread_rng;
 use std::error::Error;
 use std::time::Duration;
-use ed25519_dalek::PublicKey as DalekPublicKey;
 
 /// Public definition used to generate Owner jsonrpc api.
 /// Secure version containing wallet lifecycle functions. All calls to this API must be encrypted.
@@ -2667,7 +2667,7 @@ pub trait OwnerRpcV3 {
 	  "result": {
 		"Ok": {
 		  "public_key": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5",
-  		  "domain": "",
+			"domain": "",
 		  "port": null
 		}
 	  }
@@ -3800,9 +3800,11 @@ where
 			ErrorKind::SlatepackDecodeError(format!("Expected to get slate in Json format, {}", e))
 		})?;
 
-		let recipient : Option<DalekPublicKey> = match recipient {
-			Some(recipient) => Some(recipient.tor_public_key().map_err(|e| ErrorKind::SlatepackEncodeError(format!("Expecting recipient tor address, {}", e)))?),
-			None => None
+		let recipient: Option<DalekPublicKey> = match recipient {
+			Some(recipient) => Some(recipient.tor_public_key().map_err(|e| {
+				ErrorKind::SlatepackEncodeError(format!("Expecting recipient tor address, {}", e))
+			})?),
+			None => None,
 		};
 
 		let vslate = Owner::encrypt_slate(
@@ -3861,7 +3863,7 @@ fn owner_api_v3_test() {
 	use crate as grin_wallet_api;
 
 	grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
-	r#"
+		r#"
 	{
 		"jsonrpc": "2.0",
 		"method": "get_mqs_address",
@@ -3870,9 +3872,8 @@ fn owner_api_v3_test() {
 		},
 		"id": 1
 	}
-	"#
-	,
-	r#"
+	"#,
+		r#"
 	{
 	  "id": 1,
 	  "jsonrpc": "2.0",
@@ -3884,6 +3885,13 @@ fn owner_api_v3_test() {
 		}
 	  }
 	}
-	"#
-	, true, 0, false, false, false, false, true);
+	"#,
+		true,
+		0,
+		false,
+		false,
+		false,
+		false,
+		true
+	);
 }

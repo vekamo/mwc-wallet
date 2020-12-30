@@ -446,14 +446,15 @@ where
 
 			match args.method.as_str() {
 				"file" | "slatepack" => {
-
-					let dest : Option<PathBuf> = if args.dest.is_empty() {
+					let dest: Option<PathBuf> = if args.dest.is_empty() {
 						if args.method == "file" {
-							return Err(ErrorKind::ArgumentError("Please specify destination for file".to_string()).into());
+							return Err(ErrorKind::ArgumentError(
+								"Please specify destination for file".to_string(),
+							)
+							.into());
 						}
 						None
-					}
-					else {
+					} else {
 						Some((&args.dest).into())
 					};
 
@@ -469,7 +470,7 @@ where
 						ErrorKind::IO(format!("Unable to store the file at {}, {}", args.dest, e))
 					})?;
 					api.tx_lock_outputs(m, &slate, Some(String::from("file")), 0)?;
-					if args.dest.is_empty()  {
+					if args.dest.is_empty() {
 						println!("Slatepack: {}", slate_str);
 					}
 					return Ok(());

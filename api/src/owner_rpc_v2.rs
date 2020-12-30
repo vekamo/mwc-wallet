@@ -2225,7 +2225,7 @@ pub trait OwnerRpcV2: Sync + Send {
 	  "result": {
 		"Ok": {
 		  "public_key": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5",
-  		  "domain": "",
+			"domain": "",
 		  "port": null
 		}
 	  }
@@ -2257,7 +2257,7 @@ pub trait OwnerRpcV2: Sync + Send {
 	  "result": {
 		"Ok": {
 		  "public_key": "fffqrotuelaodwjblwmifg36xjedjw4azbwvfexmxmmzsb6xvzbkhuqd",
- 		  "domain": "",
+		   "domain": "",
 		  "port": null
 		}
 	  }
@@ -2379,14 +2379,14 @@ pub trait OwnerRpcV2: Sync + Send {
 				"domain": "",
 				"port": null,
 				"public_key": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2"
-		  	  },
+				},
 			  "recipient_sig": "30440220050ccd7244a8e1bcad8724a26bef6e0bc3df85f09dfc41870635711627955c4c02202b3d3599a7371bcc685315876c54cdf956a8c990ce6526f6be8e50591bde3be2",
 			  "sender_address": {
 				"domain": "",
 				"port": null,
 				"public_key": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5"
-		  	  },
-		 	  "sender_sig": "3045022100945b57de1e8b9f7863c4f4c5698d5617ffa55748c80a8324729f98ce5ef86509022063f6bc511d80046f6f21c9476344ed8d948234cc32a0b022d720161798e09861"
+				},
+			   "sender_sig": "3045022100945b57de1e8b9f7863c4f4c5698d5617ffa55748c80a8324729f98ce5ef86509022063f6bc511d80046f6f21c9476344ed8d948234cc32a0b022d720161798e09861"
 			}
 		},
 		"id": 1
@@ -3084,9 +3084,11 @@ where
 			ErrorKind::SlatepackDecodeError(format!("Expected to get slate in Json format, {}", e))
 		})?;
 
-		let recipient : Option<DalekPublicKey> = match recipient {
-			Some(recipient) => Some(recipient.tor_public_key().map_err(|e| ErrorKind::SlatepackEncodeError(format!("Expecting recipient tor address, {}", e)))?),
-			None => None
+		let recipient: Option<DalekPublicKey> = match recipient {
+			Some(recipient) => Some(recipient.tor_public_key().map_err(|e| {
+				ErrorKind::SlatepackEncodeError(format!("Expecting recipient tor address, {}", e))
+			})?),
+			None => None,
 		};
 
 		let vslate = Owner::encrypt_slate(

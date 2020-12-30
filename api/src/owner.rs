@@ -2509,7 +2509,15 @@ where
 		keychain_mask: Option<&SecretKey>,
 		encrypted_slate: VersionedSlate,
 		address_index: Option<u32>,
-	) -> Result<(Slate, SlatePurpose, Option<DalekPublicKey>, Option<DalekPublicKey>), Error> {
+	) -> Result<
+		(
+			Slate,
+			SlatePurpose,
+			Option<DalekPublicKey>,
+			Option<DalekPublicKey>,
+		),
+		Error,
+	> {
 		let mut w_lock = self.wallet_inst.lock();
 		let w = w_lock.lc_provider()?.wallet_inst()?;
 		foreign::decrypt_slate(&mut **w, keychain_mask, encrypted_slate, address_index)

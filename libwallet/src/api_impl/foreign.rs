@@ -348,7 +348,15 @@ pub fn decrypt_slate<'a, T: ?Sized, C, K>(
 	keychain_mask: Option<&SecretKey>,
 	encrypted_slate: VersionedSlate,
 	address_index: Option<u32>,
-) -> Result<(Slate, SlatePurpose, Option<DalekPublicKey>, Option<DalekPublicKey>), Error>
+) -> Result<
+	(
+		Slate,
+		SlatePurpose,
+		Option<DalekPublicKey>,
+		Option<DalekPublicKey>,
+	),
+	Error,
+>
 where
 	T: WalletBackend<'a, C, K>,
 	C: NodeClient + 'a,
@@ -405,8 +413,7 @@ where
 			&slatepack_secret,
 			use_test_rng,
 		)?)
-	}
-	else {
+	} else {
 		// Plain slate format
 		let version = version.unwrap_or(slate.lowest_version());
 		Ok(

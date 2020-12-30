@@ -63,18 +63,18 @@ grin_wallet_config = { path = "../config", version = "4.0.0" }
 #grin_util = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.1" }
 
 # For bleeding edge
-#grin_api = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
-#grin_p2p = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
-#grin_core= { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
-#grin_keychain = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
-#grin_util = { git = "https://github.com/mwcproject/mwc-node", branch = "master"  }
+grin_api = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
+grin_p2p = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
+grin_core= { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
+grin_keychain = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
+grin_util = { git = "https://github.com/mwcproject/mwc-node", branch = "master"  }
 
 # For local testing
-grin_api = { path = "../../mwc-node/api"}
-grin_p2p = { path = "../../mwc-node/p2p"}
-grin_core= { path = "../../mwc-node/core"}
-grin_keychain = { path = "../../mwc-node/keychain"}
-grin_util = { path = "../../mwc-node/util"}
+#grin_api = { path = "../../mwc-node/api"}
+#grin_p2p = { path = "../../mwc-node/p2p"}
+#grin_core= { path = "../../mwc-node/core"}
+#grin_keychain = { path = "../../mwc-node/keychain"}
+#grin_util = { path = "../../mwc-node/util"}
 
 [target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
 libc = { version = "0.2.69", default-features = false }
