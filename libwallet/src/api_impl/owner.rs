@@ -414,7 +414,8 @@ where
 		None => None,
 	};
 
-	let compact_slate = args.slatepack_recipient.is_some();
+	let compact_slate = args.slatepack_recipient.is_some() || args.target_slate_version.clone().unwrap_or(0) >= 4;
+
 	let mut slate = tx::new_tx_slate(
 		&mut *w,
 		args.amount,

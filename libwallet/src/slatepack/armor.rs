@@ -26,16 +26,22 @@ use sha2::{Digest, Sha256};
 use std::str;
 
 // Framing and formatting for slate armor
-pub static HEADER: &str = "BEGINSLATEPACK.";
-static FOOTER: &str = ". ENDSLATEPACK.";
+pub static HEADER_ENC: &str = "BEGINSLATEPACK.";
+static FOOTER_ENC: &str = ". ENDSLATEPACK.";
+pub static HEADER_BIN: &str = "BEGINSLATEBIN.";
+static FOOTER_BIN: &str = ". ENDSLATEBIN.";
 const WORD_LENGTH: usize = 15;
 const WORDS_PER_LINE: usize = 200;
 
 lazy_static! {
-	static ref HEADER_REGEX: Regex =
+	static ref HEADER_REGEX_ENC: Regex =
 		Regex::new(concat!(r"^[>\n\r\t ]*BEGINSLATEPACK[>\n\r\t ]*$")).unwrap();
-	static ref FOOTER_REGEX: Regex =
+	static ref FOOTER_REGEX_ENC: Regex =
 		Regex::new(concat!(r"^[>\n\r\t ]*ENDSLATEPACK[>\n\r\t ]*$")).unwrap();
+	static ref HEADER_REGEX_BIN: Regex =
+		Regex::new(concat!(r"^[>\n\r\t ]*BEGINSLATEBIN[>\n\r\t ]*$")).unwrap();
+	static ref FOOTER_REGEX_BIN: Regex =
+		Regex::new(concat!(r"^[>\n\r\t ]*ENDSLATEBIN[>\n\r\t ]*$")).unwrap();
 	static ref WHITESPACE_LIST: [u8; 5] = [b'>', b'\n', b'\r', b'\t', b' '];
 }
 
@@ -44,7 +50,7 @@ pub struct SlatepackArmor;
 
 impl SlatepackArmor {
 	/// Decode an armored Slatepack
-	pub fn decode(armor_bytes: &[u8]) -> Result<Vec<u8>, Error> {
+	pub fn decode(armor_bytes: &[u8]) -> Result<(Vec<u8>,bool), Error> {
 		// Collect the bytes up to the first period, this is the header
 		let header_bytes = armor_bytes
 			.iter()
@@ -52,7 +58,7 @@ impl SlatepackArmor {
 			.cloned()
 			.collect::<Vec<u8>>();
 		// Verify the header...
-		check_header(&header_bytes)?;
+		let henc = check_header(&header_bytes)?;
 		// Get the length of the header
 		let header_len = header_bytes.len() + 1;
 		// Skip the length of the header to read for the payload until the next period
@@ -70,7 +76,10 @@ impl SlatepackArmor {
 			.take_while(|byte| **byte != b'.')
 			.cloned()
 			.collect::<Vec<u8>>();
-		check_footer(&footer_bytes)?;
+		let fenc = check_footer(&footer_bytes)?;
+		if henc != fenc {
+			return Err(ErrorKind::SlatepackDecodeError("Non matched armor header and footer".to_string()).into());
+		}
 		// Clean up the payload bytes to be deserialized
 		let clean_payload = payload_bytes
 			.iter()
@@ -86,14 +95,18 @@ impl SlatepackArmor {
 		// Make sure the error check code is valid for the slate data
 		error_check(error_code, slatepack_bytes)?;
 		// Return slate as binary or string
-		Ok(slatepack_bytes.to_vec())
+		Ok((slatepack_bytes.to_vec(), henc))
 	}
 
 	/// Encode an armored slatepack
-	pub fn encode(slatepack_bytes: &Vec<u8>) -> Result<String, Error> {
+	pub fn encode(slatepack_bytes: &Vec<u8>, encrypted: bool) -> Result<String, Error> {
 		let encoded_slatepack = base58check(&slatepack_bytes)?;
-		let formatted_slatepack = format_slatepack(&format!("{}{}", HEADER, encoded_slatepack))?;
-		Ok(format!("{}{}", formatted_slatepack, FOOTER))
+
+		let header = if encrypted {HEADER_ENC} else {HEADER_BIN};
+		let footer = if encrypted {FOOTER_ENC} else {FOOTER_BIN};
+
+		let formatted_slatepack = format_slatepack(&format!("{}{}", header, encoded_slatepack))?;
+		Ok(format!("{}{}", formatted_slatepack, footer))
 	}
 }
 
@@ -111,22 +124,26 @@ fn error_check(error_code: &[u8], slate_bytes: &[u8]) -> Result<(), Error> {
 }
 
 // Checks header framing bytes and returns an error if they are invalid
-fn check_header(header: &[u8]) -> Result<(), Error> {
+fn check_header(header: &[u8]) -> Result<bool, Error> {
 	let framing = str::from_utf8(header)
 		.map_err(|_| ErrorKind::SlatepackDecodeError("Bad bytes at armored data".into()))?;
-	if HEADER_REGEX.is_match(framing) {
-		Ok(())
+	if HEADER_REGEX_ENC.is_match(framing) {
+		Ok(true)
+	} else if HEADER_REGEX_BIN.is_match(framing) {
+		Ok(false)
 	} else {
 		Err(ErrorKind::SlatepackDecodeError("Bad armor header".to_string()).into())
 	}
 }
 
 // Checks footer framing bytes and returns an error if they are invalid
-fn check_footer(footer: &[u8]) -> Result<(), Error> {
+fn check_footer(footer: &[u8]) -> Result<bool, Error> {
 	let framing = str::from_utf8(footer)
 		.map_err(|_| ErrorKind::SlatepackDecodeError("Bad bytes at armored data".into()))?;
-	if FOOTER_REGEX.is_match(framing) {
-		Ok(())
+	if FOOTER_REGEX_ENC.is_match(framing) {
+		Ok(true)
+	} else if FOOTER_REGEX_BIN.is_match(framing) {
+		Ok(false)
 	} else {
 		Err(ErrorKind::SlatepackDecodeError("Bad armor footer".to_string()).into())
 	}

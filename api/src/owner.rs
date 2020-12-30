@@ -2489,13 +2489,13 @@ where
 		keychain_mask: Option<&SecretKey>,
 		in_slate: VersionedSlate,
 	) -> Result<(Slate, Option<SlatePurpose>, Option<DalekPublicKey>), Error> {
-		let (slate_from, content, sender) = if in_slate.is_encrypted() {
+		let (slate_from, content, sender) = if in_slate.is_slatepack() {
 			let (slate_from, content, sender, _receiver) = self
 				.decrypt_slatepack(keychain_mask, in_slate, None)
 				.map_err(|e| {
 					ErrorKind::SlatepackDecodeError(format!("Unable to decrypt a slatepack, {}", e))
 				})?;
-			(slate_from, Some(content), Some(sender))
+			(slate_from, Some(content), sender)
 		} else {
 			let slate_from = in_slate.into_slate_plain().map_err(|e| e.kind())?;
 			(slate_from, None, None)
@@ -2509,7 +2509,7 @@ where
 		keychain_mask: Option<&SecretKey>,
 		encrypted_slate: VersionedSlate,
 		address_index: Option<u32>,
-	) -> Result<(Slate, SlatePurpose, DalekPublicKey, DalekPublicKey), Error> {
+	) -> Result<(Slate, SlatePurpose, Option<DalekPublicKey>, Option<DalekPublicKey>), Error> {
 		let mut w_lock = self.wallet_inst.lock();
 		let w = w_lock.lc_provider()?.wallet_inst()?;
 		foreign::decrypt_slate(&mut **w, keychain_mask, encrypted_slate, address_index)

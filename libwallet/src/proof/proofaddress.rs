@@ -55,14 +55,10 @@ pub fn get_address_index() -> u32 {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProvableAddress {
 	/// Public key that is an address
-	#[serde(rename = "address")]
-	#[serde(alias = "public_key")]
 	pub public_key: String,
 	/// Place holder for mwc713 backcompability. Value is empty string
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub domain: Option<String>,
+	pub domain: String,
 	/// Place holder for mwc713 backcompability. Value is None
-	#[serde(skip_serializing_if = "Option::is_none")]
 	pub port: Option<u16>,
 }
 
@@ -77,7 +73,7 @@ impl ProvableAddress {
 	pub fn blank() -> Self {
 		Self {
 			public_key: String::new(),
-			domain: None,
+			domain: String::new(),
 			port: None,
 		}
 	}
@@ -92,7 +88,7 @@ impl ProvableAddress {
 
 		Ok(Self {
 			public_key: String::from(public_key),
-			domain: None,
+			domain: String::new(),
 			port: None,
 		})
 	}
@@ -101,7 +97,7 @@ impl ProvableAddress {
 	pub fn from_pub_key(public_key: &PublicKey) -> Self {
 		Self {
 			public_key: public_key.to_base58_check(version_bytes()),
-			domain: None,
+			domain: String::new(),
 			port: None,
 		}
 	}
@@ -114,7 +110,7 @@ impl ProvableAddress {
 	pub fn from_tor_pub_key(public_key: &DalekPublicKey) -> Self {
 		Self {
 			public_key: OnionV3Address::from_bytes(*public_key.as_bytes()).to_ov3_str(),
-			domain: None,
+			domain: String::new(),
 			port: None,
 		}
 	}

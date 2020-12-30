@@ -511,7 +511,7 @@ where
 	pub fn decrypt_slate(
 		&self,
 		encrypted_slate: VersionedSlate,
-	) -> Result<(Slate, SlatePurpose, DalekPublicKey), Error> {
+	) -> Result<(Slate, SlatePurpose, Option<DalekPublicKey>), Error> {
 		let mut w_lock = self.wallet_inst.lock();
 		let w = w_lock.lc_provider()?.wallet_inst()?;
 		let (slate, content, sender, _receiver) = foreign::decrypt_slate(

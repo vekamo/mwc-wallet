@@ -953,7 +953,7 @@ where
 		message: Option<String>,
 	) -> Result<VersionedSlate, ErrorKind> {
 		let version = in_slate.version();
-		let (slate_from, sender) = if in_slate.is_encrypted() {
+		let (slate_from, sender) = if in_slate.is_slatepack() {
 			let (slate_from, content, sender) =
 				Foreign::decrypt_slate(self, in_slate).map_err(|e| {
 					ErrorKind::SlatepackDecodeError(format!("Unable to decrypt a slatepack, {}", e))
@@ -966,7 +966,7 @@ where
 				)));
 			}
 
-			(slate_from, Some(sender))
+			(slate_from, sender)
 		} else {
 			let slate_from = in_slate.into_slate_plain().map_err(|e| e.kind())?;
 			(slate_from, None)
@@ -998,7 +998,7 @@ where
 
 	fn finalize_invoice_tx(&self, in_slate: VersionedSlate) -> Result<VersionedSlate, ErrorKind> {
 		let version = in_slate.version();
-		let (in_slate, sender) = if in_slate.is_encrypted() {
+		let (in_slate, sender) = if in_slate.is_slatepack() {
 			let (slate_from, content, sender) =
 				Foreign::decrypt_slate(self, in_slate).map_err(|e| {
 					ErrorKind::SlatepackDecodeError(format!("Unable to decrypt a slatepack, {}", e))
@@ -1011,7 +1011,7 @@ where
 				)));
 			}
 
-			(slate_from, Some(sender))
+			(slate_from, sender)
 		} else {
 			let slate_from = in_slate.into_slate_plain().map_err(|e| e.kind())?;
 			(slate_from, None)

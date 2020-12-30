@@ -141,6 +141,7 @@ subcommands:
             possible_values:
               - http
               - file
+              - slatepack
               - self
               - mwcmqs
             default_value: http

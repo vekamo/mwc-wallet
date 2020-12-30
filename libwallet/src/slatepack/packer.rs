@@ -50,27 +50,27 @@ impl Slatepacker {
 		slate_version: SlateVersion,
 		content: SlatePurpose,
 		sender: DalekPublicKey,
-		recipient: DalekPublicKey,
+		recipient: Option<DalekPublicKey>, // Encrypted only if recipient is some
 		secret: &DalekSecretKey,
 		use_test_rng: bool,
 	) -> Result<String, Error> {
 		let pack = Slatepack {
-			sender: sender,
+			sender: Some(sender),
 			recipient: recipient,
 			content,
 			slate: slate,
 		};
 
-		let slate_bin = pack.to_binary(slate_version, secret, use_test_rng)?;
+		let (slate_bin, encrypted) = pack.to_binary(slate_version, secret, use_test_rng)?;
 
-		SlatepackArmor::encode(&slate_bin)
+		SlatepackArmor::encode(&slate_bin, encrypted)
 	}
 
 	/// return slatepack
 	pub fn decrypt_slatepack(data: &[u8], dec_key: &DalekSecretKey) -> Result<Self, Error> {
-		let slate_bytes = SlatepackArmor::decode(data)?;
+		let (slate_bytes, encrypted) = SlatepackArmor::decode(data)?;
 
-		let slatepack = Slatepack::from_binary(&slate_bytes, dec_key)?;
+		let slatepack = Slatepack::from_binary(&slate_bytes, encrypted, dec_key)?;
 
 		let Slatepack {
 			sender,
@@ -80,8 +80,8 @@ impl Slatepacker {
 		} = slatepack;
 
 		Ok(Self {
-			sender: Some(sender),
-			recipient: Some(recipient),
+			sender,
+			recipient,
 			content,
 			slate,
 		})
@@ -175,7 +175,7 @@ fn slatepack_io_test() {
 
 	assert_eq!(shared_secret1.as_bytes(), shared_secret2.as_bytes());
 
-	let mut slate = Slate {
+	let mut slate_enc = Slate {
 		compact_slate: true, // Slatepack works only for compact models.
 		num_participants: 2,
 		id: Uuid::from_bytes(bytes_16),
@@ -219,38 +219,70 @@ fn slatepack_io_test() {
 		}),
 	};
 	// updating kernel excess
-	slate.tx.body.kernels[0].excess = slate.calc_excess::<ExtKeychain>(None).unwrap();
+	slate_enc.tx.body.kernels[0].excess = slate_enc.calc_excess::<ExtKeychain>(None).unwrap();
 
-	let slate1_str = format!("{:?}", slate);
-	println!("start slate = {}", slate1_str);
+	let slate_enc_str = format!("{:?}", slate_enc);
+	println!("start encrypted slate = {}", slate_enc_str);
+
+	// For binaries we can't have messages...
+	let mut slate_bin = slate_enc.clone();
+	slate_bin.participant_data[0].message = None;
+	slate_bin.participant_data[1].message = None;
+	let slate_bin_str = format!("{:?}", slate_bin);
+	println!("start binary slate = {}", slate_bin_str);
 
 	// Not encoded, just want to review the data...
-	let slatepack_string = Slatepacker::encrypt_to_send(
-		slate,
+	let slatepack_string_encrypted = Slatepacker::encrypt_to_send(
+		slate_enc.clone(),
 		SlateVersion::SP,
 		SlatePurpose::FullSlate,
 		dalek_pk.clone(),
-		dalek_pk2.clone(), // sending to self, should be fine...
+		Some(dalek_pk2.clone()), // sending to self, should be fine...
 		&dalek_sk,
 		true,
 	)
 	.unwrap();
-	println!("slatepack_string = {}", slatepack_string);
+	println!("slatepack encrypted = {}", slatepack_string_encrypted);
+
+	// Not encoded, just want to review the data...
+	let slatepack_string_binary = Slatepacker::encrypt_to_send(
+		slate_bin.clone(),
+		SlateVersion::SP,
+		SlatePurpose::FullSlate,
+		dalek_pk.clone(),
+		None, // No recipient, should trigger non encrypted mode.
+		&dalek_sk,
+		true,
+	)
+	.unwrap();
+	println!("slatepack binary = {}", slatepack_string_binary);
+
+	assert!( slatepack_string_encrypted.len() > slatepack_string_binary.len() );
 
 	// Testing if can open from a backup
-	let slatepack = Slatepacker::decrypt_slatepack(slatepack_string.as_bytes(), &dalek_sk).unwrap();
+	let slatepack = Slatepacker::decrypt_slatepack(slatepack_string_encrypted.as_bytes(), &dalek_sk).unwrap();
 	let res_slate = slatepack.to_result_slate();
 	let slate2_str = format!("{:?}", res_slate);
 	println!("res_slate = {:?}", slate2_str);
 
-	assert_eq!(slate1_str, slate2_str);
+	assert_eq!(slate_enc_str, slate2_str);
 
 	// Testing if another party can open it
 	let slatepack =
-		Slatepacker::decrypt_slatepack(slatepack_string.as_bytes(), &dalek_sk2).unwrap();
+		Slatepacker::decrypt_slatepack(slatepack_string_encrypted.as_bytes(), &dalek_sk2).unwrap();
 	let res_slate = slatepack.to_result_slate();
 	let slate2_str = format!("{:?}", res_slate);
 	println!("res_slate2 = {:?}", slate2_str);
 
-	assert_eq!(slate1_str, slate2_str);
+	assert_eq!(slate_enc_str, slate2_str);
+
+	// Testing if can decode form the binary
+	let slatepack =
+		Slatepacker::decrypt_slatepack(slatepack_string_binary.as_bytes(), &DalekSecretKey::from_bytes(&[1; 32]).unwrap()).unwrap();
+	let res_slate = slatepack.to_result_slate();
+	let slate3_str = format!("{:?}", res_slate);
+	println!("slate3_str = {:?}", slate3_str);
+
+	assert_eq!(slate_bin_str, slate3_str);
+
 }

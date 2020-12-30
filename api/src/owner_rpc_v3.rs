@@ -37,6 +37,7 @@ use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use rand::thread_rng;
 use std::error::Error;
 use std::time::Duration;
+use ed25519_dalek::PublicKey as DalekPublicKey;
 
 /// Public definition used to generate Owner jsonrpc api.
 /// Secure version containing wallet lifecycle functions. All calls to this API must be encrypted.
@@ -574,7 +575,9 @@ pub trait OwnerRpcV3 {
 				"estimate_only": false,
 				"send_args": null,
 				"slatepack_recipient" : {
-					"address": "3zvywmzxtlm5db6kud3sc3sjjeet4hdr3crcoxpul6h3fnlecvevepqd"
+					"public_key": "3zvywmzxtlm5db6kud3sc3sjjeet4hdr3crcoxpul6h3fnlecvevepqd",
+					"domain": "",
+					"port": null
 				},
 				"late_lock" : true
 			}
@@ -632,6 +635,92 @@ pub trait OwnerRpcV3 {
 	}
 	# "#
 	# ,true, 4, false, false, false, false, true);
+	#
+	# // Producing compact slate that can be converted into the slatepack with target_slate_version = 4.
+	# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
+	# r#"
+	{
+		"jsonrpc": "2.0",
+		"method": "init_send_tx",
+		"params": {
+			"token": "d202964900000000d302964900000000d402964900000000d502964900000000",
+			"args": {
+				"amount": "200000000",
+				"minimum_confirmations": 2,
+				"max_outputs": 500,
+				"num_change_outputs": 1,
+				"selection_strategy_is_use_all": true,
+				"target_slate_version": 4
+			}
+		},
+		"id": 1
+	}
+	# "#
+	# ,
+	# r#"
+	{
+	  "id": 1,
+	  "jsonrpc": "2.0",
+	  "result": {
+		"Ok": {
+		  "amount": "200000000",
+		  "coin_type": "mwc",
+		  "compact_slate": true,
+		  "fee": "8000000",
+		  "height": "4",
+		  "id": "0436430c-2b02-624c-2032-570501212b03",
+		  "lock_height": "0",
+		  "network_type": "automatedtests",
+		  "num_participants": 2,
+		  "participant_data": [
+			{
+			  "id": "0",
+			  "message": null,
+			  "message_sig": null,
+			  "part_sig": null,
+			  "public_blind_excess": "02e89cce4499ac1e9bb498dab9e3fab93cc40cd3d26c04a0292e00f4bf272499ec",
+			  "public_nonce": "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f"
+			}
+		  ],
+		  "payment_proof": null,
+		  "ttl_cutoff_height": null,
+		  "tx": {
+			"body": {
+			  "inputs": [
+				{
+				  "commit": "0910c1752100733bae49e877286835aab76d5856ef8139b6c6e3f51798aa461b03",
+				  "features": "Coinbase"
+				}
+			  ],
+			  "kernels": [
+				{
+				  "excess": "000000000000000000000000000000000000000000000000000000000000000000",
+				  "excess_sig": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+				  "features": "Plain",
+				  "fee": "8000000",
+				  "lock_height": "0"
+				}
+			  ],
+			  "outputs": [
+				{
+				  "commit": "086e1e9e6247b3816a8a9104f4f47b2bea016702a6b2e84b1025a0c9652114bf9f",
+				  "features": "Plain",
+				  "proof": "1eb1ef38d52d17111bac87126fc499c04f9f6f2eb36cdfb3b03bc217d9db1ac31b6775ece55cd92e3af37c45d785580e4e15d2cbb9fe71711e20f687bbd947ec0cc54c9346cf9aa25583199eb0b04a12b4ee2973cb1e6dbbf994f3900400d7f774db483710a187a396992bdfa214ce4f0d09771b5bbfb21839fcb5aa16c0b02e10023df136afdff3ae2bd34f4eef04d3aa4b9a895e838b52dc2b03e0b78bec817f75f6ac95fdca5d8a118aeca0be44657dcf730c7ca04043b5e0d154956315b3332b3f477cf073eb6b6a56ab2b051258077cf86de7e3f3a4ceb9b9e83440a88bae1db7086c2592d10ba7dbb5d835c358241a52da7f0bca94a1dc91a4553cdcab8687218b6bee7dcc0c0cba6c73707a9776c89dcf54698ff6f7a4a35e3b4d96e9a1b1c2fbc24faea695b3a5a1bb1d91e64be1e1d54f1ba57535f9b89cbbf6a54eb8aa3a0c96eba8215ec3903efb646cb2d199d3fd846c0ff34253eb2641d5da28263302d297db95ceb4b5c2fe89775d3e83c3d34d48a84be2ec5777e2d6509234c988885ef6e2725743e2bd051c49cd4637d41454f887fee4331bafa3c253ce4560a4fc7a0b75ec1a2bd022b4930204ebf47556d034a295dda06920b26fff4dc8f50cd9a4a174661a2fea1da6e7c30c98c999a6333a291fe38d319d4677796f9759d6e5b2eaf8ec81729157b05eb252e9c4e1d299dfe21cc10e9e30cc5f1f1d363dd69aaa475fa3a90c50e8175c1c56093f32715505c46905eae35a844322032427f0b5b9b88024506aa85d3462e93705948fa2a31f4858d673415b2d558646c53ec9ce923df9b112b35e5e6ad4271f8aad3504a221ed83023e233cc626cbe3f0c17b9f8c277c615f131ef943457a5e30c976760456319a838608da37dbacf0ddd4b52122ac914a3928cb557880b10498fe22c17c46689951b92310003785206f027a6b"
+				}
+			  ]
+			},
+			"offset": "0000000000000000000000000000000000000000000000000000000000000000"
+		  },
+		  "version_info": {
+			"block_header_version": 2,
+			"orig_version": 3,
+			"version": 3
+		  }
+		}
+	  }
+	}
+	# "#
+	# ,true, 4, false, false, false, false, false);
 	```
 	*/
 
@@ -804,7 +893,9 @@ pub trait OwnerRpcV3 {
 				"dest_acct_name": null,
 				"target_slate_version": null,
 				"slatepack_recipient" : {
-					"address": "3zvywmzxtlm5db6kud3sc3sjjeet4hdr3crcoxpul6h3fnlecvevepqd"
+					"public_key": "3zvywmzxtlm5db6kud3sc3sjjeet4hdr3crcoxpul6h3fnlecvevepqd",
+					"domain": "",
+					"port": null
 				}
 			}
 		},
@@ -2575,7 +2666,9 @@ pub trait OwnerRpcV3 {
 	  "jsonrpc": "2.0",
 	  "result": {
 		"Ok": {
-		  "address": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5"
+		  "public_key": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5",
+  		  "domain": "",
+		  "port": null
 		}
 	  }
 	}
@@ -2607,7 +2700,9 @@ pub trait OwnerRpcV3 {
 	  "jsonrpc": "2.0",
 	  "result": {
 		"Ok": {
-		  "address": "fffqrotuelaodwjblwmifg36xjedjw4azbwvfexmxmmzsb6xvzbkhuqd"
+		  "public_key": "fffqrotuelaodwjblwmifg36xjedjw4azbwvfexmxmmzsb6xvzbkhuqd",
+		  "domain": "",
+		  "port": null
 		}
 	  }
 	}
@@ -2646,11 +2741,15 @@ pub trait OwnerRpcV3 {
 		  "amount": "2000000000",
 		  "excess": "08b3b8b83c622f630141a66c9cad96e19c78f745e4e2ddea85439f05d14a404640",
 		  "recipient_address": {
-			"address": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2"
+			"public_key": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2",
+			"domain": "",
+			"port": null
 		  },
 		  "recipient_sig": "30440220050ccd7244a8e1bcad8724a26bef6e0bc3df85f09dfc41870635711627955c4c02202b3d3599a7371bcc685315876c54cdf956a8c990ce6526f6be8e50591bde3be2",
 		  "sender_address": {
-			"address": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5"
+			"public_key": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5",
+			"domain": "",
+			"port": null
 		  },
 		  "sender_sig": "3045022100945b57de1e8b9f7863c4f4c5698d5617ffa55748c80a8324729f98ce5ef86509022063f6bc511d80046f6f21c9476344ed8d948234cc32a0b022d720161798e09861"
 		}
@@ -2684,11 +2783,15 @@ pub trait OwnerRpcV3 {
 		  "amount": "2000000000",
 		  "excess": "09eac5f5872fa5e08e0c29fd900f1b8f77ff3ad1d0d1c46aeb202cbf92363fe0af",
 		  "recipient_address": {
-			"address": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2"
+			"public_key": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2",
+			"domain": "",
+			"port": null
 		  },
 		  "recipient_sig": "304402204417c3b64709c7e38197103b6979dacee4e41c3ee44d89ea75191f553e2bbcc2022044c52df100fffd080c95575c92329b6ddbd0c77545e31ee439112655918fe0ee",
 		  "sender_address": {
-			"address": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5"
+			"public_key": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5",
+			"domain": "",
+			"port": null
 		  },
 		  "sender_sig": "3044022001d10e4e1fd303748120a45cfcdedcd8b1abc1ffe8ff59d35ddb2ec5b7c2e1a902207dab490bd26d16784933724c559e5a1e4dc56a6c0941f4dd70a22b0c4cfbcc40"
 		}
@@ -2723,15 +2826,17 @@ pub trait OwnerRpcV3 {
 			  "recipient_address": {
 				"domain": "",
 				"port": null,
-				"address": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2"
+				"public_key": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2"
 
-		  },
+			  },
 			  "recipient_sig": "30440220050ccd7244a8e1bcad8724a26bef6e0bc3df85f09dfc41870635711627955c4c02202b3d3599a7371bcc685315876c54cdf956a8c990ce6526f6be8e50591bde3be2",
 			  "sender_address": {
-				"address": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5"
-		  },
-		 "sender_sig": "3045022100945b57de1e8b9f7863c4f4c5698d5617ffa55748c80a8324729f98ce5ef86509022063f6bc511d80046f6f21c9476344ed8d948234cc32a0b022d720161798e09861"
-		}
+				"public_key": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5",
+				"domain": "",
+				"port": null
+			  },
+			 "sender_sig": "3045022100945b57de1e8b9f7863c4f4c5698d5617ffa55748c80a8324729f98ce5ef86509022063f6bc511d80046f6f21c9476344ed8d948234cc32a0b022d720161798e09861"
+			}
 		},
 		"id": 1
 	}
@@ -2763,11 +2868,15 @@ pub trait OwnerRpcV3 {
 				  "amount": "2000000000",
 				  "excess": "09eac5f5872fa5e08e0c29fd900f1b8f77ff3ad1d0d1c46aeb202cbf92363fe0af",
 				  "recipient_address": {
-					"address": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2"
+					"public_key": "xmgceW7Z2phenRwaBeKvTRZkPMJarwLFa8h5LW5bdHKucaKTeuE2",
+					"domain": "",
+					"port": null
 				  },
 				  "recipient_sig": "304402204417c3b64709c7e38197103b6979dacee4e41c3ee44d89ea75191f553e2bbcc2022044c52df100fffd080c95575c92329b6ddbd0c77545e31ee439112655918fe0ee",
 				  "sender_address": {
-					"address": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5"
+					"public_key": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5",
+					"domain": "",
+					"port": null
 				  },
 				  "sender_sig": "3044022001d10e4e1fd303748120a45cfcdedcd8b1abc1ffe8ff59d35ddb2ec5b7c2e1a902207dab490bd26d16784933724c559e5a1e4dc56a6c0941f4dd70a22b0c4cfbcc40"
 				}
@@ -2844,7 +2953,9 @@ pub trait OwnerRpcV3 {
 		"params": {
 			"token": "d202964900000000d302964900000000d402964900000000d502964900000000",
 			"recipient": {
-					"address" : "3zvywmzxtlm5db6kud3sc3sjjeet4hdr3crcoxpul6h3fnlecvevepqd"
+					"public_key" : "3zvywmzxtlm5db6kud3sc3sjjeet4hdr3crcoxpul6h3fnlecvevepqd",
+					"domain": "",
+					"port": null
 				},
 			"content" : "InvoiceInitial",
 			"address_index" : null,
@@ -2913,6 +3024,83 @@ pub trait OwnerRpcV3 {
 	}
 	# "#
 	# ,true, 4, false, false, false, false, true);
+	#
+	# // Converting slate into non encrypted binary, recipient is null
+	# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
+	# r#"
+	{
+		"jsonrpc": "2.0",
+		"method": "encode_slatepack_message",
+		"params": {
+			"token": "d202964900000000d302964900000000d402964900000000d502964900000000",
+			"recipient": null,
+			"content" : "InvoiceInitial",
+			"address_index" : null,
+			"slate": {
+			  "amount": "2000000000",
+			  "coin_type": null,
+			  "compact_slate": true,
+			  "fee": "0",
+			  "height": "4",
+			  "id": "0436430c-2b02-624c-2032-570501212b02",
+			  "lock_height": "0",
+			  "network_type": null,
+			  "num_participants": 2,
+			  "participant_data": [
+				{
+				  "id": "0",
+				  "message": null,
+				  "message_sig": null,
+				  "part_sig": null,
+				  "public_blind_excess": "02e89cce4499ac1e9bb498dab9e3fab93cc40cd3d26c04a0292e00f4bf272499ec",
+				  "public_nonce": "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f"
+				}
+			  ],
+			  "payment_proof": null,
+			  "ttl_cutoff_height": null,
+			  "tx": {
+				"body": {
+				  "inputs": [],
+				  "kernels": [
+					{
+					  "excess": "000000000000000000000000000000000000000000000000000000000000000000",
+					  "excess_sig": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+					  "features": "Plain",
+					  "fee": "0",
+					  "lock_height": "0"
+					}
+				  ],
+				  "outputs": [
+					{
+					  "commit": "088119ed65640d33407d84da4992850eb6a5c2b68ad2ff2323dee51495599bc42d",
+					  "features": "Plain",
+					  "proof": "5035e8cc9a8f35353bf73124ef12b3f7cff7dbcfcc8476c796f62bdf48000e7c87a0a70f2deb44f502bf3be08302d2affb51ae9b7b7d21b96752dc9bd22932520c46311cc0492b1a8e5bcd5c12df5eda2a05860c9db2ac178a2c1c5c01acf3859b068c927a300a4d883b03f03a062dd8475174d8d1770dca2d24e60a8899907b8b425346f1c75c8febaf4b21d81666d9fb6af62f8059f55677a8cef90e64be362d6c7232e009209fbe4a1b1918211109d3d16f08fc018b1a3d3bd11be9495a6a40cbb433130f74b2e0fd4d97da78e623f329922e07a791aab6c93a477449c04894cfdba37a3748fd7fd7203b93e73b00299e367efa5411cd5da70104dc25fda3497c3c99bda84f3bce4c205cb27d72979bdcbfa495599d9804cba3096319c3c5c4aaeeadbda2b185196a3b5785c3e68de0ec260cb1450cfbe0934c78f61a4df8632018e731016aa82dab83f09670534e04c044d20eaa2b9281bdf6d3677be6fab54203b95701c8a962638e78706b3024c61994b420705934f9f7fdd36bc00431cea462edbabbef2aea62cf422a736f02f8852c53996d0e663648f67838b2f084db39b115de1dc05047803071e1ac2ce25e5d2ecf41a83f12adb88ee336ba6e04b52a59fe138245ed2a2ff46ff38221ee7fcf311bb330947766d8f695ec990efe63df358bd17d15d825c42b8de93cf740a22a0328781e76e92f210ba0ae989c4290f3035b208b27a616076b6873e851f3b5b74ad8bbd01cbebcc7b5d0c0d7c4604136106d1086f71b467d06c7c91caf913fc2bc588762fd63ce4ed2f85b1befdd4fa29ae073b943fc00fc9a675a676d6d3be03e1b7ac351379966fc5bcf8584508b975974fd98c3062861e588453a96296fae97488f42662f55af630389a436707940a673a36e19fc720c859660eabc9de31b4e48cef26b88b8a3af462c8ad62f461714"
+					}
+				  ]
+				},
+				"offset": "0000000000000000000000000000000000000000000000000000000000000000"
+			  },
+			  "version_info": {
+				"block_header_version": 2,
+				"orig_version": 3,
+				"version": 3
+			  }
+			}
+		},
+		"id": 1
+	}
+	# "#
+	# ,
+	# r#"
+	{
+	  "id": 1,
+	  "jsonrpc": "2.0",
+	  "result": {
+		"Ok": "BEGINSLATEBIN.9 ahjQefP9gsCcVt2 5Po4VP34y95yxEw MmTzzckUkh1tu3y 7WwT5j1ZTL7UyC4 byFhRQM4BmhM92Y 1ukWPJ8BVdpEGUM AJUrU2YbXFLAYTt dqamYotCv4Co3zk eD8RdPpX4b. ENDSLATEBIN."
+	  }
+	}
+	# "#
+	# ,true, 4, false, false, false, false, true);
 	```
 	*/
 
@@ -2921,7 +3109,7 @@ pub trait OwnerRpcV3 {
 		token: Token,
 		slate: VersionedSlate,
 		content: SlatePurpose,
-		recipient: ProvableAddress,
+		recipient: Option<ProvableAddress>,
 		address_index: Option<u32>,
 	) -> Result<String, ErrorKind>;
 
@@ -2950,10 +3138,14 @@ pub trait OwnerRpcV3 {
 		"Ok": {
 		  "content": "SendResponse",
 		  "recipient": {
-			"address": "fffqrotuelaodwjblwmifg36xjedjw4azbwvfexmxmmzsb6xvzbkhuqd"
+			"public_key": "fffqrotuelaodwjblwmifg36xjedjw4azbwvfexmxmmzsb6xvzbkhuqd",
+			"domain": "",
+			"port": null
 		  },
 		  "sender": {
-			"address": "7rky2tvk763cq5kvhyxv7zkjxfytmao3qttqvoc6fsiawo4kzgii7bqd"
+			"public_key": "7rky2tvk763cq5kvhyxv7zkjxfytmao3qttqvoc6fsiawo4kzgii7bqd",
+			"domain": "",
+			"port": null
 		  },
 		  "slate": {
 			"amount": "0",
@@ -3003,6 +3195,80 @@ pub trait OwnerRpcV3 {
 				]
 			  },
 			  "offset": "97e0fccd0b805d10065a4f8ca46aa6cc73f0962e829c7f13836e2c8371da6293"
+			},
+			"version_info": {
+			  "block_header_version": 1,
+			  "orig_version": 3,
+			  "version": 3
+			}
+		  }
+		}
+	  }
+	}
+	# "#
+	# , true, 0, false, false, false, false, true);
+	#
+	# // Decode not encrypted slate pack
+	# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
+	# r#"
+	{
+		"jsonrpc": "2.0",
+		"method": "decode_slatepack_message",
+		"params": {
+			"token": "d202964900000000d302964900000000d402964900000000d502964900000000",
+			"address_index": null,
+			"message": "BEGINSLATEBIN.9 ahjQefP9gsCcVt2 5Po4VP34y95yxEw MmTzzckUkh1tu3y 7WwT5j1ZTL7UyC4 byFhRQM4BmhM92Y 1ukWPJ8BVdpEGUM AJUrU2YbXFLAYTt dqamYotCv4Co3zk eD8RdPpX4b. ENDSLATEBIN."
+		},
+		"id": 1
+	}
+	# "#
+	# ,
+	# r#"
+	{
+	  "id": 1,
+	  "jsonrpc": "2.0",
+	  "result": {
+		"Ok": {
+		  "content": "InvoiceInitial",
+		  "recipient": null,
+		  "sender": null,
+		  "slate": {
+			"amount": "2000000000",
+			"coin_type": "mwc",
+			"compact_slate": true,
+			"fee": "0",
+			"height": "4",
+			"id": "0436430c-2b02-624c-2032-570501212b02",
+			"lock_height": "0",
+			"network_type": "automatedtests",
+			"num_participants": 2,
+			"participant_data": [
+			  {
+				"id": "0",
+				"message": null,
+				"message_sig": null,
+				"part_sig": null,
+				"public_blind_excess": "02e89cce4499ac1e9bb498dab9e3fab93cc40cd3d26c04a0292e00f4bf272499ec",
+				"public_nonce": "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f"
+			  }
+			],
+			"payment_proof": null,
+			"ttl_cutoff_height": null,
+			"tx": {
+			  "body": {
+				"inputs": [],
+				"kernels": [
+				  {
+					"excess": "09e89cce4499ac1e9bb498dab9e3fab93cc40cd3d26c04a0292e00f4bf272499ec",
+					"excess_sig": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+					"features": "Plain",
+					"fee": "0",
+					"lock_height": "0"
+				  }
+				],
+				"outputs": []
+			  },
+			  "offset": "0000000000000000000000000000000000000000000000000000000000000000"
 			},
 			"version_info": {
 			  "block_header_version": 1,
@@ -3301,9 +3567,9 @@ where
 	}
 
 	fn verify_slate_messages(&self, token: Token, slate: VersionedSlate) -> Result<(), ErrorKind> {
-		if slate.is_encrypted() {
+		if slate.is_slatepack() {
 			return Err(ErrorKind::SlatepackDecodeError(
-				"verify_slate_messages doesn't make sense for slatepack".to_string(),
+				"verify_slate_messages is not applicable for slatepack".to_string(),
 			));
 		}
 		let slate = slate
@@ -3526,7 +3792,7 @@ where
 		token: Token,
 		slate: VersionedSlate,
 		content: SlatePurpose,
-		recipient: ProvableAddress,
+		recipient: Option<ProvableAddress>,
 		address_index: Option<u32>,
 	) -> Result<String, ErrorKind> {
 		// Expected Slate in Json (plain) format
@@ -3534,9 +3800,10 @@ where
 			ErrorKind::SlatepackDecodeError(format!("Expected to get slate in Json format, {}", e))
 		})?;
 
-		let recipient = recipient.tor_public_key().map_err(|e| {
-			ErrorKind::SlatepackEncodeError(format!("Expecting recipient tor address, {}", e))
-		})?;
+		let recipient : Option<DalekPublicKey> = match recipient {
+			Some(recipient) => Some(recipient.tor_public_key().map_err(|e| ErrorKind::SlatepackEncodeError(format!("Expecting recipient tor address, {}", e)))?),
+			None => None
+		};
 
 		let vslate = Owner::encrypt_slate(
 			&self,
@@ -3544,7 +3811,7 @@ where
 			&slate,
 			Some(SlateVersion::SP),
 			content,
-			Some(recipient),
+			recipient,
 			address_index,
 			self.doctest_mode,
 		)
@@ -3581,8 +3848,8 @@ where
 
 		Ok(SlatepackInfo {
 			slate: vslate,
-			sender: ProvableAddress::from_tor_pub_key(&sender),
-			recipient: ProvableAddress::from_tor_pub_key(&recipient),
+			sender: sender.map(|pk| ProvableAddress::from_tor_pub_key(&pk)),
+			recipient: recipient.map(|pk| ProvableAddress::from_tor_pub_key(&pk)),
 			content,
 		})
 	}
@@ -3591,5 +3858,32 @@ where
 // Keeping as a placeholder for doc tests
 #[test]
 fn owner_api_v3_test() {
-	//use crate as grin_wallet_api;
+	use crate as grin_wallet_api;
+
+	grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
+	r#"
+	{
+		"jsonrpc": "2.0",
+		"method": "get_mqs_address",
+		"params": {
+			"token": "d202964900000000d302964900000000d402964900000000d502964900000000"
+		},
+		"id": 1
+	}
+	"#
+	,
+	r#"
+	{
+	  "id": 1,
+	  "jsonrpc": "2.0",
+	  "result": {
+		"Ok": {
+		  "public_key": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5",
+  		  "domain": "",
+		  "port": null
+		}
+	  }
+	}
+	"#
+	, true, 0, false, false, false, false, true);
 }

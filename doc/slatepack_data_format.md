@@ -17,10 +17,16 @@ This document desribe the Slatepack format.
 MWC has 'ProvableAddress' that include TOR or MQS address. For Slatepacks we will continue to use them. Only TOR 
 address can be used because of encryption/decryption internals.  ProvableAddress with MQS value can't be used for slatepacks.
 
+Please note, Address is applicable to encrypted slatepack only.
+
 ## Message Armor
 
-Grin Armor does binary to Base58 conversion and it works great for us. This part works as it is, no changes was made.
+Grin Armor does binary to Base58 conversion and it works great for us. This part works as it is, the only change is header and footer.
 https://docs.grin.mw/wiki/transactions/slatepack/#armor
+
+For normal encrypted slatepack header/footer are: BEGINSLATEPACK / ENDSLATEPACK
+
+For not encrypted binary formatr slatepack header/footer are: BEGINSLATEBIN / ENDSLATEBIN
 
 ## Encryption/Decryption
 

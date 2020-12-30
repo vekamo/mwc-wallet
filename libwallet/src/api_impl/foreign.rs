@@ -348,7 +348,7 @@ pub fn decrypt_slate<'a, T: ?Sized, C, K>(
 	keychain_mask: Option<&SecretKey>,
 	encrypted_slate: VersionedSlate,
 	address_index: Option<u32>,
-) -> Result<(Slate, SlatePurpose, DalekPublicKey, DalekPublicKey), Error>
+) -> Result<(Slate, SlatePurpose, Option<DalekPublicKey>, Option<DalekPublicKey>), Error>
 where
 	T: WalletBackend<'a, C, K>,
 	C: NodeClient + 'a,
@@ -361,12 +361,8 @@ where
 			ErrorKind::SlatepackDecodeError(format!("Unable to build key to decrypt, {}", e))
 		})?;
 	let sp = encrypted_slate.into_slatepack(&sec_key)?;
-	let sender = sp.get_sender().ok_or(ErrorKind::SlatepackDecodeError(
-		"Not found sender".to_string(),
-	))?;
-	let recipient = sp.get_recipient().ok_or(ErrorKind::SlatepackDecodeError(
-		"Not found recipient".to_string(),
-	))?;
+	let sender = sp.get_sender();
+	let recipient = sp.get_recipient();
 	let content = sp.get_content();
 	let slate = sp.to_result_slate();
 	Ok((slate, content, sender, recipient))
@@ -388,15 +384,10 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	if slatepack_recipient.is_none() {
-		// Using unencrypted format
-		let version = version.unwrap_or(slate.lowest_version());
-		Ok(
-			VersionedSlate::into_version_plain(slate.clone(), version).map_err(|e| {
-				ErrorKind::SlatepackEncodeError(format!("Unable to build a slate, {}", e))
-			})?,
-		)
-	} else {
+	let slatepack_format = slatepack_recipient.is_some() || version == Some(SlateVersion::SP);
+
+	if slatepack_format {
+		// Can be not encrypted slate binary if slatepack_recipient is_none
 		let (slatepack_secret, slatepack_pk) = {
 			let keychain = w.keychain(keychain_mask)?;
 			let slatepack_secret =
@@ -414,5 +405,14 @@ where
 			&slatepack_secret,
 			use_test_rng,
 		)?)
+	}
+	else {
+		// Plain slate format
+		let version = version.unwrap_or(slate.lowest_version());
+		Ok(
+			VersionedSlate::into_version_plain(slate.clone(), version).map_err(|e| {
+				ErrorKind::SlatepackEncodeError(format!("Unable to build a slate, {}", e))
+			})?,
+		)
 	}
 }

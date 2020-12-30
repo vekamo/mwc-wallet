@@ -42,7 +42,7 @@ use serde_json as json;
 use std::fs::File;
 use std::io;
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -445,18 +445,33 @@ where
 			};
 
 			match args.method.as_str() {
-				"file" => {
-					PathToSlatePutter::build_encrypted(
-						Some((&args.dest).into()),
+				"file" | "slatepack" => {
+
+					let dest : Option<PathBuf> = if args.dest.is_empty() {
+						if args.method == "file" {
+							return Err(ErrorKind::ArgumentError("Please specify destination for file".to_string()).into());
+						}
+						None
+					}
+					else {
+						Some((&args.dest).into())
+					};
+
+					let slate_str = PathToSlatePutter::build_encrypted(
+						dest,
 						SlatePurpose::SendInitial,
 						slatepack_sender,
 						recipient,
+						args.method == "slatepack",
 					)
 					.put_tx(&slate, &slatepack_secret, false)
 					.map_err(|e| {
 						ErrorKind::IO(format!("Unable to store the file at {}, {}", args.dest, e))
 					})?;
 					api.tx_lock_outputs(m, &slate, Some(String::from("file")), 0)?;
+					if args.dest.is_empty()  {
+						println!("Slatepack: {}", slate_str);
+					}
 					return Ok(());
 				}
 				"self" => {
@@ -551,7 +566,7 @@ where
 		let slate_pkg =
 			PathToSlateGetter::build_form_path((&args.input).into()).get_tx(&slatepack_secret)?;
 
-		let (mut slate, sender, _recipient) = slate_pkg.to_slate()?;
+		let (mut slate, sender, _recipient, slatepack_format) = slate_pkg.to_slate()?;
 
 		if let Err(e) = api.verify_slate_messages(&slate) {
 			error!("Error validating participant messages: {}", e);
@@ -571,6 +586,7 @@ where
 			SlatePurpose::SendResponse,
 			DalekPublicKey::from(&slatepack_secret),
 			sender,
+			slatepack_format,
 		)
 		.put_tx(&slate, &slatepack_secret, false)?;
 		info!(
@@ -746,6 +762,7 @@ where
 			SlatePurpose::InvoiceInitial,
 			tor_address,
 			recipient,
+			recipient.is_some(),
 		)
 		.put_tx(&slate, &slatepack_secret, false)?;
 		Ok(())
@@ -790,7 +807,7 @@ where
 	let slate_pkg =
 		PathToSlateGetter::build_form_path((&args.input).into()).get_tx(&slatepack_secret)?;
 
-	let (slate, sender_pk, _recepient) = slate_pkg.to_slate()?;
+	let (slate, sender_pk, _recepient, _encrypted) = slate_pkg.to_slate()?;
 
 	let wallet_inst = owner_api.wallet_inst.clone();
 	controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, m| {

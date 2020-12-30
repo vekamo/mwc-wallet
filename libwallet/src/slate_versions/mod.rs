@@ -79,8 +79,8 @@ impl VersionedSlate {
 		}
 	}
 
-	/// Return tru is the slate data encrypted
-	pub fn is_encrypted(&self) -> bool {
+	/// Return true is the slate is binary. It can be encrypted or not.
+	pub fn is_slatepack(&self) -> bool {
 		match self {
 			VersionedSlate::SP(_) => true,
 			_ => false,
@@ -99,19 +99,12 @@ impl VersionedSlate {
 	) -> Result<VersionedSlate, Error> {
 		match version {
 			SlateVersion::SP => {
-				if recipient.is_none() {
-					return Err(ErrorKind::SlatepackEncodeError(
-						"Not found slatepack recipient values".to_string(),
-					)
-					.into());
-				}
-
 				let armored_slatepack = Slatepacker::encrypt_to_send(
 					slate,
 					SlateVersion::SP,
 					content,
 					sender,
-					recipient.unwrap(),
+					recipient,
 					secret,
 					use_test_rng,
 				)?;

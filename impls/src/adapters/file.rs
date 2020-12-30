@@ -30,6 +30,7 @@ pub struct PathToSlatePutter {
 	content: Option<SlatePurpose>,
 	sender: Option<DalekPublicKey>,
 	recipient: Option<DalekPublicKey>,
+	slatepack_format: bool,
 }
 
 pub struct PathToSlateGetter {
@@ -46,12 +47,14 @@ impl PathToSlatePutter {
 		content: SlatePurpose,
 		sender: DalekPublicKey,
 		recipient: Option<DalekPublicKey>,
+		slatepack_format: bool,
 	) -> Self {
 		Self {
 			path_buf,
 			content: Some(content),
 			sender: Some(sender),
 			recipient: recipient,
+			slatepack_format,
 		}
 	}
 
@@ -61,6 +64,7 @@ impl PathToSlatePutter {
 			content: None,
 			sender: None,
 			recipient: None,
+			slatepack_format: false,
 		}
 	}
 }
@@ -89,7 +93,8 @@ impl SlatePutter for PathToSlatePutter {
 		use_test_rng: bool,
 	) -> Result<String, Error> {
 		let out_slate = {
-			if self.recipient.is_some() {
+			if self.recipient.is_some() || self.slatepack_format {
+				// recipient is defining enrypted/nonencrypted format. Sender and content are still required.
 				if self.sender.is_none() || self.content.is_none() {
 					return Err(ErrorKind::GenericError(
 						"Sender or content are not defined".to_string(),

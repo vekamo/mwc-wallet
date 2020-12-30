@@ -453,9 +453,10 @@ pub struct SlatepackInfo {
 	pub slate: VersionedSlate,
 	/// Sender address. No receiver address. Wallet can try to decode it to check if receiver this wallet
 	/// Sender address is needed to respond back, or for encoding/decoding
-	pub sender: ProvableAddress,
-	// Receiver address
-	pub recipient: ProvableAddress,
+	/// If none, slatepack was not encrypted
+	pub sender: Option<ProvableAddress>,
+	// Receiver address, none for not encrypted
+	pub recipient: Option<ProvableAddress>,
 	/// The content of the slate.
 	pub content: SlatePurpose,
 }
