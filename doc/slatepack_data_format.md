@@ -59,7 +59,7 @@ Users working with armored message, but underneath it is a pure binary format. H
 MWC slate data using bit streaming format for data serialization. The serialization/deserialization functions are symmetrical and
 not using serde because we want full control to maintain compatibility. Backward compatibility will be maintained. The forward compatibility is nice to have, but it is not guarantee.
 
-## Slate package not encrypted data
+## Slate package binary (not encrypted) header
 
 Data | Size | Descryption 
 ---- | ---- | ----------- |
@@ -68,8 +68,6 @@ Sender Public Key   | 30 bytes  | Sender public key. Needed to decode the encryp
 Receiver Public Key | 30 bytes  | Receiver Public key. Needed to decode encryptrd by sender (archived data)
 Nonce               | 12 bytes  | AEAD message nonce 
 Encrypted Data Size | 2 bytes   | Length of the encrypted data in bytes
-Encrypted data      | length    | Encrypted data, see below for details
-Future usage        | any       | Here we can write not encrypted frontward compatible data.
 
 ## Slate package encrypted data.
 
@@ -114,3 +112,6 @@ Proof Signature         | 64 bytes | Optional, signature data
 Future usage        | any       | Here we can write encrypted frontward compatible data.
 CRC32               | last 4 bytes | The check sum for Unencrypoted and Encrypted data. It allow to verify is unencrypted or encrypted data was adjusted
 
+## Slate package binary (not encrypted) tail
+
+Currently nothing, can be used for frontward compatible data.
