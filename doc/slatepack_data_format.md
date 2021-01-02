@@ -26,7 +26,7 @@ https://docs.grin.mw/wiki/transactions/slatepack/#armor
 
 For normal encrypted slatepack header/footer are: BEGINSLATEPACK / ENDSLATEPACK
 
-For not encrypted binary formatr slatepack header/footer are: BEGINSLATEBIN / ENDSLATEBIN
+For not encrypted binary format slatepack header/footer are: BEGINSLATE_BIN / ENDSLATE_BIN
 
 ## Encryption/Decryption
 

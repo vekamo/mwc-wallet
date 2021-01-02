@@ -2607,7 +2607,7 @@ pub trait OwnerRpcV2: Sync + Send {
 	  "id": 1,
 	  "jsonrpc": "2.0",
 	  "result": {
-		"Ok": "BEGINSLATEBIN.9 ahjQefP9gsCcVt2 5Po4VP34y95yxEw MmTzzckUkh1tu3y 7WwT5j1ZTL7UyC4 byFhRQM4BmhM92Y 1ukWPJ8BVdpEGUM AJUrU2YbXFLAYTt dqamYotCv4Co3zk eD8RdPpX4b. ENDSLATEBIN."
+		"Ok": "BEGINSLATE_BIN. 9ahjQefP9gsCcVt 25Po4VP34y95yxE wMmTzzckUkh1tu3 y7WwT5j1ZTL7UyC 4byFhRQM4BmhM92 Y1ukWPJ8BVdpEGU MAJUrU2YbXFLAYT tdqamYotCv4Co3z keD8RdPpX4b. ENDSLATE_BIN."
 	  }
 	}
 	# "#
@@ -2725,7 +2725,7 @@ pub trait OwnerRpcV2: Sync + Send {
 		"method": "decode_slatepack_message",
 		"params": {
 			"address_index": null,
-			"message": "BEGINSLATEBIN.9 ahjQefP9gsCcVt2 5Po4VP34y95yxEw MmTzzckUkh1tu3y 7WwT5j1ZTL7UyC4 byFhRQM4BmhM92Y 1ukWPJ8BVdpEGUM AJUrU2YbXFLAYTt dqamYotCv4Co3zk eD8RdPpX4b. ENDSLATEBIN."
+			"message": "BEGINSLATE_BIN. 9ahjQefP9gsCcVt 25Po4VP34y95yxE wMmTzzckUkh1tu3 y7WwT5j1ZTL7UyC 4byFhRQM4BmhM92 Y1ukWPJ8BVdpEGU MAJUrU2YbXFLAYT tdqamYotCv4Co3z keD8RdPpX4b. ENDSLATE_BIN."
 		},
 		"id": 1
 	}

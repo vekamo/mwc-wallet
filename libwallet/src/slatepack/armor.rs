@@ -25,11 +25,11 @@ use regex::Regex;
 use sha2::{Digest, Sha256};
 use std::str;
 
-// Framing and formatting for slate armor
+// Framing and formatting for slate armor. Headers and footers better to be the same size, otherwise formatting makes it ugly
 pub static HEADER_ENC: &str = "BEGINSLATEPACK.";
 static FOOTER_ENC: &str = ". ENDSLATEPACK.";
-pub static HEADER_BIN: &str = "BEGINSLATEBIN.";
-static FOOTER_BIN: &str = ". ENDSLATEBIN.";
+pub static HEADER_BIN: &str = "BEGINSLATE_BIN.";
+static FOOTER_BIN: &str = ". ENDSLATE_BIN.";
 const WORD_LENGTH: usize = 15;
 const WORDS_PER_LINE: usize = 200;
 
@@ -39,9 +39,9 @@ lazy_static! {
 	static ref FOOTER_REGEX_ENC: Regex =
 		Regex::new(concat!(r"^[>\n\r\t ]*ENDSLATEPACK[>\n\r\t ]*$")).unwrap();
 	static ref HEADER_REGEX_BIN: Regex =
-		Regex::new(concat!(r"^[>\n\r\t ]*BEGINSLATEBIN[>\n\r\t ]*$")).unwrap();
+		Regex::new(concat!(r"^[>\n\r\t ]*BEGINSLATE_BIN[>\n\r\t ]*$")).unwrap();
 	static ref FOOTER_REGEX_BIN: Regex =
-		Regex::new(concat!(r"^[>\n\r\t ]*ENDSLATEBIN[>\n\r\t ]*$")).unwrap();
+		Regex::new(concat!(r"^[>\n\r\t ]*ENDSLATE_BIN[>\n\r\t ]*$")).unwrap();
 	static ref WHITESPACE_LIST: [u8; 5] = [b'>', b'\n', b'\r', b'\t', b' '];
 }
 
