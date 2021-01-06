@@ -471,7 +471,7 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 				None => "default",
 			}
 		} else {
-			if !estimate_selection_strategies {
+			if !estimate_selection_strategies && method != "slatepack" {
 				parse_required(args, "dest")?
 			} else {
 				""
@@ -613,48 +613,50 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 	}
 }
 
-pub fn parse_receive_args(receive_args: &ArgMatches) -> Result<command::ReceiveArgs, ParseError> {
-	// message
-	let message = match receive_args.is_present("message") {
-		true => Some(receive_args.value_of("message").unwrap().to_owned()),
+pub fn parse_receive_unpack_args(args: &ArgMatches) -> Result<command::ReceiveArgs, ParseError> {
+	// input file
+	let input_file = match args.is_present("file") {
+		true => {
+			let file = args.value_of("file").unwrap().to_owned();
+			// validate input
+			if !Path::new(&file).is_file() {
+				let msg = format!("File {} not found.", &file);
+				return Err(ParseError::ArgumentError(msg));
+			}
+			Some(file)
+		}
 		false => None,
 	};
 
-	// input
-	let tx_file = parse_required(receive_args, "input")?;
-
-	// validate input
-	if !Path::new(&tx_file).is_file() {
-		let msg = format!("File {} not found.", &tx_file);
-		return Err(ParseError::ArgumentError(msg));
-	}
-
 	Ok(command::ReceiveArgs {
-		input: tx_file.to_owned(),
-		message: message,
+		input_file,
+		input_slatepack_message: args.value_of("content").map(|s| s.to_string()),
+		message: args.value_of("message").map(|s| s.to_string()),
+		outfile: args.value_of("outfile").map(|s| s.to_string()),
 	})
 }
 
 pub fn parse_finalize_args(args: &ArgMatches) -> Result<command::FinalizeArgs, ParseError> {
-	let fluff = args.is_present("fluff");
-	let nopost = args.is_present("nopost");
-	let tx_file = parse_required(args, "input")?;
-
-	if !Path::new(&tx_file).is_file() {
-		let msg = format!("File {} not found.", tx_file);
-		return Err(ParseError::ArgumentError(msg));
-	}
-
-	let dest_file = match args.is_present("dest") {
-		true => Some(args.value_of("dest").unwrap().to_owned()),
+	// input file
+	let input_file = match args.is_present("file") {
+		true => {
+			let file = args.value_of("file").unwrap().to_owned();
+			// validate input
+			if !Path::new(&file).is_file() {
+				let msg = format!("File {} not found.", &file);
+				return Err(ParseError::ArgumentError(msg));
+			}
+			Some(file)
+		}
 		false => None,
 	};
 
 	Ok(command::FinalizeArgs {
-		input: tx_file.to_owned(),
-		fluff: fluff,
-		nopost: nopost,
-		dest: dest_file.to_owned(),
+		input_file,
+		input_slatepack_message: args.value_of("content").map(|s| s.to_string()),
+		fluff: args.is_present("fluff"),
+		nopost: args.is_present("nopost"),
+		dest: args.value_of("dest").map(|s| s.to_string()),
 	})
 }
 
@@ -1396,8 +1398,12 @@ where
 				wallet_config.dark_background_color_scheme.unwrap_or(true),
 			)
 		}
+		("unpack", Some(args)) => {
+			let a = arg_parse!(parse_receive_unpack_args(&args));
+			command::unpack(owner_api, km, a)
+		}
 		("receive", Some(args)) => {
-			let a = arg_parse!(parse_receive_args(&args));
+			let a = arg_parse!(parse_receive_unpack_args(&args));
 			command::receive(owner_api, km, &global_wallet_args, a)
 		}
 		("finalize", Some(args)) => {

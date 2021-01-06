@@ -535,8 +535,10 @@ where
 
 /// Receive command argument
 pub struct ReceiveArgs {
-	pub input: String,
+	pub input_file: Option<String>,
+	pub input_slatepack_message: Option<String>,
 	pub message: Option<String>,
+	pub outfile: Option<String>,
 }
 
 pub fn receive<L, C, K>(
@@ -565,9 +567,30 @@ where
 		};
 
 		let slate_pkg =
-			PathToSlateGetter::build_form_path((&args.input).into()).get_tx(&slatepack_secret)?;
+			match &args.input_file {
+				Some(file_name) => PathToSlateGetter::build_form_path(file_name.into())
+					.get_tx(&slatepack_secret)?,
+				None => match &args.input_slatepack_message {
+					Some(message) => PathToSlateGetter::build_form_str(message.clone())
+						.get_tx(&slatepack_secret)?,
+					None => {
+						return Err(ErrorKind::ArgumentError(
+							"Please specify 'file' or 'content' argument".to_string(),
+						)
+						.into())
+					}
+				},
+			};
 
-		let (mut slate, sender, _recipient, slatepack_format) = slate_pkg.to_slate()?;
+		let (mut slate, sender, _recipient, content, slatepack_format) = slate_pkg.to_slate()?;
+
+		if !(content == SlatePurpose::FullSlate || content == SlatePurpose::SendInitial) {
+			return Err(ErrorKind::ArgumentError(format!(
+				"Wrong slate content. Expecting SendInitial, get {:?}",
+				content
+			))
+			.into());
+		}
 
 		if let Err(e) = api.verify_slate_messages(&slate) {
 			error!("Error validating participant messages: {}", e);
@@ -582,18 +605,97 @@ where
 			args.message.clone(),
 		)?;
 
-		PathToSlatePutter::build_encrypted(
-			Some(format!("{}.response", args.input).into()),
+		let mut response_file = args.outfile.clone();
+		if response_file.is_none() {
+			response_file = args.input_file.map(|n| format!("{}.response", n));
+		}
+
+		let slatepack_str = PathToSlatePutter::build_encrypted(
+			response_file.clone().map(|s| s.into()),
 			SlatePurpose::SendResponse,
 			DalekPublicKey::from(&slatepack_secret),
 			sender,
 			slatepack_format,
 		)
 		.put_tx(&slate, &slatepack_secret, false)?;
-		info!(
-			"Response file {}.response generated, and can be sent back to the transaction originator.",
-			args.input
-		);
+
+		if let Some(response_file) = &response_file {
+			info!("Response file {}.response generated, and can be sent back to the transaction originator.", response_file);
+		} else {
+			println!("Response Slate: {}", slatepack_str);
+		}
+		Ok(())
+	})?;
+
+	Ok(())
+}
+
+pub fn unpack<L, C, K>(
+	owner_api: &mut Owner<L, C, K>,
+	keychain_mask: Option<&SecretKey>,
+	args: ReceiveArgs,
+) -> Result<(), Error>
+where
+	L: WalletLCProvider<'static, C, K>,
+	C: NodeClient + 'static,
+	K: keychain::Keychain + 'static,
+{
+	let km = match keychain_mask.as_ref() {
+		None => None,
+		Some(&m) => Some(m.to_owned()),
+	};
+	controller::foreign_single_use(owner_api.wallet_inst.clone(), km, |api| {
+		let slatepack_secret = {
+			let mut w_lock = api.wallet_inst.lock();
+			let w = w_lock.lc_provider()?.wallet_inst()?;
+			let keychain = w.keychain(keychain_mask)?;
+			let slatepack_secret =
+				proofaddress::payment_proof_address_dalek_secret(&keychain, None)?;
+			slatepack_secret
+		};
+
+		let slate_pkg =
+			match &args.input_file {
+				Some(file_name) => PathToSlateGetter::build_form_path(file_name.into())
+					.get_tx(&slatepack_secret)?,
+				None => match &args.input_slatepack_message {
+					Some(message) => PathToSlateGetter::build_form_str(message.clone())
+						.get_tx(&slatepack_secret)?,
+					None => {
+						return Err(ErrorKind::ArgumentError(
+							"Please specify 'file' or 'content' argument".to_string(),
+						)
+						.into())
+					}
+				},
+			};
+
+		let (slate, sender, recipient, content, _slatepack_format) = slate_pkg.to_slate()?;
+
+		let slate_str =
+			PathToSlatePutter::build_plain(None).put_tx(&slate, &slatepack_secret, false)?;
+
+		println!();
+		println!("SLATEPACK CONTENTS");
+		println!("Slate:     {}", slate_str);
+		println!("Content:   {:?}", content);
+		if let Some(sender) = sender {
+			println!(
+				"Sender:    {}",
+				ProvableAddress::from_tor_pub_key(&sender).public_key
+			);
+		} else {
+			println!("Sender:    None (Not encrypted)");
+		}
+		if let Some(recipient) = recipient {
+			println!(
+				"recipient: {}",
+				ProvableAddress::from_tor_pub_key(&recipient).public_key
+			);
+		} else {
+			println!("recipient: None (Not encrypted)");
+		}
+
 		Ok(())
 	})?;
 
@@ -602,7 +704,8 @@ where
 
 /// Finalize command args
 pub struct FinalizeArgs {
-	pub input: String,
+	pub input_file: Option<String>,
+	pub input_slatepack_message: Option<String>,
 	pub fluff: bool,
 	pub nopost: bool,
 	pub dest: Option<String>,
@@ -620,6 +723,10 @@ where
 	K: keychain::Keychain + 'static,
 {
 	let mut slate = Slate::blank(2, false); // result placeholder, params not important
+	let mut content = SlatePurpose::FullSlate;
+	let mut sender = None;
+	let mut recipient = None;
+	let mut slatepack_format = false;
 
 	controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, m| {
 		let slatepack_secret = {
@@ -633,9 +740,27 @@ where
 		};
 
 		let slate_pkg =
-			PathToSlateGetter::build_form_path((&args.input).into()).get_tx(&slatepack_secret)?;
+			match &args.input_file {
+				Some(file_name) => PathToSlateGetter::build_form_path(file_name.into())
+					.get_tx(&slatepack_secret)?,
+				None => match &args.input_slatepack_message {
+					Some(message) => PathToSlateGetter::build_form_str(message.clone())
+						.get_tx(&slatepack_secret)?,
+					None => {
+						return Err(ErrorKind::ArgumentError(
+							"Please specify 'file' or 'content' argument".to_string(),
+						)
+						.into())
+					}
+				},
+			};
 
-		slate = slate_pkg.to_slate()?.0;
+		let (slate2, sender2, recipient2, content2, slatepack_format2) = slate_pkg.to_slate()?;
+		slate = slate2;
+		sender = sender2;
+		recipient = recipient2;
+		content = content2;
+		slatepack_format = slatepack_format2;
 
 		Ok(())
 	})?;
@@ -645,6 +770,14 @@ where
 	//    We choose backward compatibility as more impotant, that is why we need 'is_invoice' flag to compensate that.
 
 	if is_invoice {
+		if !(content == SlatePurpose::FullSlate || content == SlatePurpose::InvoiceResponse) {
+			return Err(ErrorKind::ArgumentError(format!(
+				"Wrong slate content. Expecting InvoiceResponse, get {:?}",
+				content
+			))
+			.into());
+		}
+
 		let km = match keychain_mask.as_ref() {
 			None => None,
 			Some(&m) => Some(m.to_owned()),
@@ -662,6 +795,14 @@ where
 			Ok(())
 		})?;
 	} else {
+		if !(content == SlatePurpose::FullSlate || content == SlatePurpose::SendResponse) {
+			return Err(ErrorKind::ArgumentError(format!(
+				"Wrong slate content. Expecting SendResponse, get {:?}",
+				content
+			))
+			.into());
+		}
+
 		controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, m| {
 			if let Err(e) = api.verify_slate_messages(m, &slate) {
 				error!("Error validating participant messages: {}", e);
@@ -709,11 +850,14 @@ where
 			};
 
 			// save to a destination not as a slatepack
-			PathToSlatePutter::build_plain(Some((&args.dest.unwrap()).into())).put_tx(
-				&slate,
-				&slatepack_secret,
-				false,
-			)?;
+			PathToSlatePutter::build_encrypted(
+				Some((&args.dest.unwrap()).into()),
+				SlatePurpose::FullSlate,
+				DalekPublicKey::from(&slatepack_secret),
+				sender,
+				slatepack_format,
+			)
+			.put_tx(&slate, &slatepack_secret, false)?;
 
 			Ok(())
 		})?;
@@ -808,7 +952,15 @@ where
 	let slate_pkg =
 		PathToSlateGetter::build_form_path((&args.input).into()).get_tx(&slatepack_secret)?;
 
-	let (slate, sender_pk, _recepient, _encrypted) = slate_pkg.to_slate()?;
+	let (slate, sender_pk, _recepient, content, _encrypted) = slate_pkg.to_slate()?;
+
+	if !(content == SlatePurpose::FullSlate || content == SlatePurpose::InvoiceInitial) {
+		return Err(ErrorKind::ArgumentError(format!(
+			"Wrong slate content. Expecting InvoiceInitial, get {:?}",
+			content
+		))
+		.into());
+	}
 
 	let wallet_inst = owner_api.wallet_inst.clone();
 	controller::owner_single_use(None, keychain_mask, Some(owner_api), |api, m| {

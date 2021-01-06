@@ -169,8 +169,30 @@ where
 		let height = current_height;
 		let parent_key_id = context.parent_key_id.clone();
 		let mut batch = wallet.batch(keychain_mask)?;
-		let log_id = batch.next_tx_log_id(&parent_key_id)?;
-		let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxSent, log_id);
+
+		// Check if such transaction already exist. It is very possible for lock after case.
+		let found_tx = batch
+			.tx_log_iter()
+			.filter(|tx_entry| {
+				if tx_entry.tx_type != TxLogEntryType::TxSent {
+					return false;
+				}
+				match tx_entry.tx_slate_id {
+					None => false,
+					Some(uuid) => uuid == slate_id,
+				}
+			})
+			.next();
+
+		let mut t = match found_tx {
+			Some(tx) => tx,
+			None => {
+				// Creating a new record
+				let log_id = batch.next_tx_log_id(&parent_key_id)?;
+				TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxSent, log_id)
+			}
+		};
+
 		t.tx_slate_id = Some(slate_id);
 		let filename = format!("{}.mwctx", slate_id);
 		t.stored_tx = Some(filename);
@@ -194,14 +216,20 @@ where
 		let mut amount_debited = 0;
 		t.num_inputs = lock_inputs.len();
 		t.input_commits = context.input_commits.clone();
-		for id in lock_inputs {
-			let mut coin = batch.get(&id.0, &id.1)?;
-			coin.tx_log_entry = Some(log_id);
-			amount_debited += coin.value;
-			batch.lock_output(&mut coin)?;
+
+		if context.late_lock_args.is_none() || !t.input_commits.is_empty() {
+			for id in lock_inputs {
+				let mut coin = batch.get(&id.0, &id.1)?;
+				coin.tx_log_entry = Some(t.id);
+				amount_debited += coin.value;
+				batch.lock_output(&mut coin)?;
+			}
+			t.amount_debited = amount_debited;
+		} else {
+			// It is lock later case. No inputs does exist yet.
+			t.amount_debited = slate.amount;
 		}
 
-		t.amount_debited = amount_debited;
 		t.messages = messages;
 
 		// store extra payment proof info, if required
@@ -247,7 +275,7 @@ where
 				height: height,
 				lock_height: 0,
 				is_coinbase: false,
-				tx_log_entry: Some(log_id),
+				tx_log_entry: Some(t.id),
 			})?;
 		}
 		batch.save_tx_log_entry(t.clone(), &parent_key_id)?;

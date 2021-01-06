@@ -107,13 +107,29 @@ impl SlateGetData {
 	/// Return: Slate, sender and recipient
 	pub fn to_slate(
 		self,
-	) -> Result<(Slate, Option<DalekPublicKey>, Option<DalekPublicKey>, bool), Error> {
+	) -> Result<
+		(
+			Slate,
+			Option<DalekPublicKey>,
+			Option<DalekPublicKey>,
+			SlatePurpose,
+			bool,
+		),
+		Error,
+	> {
 		let res = match self {
-			SlateGetData::PlainSlate(slate) => (slate, None, None, false),
+			SlateGetData::PlainSlate(slate) => (slate, None, None, SlatePurpose::FullSlate, false),
 			SlateGetData::Slatepack(slatepacker) => {
 				let sender = slatepacker.get_sender();
 				let recipient = slatepacker.get_recipient();
-				(slatepacker.to_result_slate(), sender, recipient, true)
+				let content = slatepacker.get_content();
+				(
+					slatepacker.to_result_slate(),
+					sender,
+					recipient,
+					content,
+					true,
+				)
 			}
 		};
 		Ok(res)

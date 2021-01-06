@@ -188,7 +188,7 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), grin_wallet_controller::
 		"-a",
 		"account_1",
 		"receive",
-		"-i",
+		"-f",
 		&file_name,
 		"-g",
 		"Thanks, Yeast!",
@@ -205,7 +205,7 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), grin_wallet_controller::
 		"-p",
 		"password",
 		"finalize",
-		"-i",
+		"-f",
 		&response_file_name,
 	];
 	execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
@@ -297,7 +297,7 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), grin_wallet_controller::
 		"-a",
 		"mining",
 		"receive",
-		"-i",
+		"-f",
 		&file_name,
 		"-g",
 		"Thanks, Yeast!",
@@ -311,7 +311,7 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), grin_wallet_controller::
 		"-p",
 		"password",
 		"finalize",
-		"-i",
+		"-f",
 		&response_file_name,
 	];
 	execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
@@ -476,7 +476,7 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), grin_wallet_controller::
 		"-p",
 		"password",
 		"finalize_invoice",
-		"-i",
+		"-f",
 		&output_file_name,
 	];
 	execute_command(&app, test_dir, "wallet2", &client2, arg_vec)?;
