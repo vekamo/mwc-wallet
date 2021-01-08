@@ -908,7 +908,7 @@ pub trait OwnerRpcV3 {
 	  "id": 1,
 	  "jsonrpc": "2.0",
 	  "result": {
-		"Ok": "BEGINSLATEPACK. 2V9qyvZYKjwKQT1 VPMqvLWXbdjzzZ2 sEJuThqGnk3nDQn RLhdVYZkDPBfAto SbtuPy8JvZTbKqu jb1iDGFtD3gTpQt kpyWt5Hafdn8iT4 wCMDSSEUHG55y4F nvgdcVjWdBdYexL 6iBdDbhtow4NiR2 ZPSWXUYVd8dcVQk ZyBPiiVMe8vfZZ2 2EdW9vcWZBGaB97 Fx7QFf8j1iWumJd UX3wtwpb3F8q22h W5wdCNutSvRynUu NtfqqyLAuR9b2zS 3xPCcEpSM3No1t3 sMTdefTxFYW4jTy 4. ENDSLATEPACK."
+		"Ok": "BEGINSLATEPACK. CD7MfBUbThCtDiA cdRUEr4KKm4Uwn4 z1LzfJ29o61nKAW Qc8WjGcpXHfn6po dYi5seYKNurEkMf MDJyLEQN9mUXDvy ModjyEmuTtpEDF1 xE286XvRdYPNkjM BnXg7sdzuHK1xVL iK5srPup1vAyEhM GJDGcLxFP4dyWdN zVqNsa6pMy8WJzv QPtF784fKDzPh7Z BPDvNXzvAz5nSkL 1c2FFvQzrvZudCy 1x33VwLDER6UzyD kpFFfxGqx5NLeTG Qy19AHrEUes1ecR wqPBSiGd3t8mdAB 44muWRz9AcriAbH ntZWUzgzyWVH5m2 nMQzau7fmpZbRqi PpZERxsVWxPksh1 UfrgtULqitKWVQ8 rD9NCbj5czuXf. ENDSLATEPACK."
 	  }
 	}
 	# "#
@@ -1235,7 +1235,7 @@ pub trait OwnerRpcV3 {
 			"method": "process_invoice_tx",
 			"params": {
 				"token": "d202964900000000d302964900000000d402964900000000d502964900000000",
-				"slate": "BEGINSLATEPACK. 2V9qyvZYKjwKQT1 VPMqvLWXbdjzzZ2 sEJuThqGnk3nDQn RLhdVYZkDPBfAto SbtuPy8JvZTbKqu jb1iDGFtD3gTpQt kpyWt5Hafdn8iT4 wCMDSSEUHG55y4F nvgdcVjWdBdYexL 6iBdDbhtow4NiR2 ZPSWXUYVd8dcVQk ZyBPiiVMe8vfZZ2 2EdW9vcWZBGaB97 Fx7QFf8j1iWumJd UX3wtwpb3F8q22h W5wdCNutSvRynUu NtfqqyLAuR9b2zS 3xPCcEpSM3No1t3 sMTdefTxFYW4jTy 4. ENDSLATEPACK.",
+				"slate": "BEGINSLATEPACK. CD7MfBUbThCtDiA cdRUEr4KKm4Uwn4 z1LzfJ29o61nKAW Qc8WjGcpXHfn6po dYi5seYKNurEkMf MDJyLEQN9mUXDvy ModjyEmuTtpEDF1 xE286XvRdYPNkjM BnXg7sdzuHK1xVL iK5srPup1vAyEhM GJDGcLxFP4dyWdN zVqNsa6pMy8WJzv QPtF784fKDzPh7Z BPDvNXzvAz5nSkL 1c2FFvQzrvZudCy 1x33VwLDER6UzyD kpFFfxGqx5NLeTG Qy19AHrEUes1ecR wqPBSiGd3t8mdAB 44muWRz9AcriAbH ntZWUzgzyWVH5m2 nMQzau7fmpZbRqi PpZERxsVWxPksh1 UfrgtULqitKWVQ8 rD9NCbj5czuXf. ENDSLATEPACK.",
 				"args": {
 					"src_acct_name": null,
 					"amount": "0",
@@ -1259,7 +1259,7 @@ pub trait OwnerRpcV3 {
 		  "id": 1,
 		  "jsonrpc": "2.0",
 		  "result": {
-			"Ok": "BEGINSLATEPACK. 3doQfQfJ9uybicj YYnjfoD1iiJiytS Qe5gJTdJzJQAoGc qDek9mytQmnbaGm noS3GqFjqE4oHgn BP4ckAFBKXrNgTL yAscD6KfnHD7aCS Hapo3AdroSaXWZz NB3AEmt9aRqLvbr 6Wvo3H6UipQ8Ffu MZeDFWWMpUUjCGt 6495Y1JZGXTFDzV WSfyAZqsffixQ2S qd6Vz7HN2tYGUJZ R4JkZvG48xvwky2 gsCgj5jBsVdvyrF VDxGchGR7LXiuA9 TPnErVBUCbFVJQD v6fpcrWcXTZixBb R9RSYpkT4QtVDjt b2m4hC1cwGRyzcE 9U3FyukTVpeKQFQ r4HqctPPQ2LDdaY ed99QxPryzsEK6k E1znqNDZchxYpSY HeKEryuHRDWUh32 9jS2MZh3b8TSQUE JWcaH9GDpCtYteK CjiGhR7LtzcAPvv Mbb6MZgowfdprAj mBtzYcwKENMCoP2 uUbArx1R6EAUu1B bBo5uDr1ZxuGNNx 3Pndiw5gcyFPadD p9d4vy9NByousc8 gGyAY6wmoMtMhJX izD9JsnkoRudv3C bxgagqRyi92Nfjg mmP8uDAxAHf8Mrj KxW8M3jvZqxLydN Zue7eq57UtcAAZp 13fCAJNvhfRKdAN C9kmStWoGzgtFbH kLQbfWfpB28oDqv zVSM3UcyKiT5ZSY suVqj81TvvjUL2q VYDhzBR5uwtT5AG PpHCVkSuDX89ACX Hx9siZRfgwtNhAL 6VRgUFmaDiqyzWF CPFo2BxgX6dd2Hm gWNVL1oAs55snfm KeSojqt1wDnuBBZ S8SEomKue3CijWM YtrogCnAptsuZ6f oLjQ26mLL5Kjfjp PKP53Bwa2Vpp44S VvqnVrMtLsbRZDp i7tivN6wbKUFSfh qQcVfNqttGeiQUo Afr7Qw4HtTNkShu ZgkSZ8oDqsY1znJ mcH56fQHu5dk582 KcAY8zQ9hLjyVMd Dr1xPh8MLUNa432 F2WtYUYxyuuePr2 pZVKBUEoZpdyePp DPQsA51SGnCFzBj xNsabYDRaJRQuic nmFe4gWt8VrkRmd nmkSAippqot3y7v WwcisMfDrXzcXHh jTrpyxqEViobVW4 HXyGEFoZLzJpMJR t2LYK1BSq9Z78W4 b9XPi9ZkD11KFRV TjRKGSNrdUNzYGW 1NJYWnCqWU1okaP yd49Z8GjJW9tGSX 4F74Abh3zaUi5Ji h9JCCBnFEu52THq MPTEbHH5G5anQkP 8zhEDEP8h3F7LHu 9eSi8L7va5nmXUF 3HweKJEJvxs1iKr V4ntuqZ7iYcn7bt Nncc5qR4s96Dbvc q1yhE1mQjt34HGr vwwXrD3tgxUZvJG BXVCuyj33DH2jex KEDqDj3zxs6nZnJ 3GPyWTZRMXetNVQ zqw3aHtEaNcZ91K YUjTL69Z5Gwgc3s 9gSRw5nxPaNNsA5 pb5otEu7KRWqZje ykMuvk2FMTwDYBa kobF4fhaEwxcEDP SDWBdv5jQC5sgTj wzM8nKGUzcYdSSe FfSruH9bkpCMCCf vcv7pAAzHUn2KJF BgWDJ9NAjCW3KgM Vxb7oo7NFnnrywp JLHKYQp. ENDSLATEPACK."
+			"Ok": "BEGINSLATEPACK. DTtn1SVVSti6erZ esb7jerWniQChni L94u2hs9WncUSfo rP8QxDcSuiC4jY7 6jGekpcEgrWy515 cfGr7p5jmD9hLnU 6cXnnU5a4LMcWze vSKog2CbPgA4xFp aLLS67HAMmpmY9W 4uym9KZ9AvHVBwH bcy6njx6JGTxfrs UGY9BWyaBPFcNH5 Z51V9jDrS3mJtLa gX1SaJxkTPF4c8o xXgtKyg8vHLo4PY UXpMdCxzH2Ttpyf 7uiGc1cbLgXkics 3vjfnDpA8cEMocj f9fYrc9J5Ehy1JU pXihNQ8LD2ovr1S tpv4W26etS5V1zj ASoRrQrudqcXCkf ejwBgtnsgocWBj6 FZTeDUBocbSSFcK c9SrCLozA9xvgA2 2nMVGYRA8jDsFCm crvQxcjGGNfGusP FEiF6Sb1NCVtbAM HZ3q7RBYWzW48Ru vABMHR6PLUKRyjc FFzVcSZQytcok68 FhTC7bgLyRzd9YP PfLo8tf1EU3UPJm UrFvERdQwWn1PJB ATypPzFb5uzgw99 ecjBjzt7BnNzPdM gcMQ8Et31mEJDsB UkVNW1LaxdXwZbg e5BcfXXn7txGbiz 3y1FaG5xpRP7bga qNAxXZ8ZmpQwgcg XGfPX7fAPwsXSE5 svcipWVTF6UNc1s kv6mHeBHxKMQMhE EnCmxY4E2xNjaKk zJJz9UuyKJeusa3 2nqU76eP8uSnXJM bBH8Cv9ZTz7gX8z XSmEmT1g6WjZGKR et55gzFs5WdTiQN 6hKa5EEgM7KkW4j EJ1waG2BfA7PmxW oa4kuvEdgGgkkdm aReggfKApRSAUCC x67iK7pNL7AZahK CmRPYi2j9y5YXZZ agPQweKGCRyKw9p XFkvYVM9TvykCvK LK3EsaBgyB5QnE4 MgSyJq4Xo5SF7UM hyq7XMaLFJJJ5o7 oq7v1MjcCZJzRL2 7Us2aNWJgBLg4Su 83t77jy6XEtjSiv 81RP1TXNuM9G5jQ qLyNHP34wwrv3Bt d8gr2ZaZXHgjVFz guTRqHXsMByAwtR 2SryMzrj941o4YJ hxG2gKasivYWDNq tKiprBtYs8jqCaf pfz8CSSwg43kV9r yxSD7LyELuj2pJA NEhh2h34paypgHm JPxCFcYE4vCqZuM XSL2Y1enK9d2iZS m4C3QuBw5WGEbJK v4nJ94abq2gzNdJ 9E5hc2LS8LVSwzd Fe8snUZY6rxM8HW 7bM7MqovFJV6SNm KyuLiVKDqV13jzf UhRxmeeBJhowtvf 1o7AXbvbHhx9oMA RPrqToMKJgNWhGZ zgJ5Pb68AXFPu6R 7eEwDsH1X2xuEBs 6NZubgfeneJ5TN5 LRNUcgpYxJt1u9r 6ZrZ9jecMh7aFrm x51y8LaUHVT3DYm Fr1VewmbhfsYrRK EBLRf7dGz4G89SJ oiiF6YzAYbodB5J rGPfUphLxaW5heG 5rcXxMvq1iWguUh R69en8mhK3cQi4i m7Urb8dzF8BizKN LcJhbFip3C9zAaf mbQCS7sDhTcmyQd qY4QzSfPzeq8UVF yihbivpKv5C8P1x hakMDsHrpM6PGPj VAaCfgKSvAx4m9s fKCVXqSGJ9eNQ8c 58Nkmas13Xf2Wd6 QezTqJvfjfepTGC AETt9LfambqGqgK HomB8H3ACDTeRhA e4paUX7bnApQ9yM 233r. ENDSLATEPACK."
 		  }
 		}
 	# "#
@@ -3019,7 +3019,7 @@ pub trait OwnerRpcV3 {
 	  "id": 1,
 	  "jsonrpc": "2.0",
 	  "result": {
-		"Ok": "BEGINSLATEPACK. 2V9qyvZYKjwKQT1 VPMqvLWXbdjzzZ2 sEJuThqGnk3nDQn RLhdVYZkDPBfAto SbtuPy8JvZTbKqu jb1iDGFtD3gTpQt kpyWt5Hafdn8iT4 wCMDSSEUHG55y4F nvgdcVjWdBdYexL 6iBdDbhtow4NiR2 ZPSWXUYVd8dcVQk ZyBPiiVMe8vfZZ2 2EdW9vcWZBGaB97 Fx7QFf8j1iWumJd UX3wtwpb3F8q22h W5wdCNutSvRynUu NtfqqyLAuR9b2zS 3xPCcEpSM3No1t3 sMTdefTxFYW4jTy 4. ENDSLATEPACK."
+		"Ok": "BEGINSLATEPACK. CD7MfBUbThCtDiA cdRUEr4KKm4Uwn4 z1LzfJ29o61nKAW Qc8WjGcpXHfn6po dYi5seYKNurEkMf MDJyLEQN9mUXDvy ModjyEmuTtpEDF1 xE286XvRdYPNkjM BnXg7sdzuHK1xVL iK5srPup1vAyEhM GJDGcLxFP4dyWdN zVqNsa6pMy8WJzv QPtF784fKDzPh7Z BPDvNXzvAz5nSkL 1c2FFvQzrvZudCy 1x33VwLDER6UzyD kpFFfxGqx5NLeTG Qy19AHrEUes1ecR wqPBSiGd3t8mdAB 44muWRz9AcriAbH ntZWUzgzyWVH5m2 nMQzau7fmpZbRqi PpZERxsVWxPksh1 UfrgtULqitKWVQ8 rD9NCbj5czuXf. ENDSLATEPACK."
 	  }
 	}
 	# "#
@@ -3860,38 +3860,5 @@ where
 // Keeping as a placeholder for doc tests
 #[test]
 fn owner_api_v3_test() {
-	use crate as grin_wallet_api;
-
-	grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
-		r#"
-	{
-		"jsonrpc": "2.0",
-		"method": "get_mqs_address",
-		"params": {
-			"token": "d202964900000000d302964900000000d402964900000000d502964900000000"
-		},
-		"id": 1
-	}
-	"#,
-		r#"
-	{
-	  "id": 1,
-	  "jsonrpc": "2.0",
-	  "result": {
-		"Ok": {
-		  "public_key": "xmgwbyjMEMBojnVadEkwVi1GyL1WPiVE5dziQf3TLedHdrVBPGw5",
-  		  "domain": "",
-		  "port": null
-		}
-	  }
-	}
-	"#,
-		true,
-		0,
-		false,
-		false,
-		false,
-		false,
-		true
-	);
+	// use crate as grin_wallet_api;
 }

@@ -257,18 +257,6 @@ impl Slatepack {
 			_ => return Err(ErrorKind::SlatepackEncodeError("Slate is plain".to_string()).into()),
 		}
 
-		if self.recipient.is_none() {
-			for pd in &self.slate.participant_data {
-				// messages are not acceptable because we don't transfer the signatures for them.
-				if pd.message.is_some() {
-					return Err(ErrorKind::SlatepackEncodeError(
-						"Non encrypted slates can't contain participant message".to_string(),
-					)
-					.into());
-				}
-			}
-		}
-
 		let mut encrypted_data = Vec::new();
 
 		let mut w = BitWriter::endian(&mut encrypted_data, BigEndian);
@@ -495,6 +483,17 @@ impl Slatepack {
 				}
 				w.write(16, msg_enc.len() as u16)?;
 				w.write_bytes(&msg_enc)?;
+
+				// Writing signature as a proof of the message, so other party will not be able to change it as well
+				if let Some(sig) = part_data.message_sig {
+					let sig_dt = sig.serialize_compact();
+					w.write_bytes(&sig_dt)?;
+				} else {
+					return Err(ErrorKind::GenericError(
+						"Not found message signature at participant data".to_string(),
+					)
+					.into());
+				}
 			}
 			None => w.write::<u8>(1, 0)?,
 		}
@@ -759,18 +758,23 @@ impl Slatepack {
 			None
 		};
 
-		let message = if r.read::<u8>(1)? == 1 {
+		let (message, message_sig) = if r.read::<u8>(1)? == 1 {
 			let sz: u32 = r.read(16)?;
 			let mut msg: Vec<u8> = vec![0; sz as usize];
 			r.read_bytes(&mut msg)?;
 			let msg = smaz::decompress(&msg).map_err(|e| {
 				ErrorKind::SlatepackDecodeError(format!("Unable to decode message, {}", e))
 			})?;
-			Some(String::from_utf8(msg).map_err(|e| {
-				ErrorKind::SlatepackDecodeError(format!("Unable to decode message, {}", e))
-			})?)
+			let mut sig_dt: [u8; 64] = [0; 64];
+			r.read_bytes(&mut sig_dt)?;
+			(
+				Some(String::from_utf8(msg).map_err(|e| {
+					ErrorKind::SlatepackDecodeError(format!("Unable to decode message, {}", e))
+				})?),
+				Some(Signature::from_compact(&sig_dt)?),
+			)
 		} else {
-			None
+			(None, None)
 		};
 
 		Ok(ParticipantData {
@@ -779,7 +783,7 @@ impl Slatepack {
 			public_nonce: nonce,
 			part_sig: signature,
 			message,
-			message_sig: None,
+			message_sig,
 		})
 	}
 
@@ -1107,4 +1111,20 @@ impl Slatepack {
 
 		Ok(())
 	}
+}
+
+#[test]
+fn smaz_test() {
+	// Let's check if smaz compressor really effective
+	let message = "test string to check the compress";
+	// let's limit message with 32 k
+	let msg_enc = smaz::compress(message.as_bytes());
+	// see 33 to 17 compression.
+	assert_eq!(message.len(), 33);
+	assert_eq!(msg_enc.len(), 17);
+	assert!(msg_enc.len() < message.len());
+
+	let msg = smaz::decompress(&msg_enc).unwrap();
+	let dec_msg = String::from_utf8(msg).unwrap();
+	assert_eq!(message, dec_msg);
 }

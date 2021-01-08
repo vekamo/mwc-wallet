@@ -810,11 +810,6 @@ impl Slate {
 
 	/// Verifies any messages in the slate's participant data match their signatures
 	pub fn verify_messages(&self) -> Result<(), Error> {
-		// Compact (slatepack) doesn't have a signature for the messages and have to use encrypted slatepack to move the data
-		if self.compact_slate {
-			return Ok(());
-		}
-
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::VerifyOnly);
 		for p in self.participant_data.iter() {
 			if let Some(msg) = &p.message {

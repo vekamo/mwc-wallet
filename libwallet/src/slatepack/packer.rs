@@ -175,6 +175,7 @@ fn slatepack_io_test() {
 
 	assert_eq!(shared_secret1.as_bytes(), shared_secret2.as_bytes());
 
+	// Note, Slate Data is fake. Just some randome numbers, it will not pass validation of any type
 	let mut slate_enc = Slate {
 		compact_slate: true, // Slatepack works only for compact models.
 		num_participants: 2,
@@ -197,7 +198,7 @@ fn slatepack_io_test() {
 				public_nonce:  PublicKey::from_secret_key( &secp, &sk).unwrap(),
 				part_sig: None,
 				message: Some("message 1 to send".to_string()),
-				message_sig: None, // N/A
+				message_sig: Some(Signature::from_compact(&util::from_hex("89cc3c1480fea655f29d300fcf68d0cfbf53f96a1d6b1219486b64385ed7ed89acf96f1532b31ac8309e611583b1ecf37090e79700fae3683cf682c0043b3029").unwrap()).unwrap()),
 			},
 			ParticipantData {
 				id: 1,
@@ -205,7 +206,7 @@ fn slatepack_io_test() {
 				public_nonce:  PublicKey::from_secret_key( &secp, &sk).unwrap(),
 				part_sig: Some(Signature::from_compact(&util::from_hex("89cc3c1480fea655f29d300fcf68d0cfbf53f96a1d6b1219486b64385ed7ed89acf96f1532b31ac8309e611583b1ecf37090e79700fae3683cf682c0043b3029").unwrap()).unwrap()),
 				message: Some("message 2 to send".to_string()),
-				message_sig: None, // N/A
+				message_sig: Some(Signature::from_compact(&util::from_hex("89cc3c1480fea655f29d300fcf68d0cfbf53f96a1d6b1219486b64385ed7ed89acf96f1532b31ac8309e611583b1ecf37090e79700fae3683cf682c0043b3029").unwrap()).unwrap()),
 			}
 		],
 		version_info: VersionCompatInfo {
@@ -224,13 +225,6 @@ fn slatepack_io_test() {
 	let slate_enc_str = format!("{:?}", slate_enc);
 	println!("start encrypted slate = {}", slate_enc_str);
 
-	// For binaries we can't have messages...
-	let mut slate_bin = slate_enc.clone();
-	slate_bin.participant_data[0].message = None;
-	slate_bin.participant_data[1].message = None;
-	let slate_bin_str = format!("{:?}", slate_bin);
-	println!("start binary slate = {}", slate_bin_str);
-
 	// Not encoded, just want to review the data...
 	let slatepack_string_encrypted = Slatepacker::encrypt_to_send(
 		slate_enc.clone(),
@@ -246,7 +240,7 @@ fn slatepack_io_test() {
 
 	// Not encoded, just want to review the data...
 	let slatepack_string_binary = Slatepacker::encrypt_to_send(
-		slate_bin.clone(),
+		slate_enc.clone(),
 		SlateVersion::SP,
 		SlatePurpose::FullSlate,
 		dalek_pk.clone(),
@@ -287,5 +281,5 @@ fn slatepack_io_test() {
 	let slate3_str = format!("{:?}", res_slate);
 	println!("slate3_str = {:?}", slate3_str);
 
-	assert_eq!(slate_bin_str, slate3_str);
+	assert_eq!(slate_enc_str, slate3_str);
 }
