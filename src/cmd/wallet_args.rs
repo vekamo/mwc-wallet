@@ -1392,6 +1392,8 @@ where
 				owner_api,
 				&wallet_config,
 				km,
+				wallet_config.api_listen_addr(),
+				global_wallet_args.tls_conf.clone(),
 				Some(tor_config.clone()),
 				Some(mqs_config.clone()),
 				a,

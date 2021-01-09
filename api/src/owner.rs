@@ -717,29 +717,54 @@ where
 			recipient = Some(r.tor_public_key()?);
 		}
 
+		let mut args = args.clone();
+
+		// Creating sender ahead because of slatepacks. We need to know the another wallet version so
+		// we can decide on the slate format (compact slate or not)
+		let sender_info = if let Some(sa) = &send_args {
+			match sa.method.as_ref() {
+				"http" | "mwcmqs" => {
+					let tor_config_lock = self.tor_config.lock();
+					let comm_adapter =
+						create_sender(&sa.method, &sa.dest, &sa.apisecret, tor_config_lock.clone())
+							.map_err(|e| {
+								ErrorKind::GenericError(format!("Unable to create a sender, {}", e))
+							})?;
+
+					let other_wallet_version =
+						comm_adapter.check_other_wallet_version().map_err(|e| {
+							ErrorKind::GenericError(format!(
+								"Unable to get other wallet info, {}",
+								e
+							))
+						})?;
+
+					if let Some(other_wallet_version) = &other_wallet_version {
+						if args.target_slate_version.is_none() {
+							args.target_slate_version =
+								Some(other_wallet_version.0.to_numeric_version() as u16);
+						}
+					}
+					Some((comm_adapter, other_wallet_version))
+				}
+				_ => None,
+			}
+		} else {
+			None
+		};
+
 		let mut slate = {
 			let mut w_lock = self.wallet_inst.lock();
 			let w = w_lock.lc_provider()?.wallet_inst()?;
-			owner::init_send_tx(&mut **w, keychain_mask, args, self.doctest_mode, routputs)?
+			owner::init_send_tx(&mut **w, keychain_mask, &args, self.doctest_mode, routputs)?
 		};
 
 		match send_args {
 			Some(sa) => {
 				let original_slate = slate.clone();
 
-				match sa.method.as_ref() {
-					"http" | "mwcmqs" => {
-						let tor_config_lock = self.tor_config.lock();
-						let comm_adapter = create_sender(
-							&sa.method,
-							&sa.dest,
-							&sa.apisecret,
-							tor_config_lock.clone(),
-						)
-						.map_err(|e| {
-							ErrorKind::GenericError(format!("Unable to create a sender, {}", e))
-						})?;
-
+				match sender_info {
+					Some((sender, other_wallet_info)) => {
 						let slatepack_secret = {
 							let mut w_lock = self.wallet_inst.lock();
 							let w = w_lock.lc_provider()?.wallet_inst()?;
@@ -749,12 +774,13 @@ where
 							slatepack_secret
 						};
 
-						slate = comm_adapter
+						slate = sender
 							.send_tx(
 								&slate,
 								SlatePurpose::SendInitial,
 								&slatepack_secret,
 								recipient,
+								other_wallet_info,
 							)
 							.map_err(|e| {
 								ErrorKind::ClientCallback(format!(
@@ -763,7 +789,7 @@ where
 								))
 							})?;
 					}
-					_ => {
+					None => {
 						error!("unsupported payment method: {}", sa.method);
 						return Err(ErrorKind::ClientCallback(
 							"unsupported payment method".to_owned(),

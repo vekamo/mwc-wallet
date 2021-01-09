@@ -93,7 +93,8 @@ pub struct InitTxArgs {
 	pub message: Option<String>,
 	/// Optionally set the output target slate version (acceptable
 	/// down to the minimum slate version compatible with the current. If `None` the slate
-	/// is generated with the latest version.
+	/// is generated with the least (V2,V3).
+	/// Value 4 will trigger a compact_slate workflow that is required for slatepack
 	#[serde(default)]
 	pub target_slate_version: Option<u16>,
 	/// Number of blocks from current after which TX should be ignored

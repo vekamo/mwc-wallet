@@ -30,7 +30,7 @@ use grin_wallet_libwallet::proof::tx_proof::{push_proof_for_slate, TxProof};
 use grin_wallet_libwallet::slatepack::SlatePurpose;
 use grin_wallet_libwallet::swap::message::Message;
 use grin_wallet_libwallet::swap::message::SwapMessage;
-use grin_wallet_libwallet::{Slate, VersionedSlate};
+use grin_wallet_libwallet::{Slate, SlateVersion, VersionedSlate};
 use grin_wallet_util::grin_util::secp::key::SecretKey;
 use regex::Regex;
 use std::collections::HashMap;
@@ -138,6 +138,10 @@ impl MwcMqsChannel {
 }
 
 impl SlateSender for MwcMqsChannel {
+	fn check_other_wallet_version(&self) -> Result<Option<(SlateVersion, Option<String>)>, Error> {
+		Ok(None)
+	}
+
 	// MQS doesn't do encryption because of backward compability. In any case it is not critical, the whole slate is encrypted and the size of slate is not important
 	fn send_tx(
 		&self,
@@ -145,6 +149,7 @@ impl SlateSender for MwcMqsChannel {
 		_slate_content: SlatePurpose,
 		_slatepack_secret: &DalekSecretKey,
 		_recipients: Option<DalekPublicKey>,
+		_other_wallet_version: Option<(SlateVersion, Option<String>)>,
 	) -> Result<Slate, Error> {
 		if let Some((mwcmqs_publisher, mwcmqs_subscriber)) = get_mwcmqs_brocker() {
 			// Creating channels for notification

@@ -20,8 +20,10 @@ socks_proxy_addr = "127.0.0.1:59050"
 
 #Directory to output TOR configuration to when sending
 send_config_dir = "/Users/test/.mwc/main"
-socks_running = true
+socks_running = false
 ```
+Note: use socks_running true if you already have a tor sock process setup. To get much better performance it is 
+recommended to have sock process allways running. Otherwise wallet will run it for every tor interaction.
 
 This configuration tells the mwc-wallet not to instantiate a tor instance each time send is called and instead the mwc-wallet
 will expect that a tor instance is already running. You are expected to have a tor instance running.

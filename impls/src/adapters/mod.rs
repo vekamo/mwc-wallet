@@ -28,7 +28,7 @@ use crate::tor::config::complete_tor_address;
 use crate::util::ZeroingString;
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
 use grin_wallet_libwallet::slatepack::SlatePurpose;
-use grin_wallet_libwallet::Slatepacker;
+use grin_wallet_libwallet::{SlateVersion, Slatepacker};
 pub use mwcmq::{
 	get_mwcmqs_brocker, init_mwcmqs_access_data, MWCMQPublisher, MWCMQSubscriber, MwcMqsChannel,
 };
@@ -39,6 +39,10 @@ pub use types::{
 
 /// Sends transactions to a corresponding SlateReceiver
 pub trait SlateSender {
+	/// Check other wallet version and address. Return None if it is impossible so wallet
+	/// will use least possible features.
+	fn check_other_wallet_version(&self) -> Result<Option<(SlateVersion, Option<String>)>, Error>;
+
 	/// Send a transaction slate to another listening wallet and return result
 	/// TODO: Probably need a slate wrapper type
 	fn send_tx(
@@ -47,6 +51,7 @@ pub trait SlateSender {
 		slate_content: SlatePurpose,
 		slatepack_secret: &DalekSecretKey,
 		recipient: Option<DalekPublicKey>,
+		other_wallet_version: Option<(SlateVersion, Option<String>)>,
 	) -> Result<Slate, Error>;
 }
 

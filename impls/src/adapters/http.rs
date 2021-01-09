@@ -75,7 +75,7 @@ impl HttpDataSender {
 		let mut ret = Self::new(base_url, apisecret, tor_config_dir.clone(), socks_running)?;
 		ret.use_socks = true;
 		let addr = proxy_addr.parse().map_err(|e| {
-			ErrorKind::GenericError(format!("Anable to parse address {}, {}", proxy_addr, e))
+			ErrorKind::GenericError(format!("Unable to parse address {}, {}", proxy_addr, e))
 		})?;
 		ret.socks_proxy_addr = Some(SocketAddr::V4(addr));
 		ret.tor_config_dir = tor_config_dir.unwrap_or(String::from(""));
@@ -304,7 +304,7 @@ impl HttpDataSender {
 		self.socks_running = true;
 
 		let addr = proxy_addr.parse().map_err(|e| {
-			ErrorKind::GenericError(format!("Anable to parse address {}, {}", proxy_addr, e))
+			ErrorKind::GenericError(format!("Unable to parse address {}, {}", proxy_addr, e))
 		})?;
 		self.socks_proxy_addr = Some(SocketAddr::V4(addr));
 
@@ -388,17 +388,32 @@ impl HttpDataSender {
 }
 
 impl SlateSender for HttpDataSender {
+	fn check_other_wallet_version(&self) -> Result<Option<(SlateVersion, Option<String>)>, Error> {
+		// we need to keep _tor in scope so that the process is not killed by drop.
+		let (url_str, _tor) = self.set_up_tor_send_process()?;
+		Ok(Some(self.check_other_version(&url_str, None)?))
+	}
+
 	fn send_tx(
 		&self,
 		slate: &Slate,
 		slate_content: SlatePurpose,
 		slatepack_secret: &DalekSecretKey,
 		recipient: Option<DalekPublicKey>,
+		other_wallet_version: Option<(SlateVersion, Option<String>)>,
 	) -> Result<Slate, Error> {
 		// we need to keep _tor in scope so that the process is not killed by drop.
 		let (url_str, _tor) = self.set_up_tor_send_process()?;
 
-		let (mut slate_version, slatepack_address) = self.check_other_version(&url_str, None)?;
+		if other_wallet_version.is_none() {
+			return Err(ErrorKind::GenericError(
+				"Internal error, http based send_tx get empty value for other_wallet_version"
+					.to_string(),
+			)
+			.into());
+		}
+
+		let (mut slate_version, slatepack_address) = other_wallet_version.unwrap();
 
 		// Slate can't be slatepack if it is not a compact. Let's handle that here.
 		if slate_version == SlateVersion::SP && !slate.compact_slate {
@@ -407,6 +422,7 @@ impl SlateSender for HttpDataSender {
 
 		let slate_send = match slate_version {
 			SlateVersion::SP => {
+				// Preferring recipient from params because http request can be interrupted. So encryption will help in this case
 				let mut recipient = recipient;
 				if recipient.is_none() {
 					if let Some(slatepack_address) = slatepack_address {
@@ -554,7 +570,13 @@ impl SlateSender for HttpDataSender {
 				))
 			})?
 		} else {
-			let sp = Slate::deserialize_upgrade_slatepack(&slate_str, &slatepack_secret)?;
+			let slatepack_str: String = serde_json::from_str(&slate_str).map_err(|e| {
+				ErrorKind::GenericError(format!(
+					"Invalid other wallet response, unable to decode the slate {}, {}",
+					slate_str, e
+				))
+			})?;
+			let sp = Slate::deserialize_upgrade_slatepack(&slatepack_str, &slatepack_secret)?;
 			sp.to_result_slate()
 		};
 

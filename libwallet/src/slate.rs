@@ -340,11 +340,40 @@ impl Slate {
 		if send_slate.id != respond_slate.id {
 			return Err(ErrorKind::SlateValidation("uuid mismatch".to_string()).into());
 		}
-		if send_slate.amount != respond_slate.amount {
-			return Err(ErrorKind::SlateValidation("amount mismatch".to_string()).into());
-		}
-		if send_slate.fee != respond_slate.fee {
-			return Err(ErrorKind::SlateValidation("fee mismatch".to_string()).into());
+		if !send_slate.compact_slate {
+			if send_slate.amount != respond_slate.amount {
+				return Err(ErrorKind::SlateValidation("amount mismatch".to_string()).into());
+			}
+			if send_slate.fee != respond_slate.fee {
+				return Err(ErrorKind::SlateValidation("fee mismatch".to_string()).into());
+			}
+			// Checking transaction...
+			// Inputs must match excatly
+			if send_slate.tx.body.inputs != respond_slate.tx.body.inputs {
+				return Err(ErrorKind::SlateValidation("inputs mismatch".to_string()).into());
+			}
+
+			// Checking if participant data match each other
+			for pat_data in &send_slate.participant_data {
+				if !respond_slate.participant_data.contains(&pat_data) {
+					return Err(ErrorKind::SlateValidation(
+						"participant data mismatch".to_string(),
+					)
+					.into());
+				}
+			}
+
+			// Respond outputs must include send_slate's. Expected that some was added
+			for output in &send_slate.tx.body.outputs {
+				if !respond_slate.tx.body.outputs.contains(&output) {
+					return Err(ErrorKind::SlateValidation("outputs mismatch".to_string()).into());
+				}
+			}
+
+			// Kernels must match excatly
+			if send_slate.tx.body.kernels != respond_slate.tx.body.kernels {
+				return Err(ErrorKind::SlateValidation("kernels mismatch".to_string()).into());
+			}
 		}
 		if send_slate.lock_height != respond_slate.lock_height {
 			return Err(ErrorKind::SlateValidation("lock_height mismatch".to_string()).into());
@@ -354,29 +383,6 @@ impl Slate {
 		}
 		if send_slate.ttl_cutoff_height != respond_slate.ttl_cutoff_height {
 			return Err(ErrorKind::SlateValidation("ttl_cutoff mismatch".to_string()).into());
-		}
-		// Checking transaction...
-		// Inputs must match excatly
-		if send_slate.tx.body.inputs != respond_slate.tx.body.inputs {
-			return Err(ErrorKind::SlateValidation("inputs mismatch".to_string()).into());
-		}
-		// Kernels must match excatly
-		if send_slate.tx.body.kernels != respond_slate.tx.body.kernels {
-			return Err(ErrorKind::SlateValidation("kernels mismatch".to_string()).into());
-		}
-		// Respond outputs must include send_slate's. Expected that some was added
-		for output in &send_slate.tx.body.outputs {
-			if !respond_slate.tx.body.outputs.contains(&output) {
-				return Err(ErrorKind::SlateValidation("outputs mismatch".to_string()).into());
-			}
-		}
-		// Checking if participant data match each other
-		for pat_data in &send_slate.participant_data {
-			if !respond_slate.participant_data.contains(&pat_data) {
-				return Err(
-					ErrorKind::SlateValidation("participant data mismatch".to_string()).into(),
-				);
-			}
 		}
 
 		Ok(())

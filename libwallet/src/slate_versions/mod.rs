@@ -55,6 +55,17 @@ pub enum SlateVersion {
 	V2,
 }
 
+impl SlateVersion {
+	/// Convert this version into numeric value
+	pub fn to_numeric_version(&self) -> i32 {
+		match self {
+			SlateVersion::SP => 4,
+			SlateVersion::V3 | SlateVersion::V3B => 3,
+			SlateVersion::V2 => 2,
+		}
+	}
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(untagged)]
 /// Versions are ordered newest to oldest so serde attempts to

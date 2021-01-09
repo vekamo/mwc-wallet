@@ -322,6 +322,8 @@ pub fn send<L, C, K>(
 	owner_api: &mut Owner<L, C, K>,
 	_config: &WalletConfig,
 	keychain_mask: Option<&SecretKey>,
+	api_listen_addr: String,
+	tls_conf: Option<TLSConfig>,
 	tor_config: Option<TorConfig>,
 	mqs_config: Option<MQSConfig>,
 	args: SendArgs,
@@ -356,7 +358,7 @@ where
 			}
 			display::estimate(args.amount, strategies, dark_scheme);
 		} else {
-			let init_args = InitTxArgs {
+			let mut init_args = InitTxArgs {
 				src_acct_name: None,
 				amount: args.amount,
 				minimum_confirmations: args.minimum_confirmations,
@@ -375,6 +377,80 @@ where
 				late_lock: Some(args.late_lock),
 				..Default::default()
 			};
+
+			//if it is mwcmqs, start listner first.
+			match args.method.as_str() {
+				"mwcmqs" => {
+					if grin_wallet_impls::adapters::get_mwcmqs_brocker().is_none() {
+						//check to see if mqs_config is there, if not, return error
+						let mqs_config_unwrapped;
+						match mqs_config {
+							Some(s) => {
+								mqs_config_unwrapped = s;
+							}
+							None => {
+								return Err(ErrorKind::MQSConfig(format!("NO MQS config!")).into());
+							}
+						}
+
+						let km = keychain_mask.map(|k| k.clone());
+
+						//start the listener finalize tx
+						let _ = controller::init_start_mwcmqs_listener(
+							wallet_inst.clone(),
+							mqs_config_unwrapped,
+							Arc::new(Mutex::new(km)),
+							false,
+							//None,
+						)?;
+						thread::sleep(Duration::from_millis(2000));
+					}
+				}
+				"http" => {
+					if !controller::is_foreign_api_running() {
+						let tor_config = tor_config.clone().ok_or(ErrorKind::GenericError(
+							"Tor configuration is not defined".to_string(),
+						))?;
+						let wallet_inst2 = wallet_inst.clone();
+						let km = keychain_mask.map(|k| k.clone());
+
+						let _api_thread = thread::Builder::new()
+							.name("wallet-http-listener".to_string())
+							.spawn(move || {
+								let res = controller::foreign_listener(
+									wallet_inst2,
+									Arc::new(Mutex::new(km)),
+									&api_listen_addr,
+									tls_conf,
+									tor_config.use_tor_listener,
+								);
+								if let Err(e) = res {
+									error!("Error starting http listener: {}", e);
+								}
+							});
+						thread::sleep(Duration::from_millis(2000));
+					}
+				}
+				_ => {}
+			}
+
+			// Creating sender because we need to request other wallet version first
+			let sender_info = match args.method.as_str() {
+				"http" | "mwcmqs" => {
+					let sender =
+						create_sender(&args.method, &args.dest, &args.apisecret, tor_config)?;
+					let other_wallet_version = sender.check_other_wallet_version()?;
+					if let Some(other_wallet_version) = &other_wallet_version {
+						if init_args.target_slate_version.is_none() {
+							init_args.target_slate_version =
+								Some(other_wallet_version.0.to_numeric_version() as u16);
+						}
+					}
+					Some((sender, other_wallet_version))
+				}
+				_ => None,
+			};
+
 			let result = api.init_send_tx(m, &init_args, 1);
 			let mut slate = match result {
 				Ok(s) => {
@@ -395,39 +471,6 @@ where
 					.into());
 				}
 			};
-
-			//if it is mwcmqs, start listner first.
-			match args.method.as_str() {
-				"mwcmqs" => {
-					if grin_wallet_impls::adapters::get_mwcmqs_brocker().is_none() {
-						//check to see if mqs_config is there, if not, return error
-						let mqs_config_unwrapped;
-						match mqs_config {
-							Some(s) => {
-								mqs_config_unwrapped = s;
-							}
-							None => {
-								return Err(ErrorKind::MQSConfig(format!("NO MQS config!")).into());
-							}
-						}
-
-						let km = match keychain_mask.as_ref() {
-							None => None,
-							Some(&m) => Some(m.to_owned()),
-						};
-						//start the listener finalize tx
-						let _ = controller::init_start_mwcmqs_listener(
-							wallet_inst.clone(),
-							mqs_config_unwrapped,
-							Arc::new(Mutex::new(km)),
-							false,
-							//None,
-						)?;
-						thread::sleep(Duration::from_millis(2000));
-					}
-				}
-				_ => {}
-			}
 
 			let mut recipient: Option<DalekPublicKey> = None;
 			if let Some(sp_address) = &args.slatepack_recipient {
@@ -491,15 +534,22 @@ where
 						Ok(())
 					})?;
 				}
+				_ => {
+					if sender_info.is_none() {
+						return Err(ErrorKind::GenericError(
+							"Internal error. Sender not created".to_string(),
+						)
+						.into());
+					}
+					let (sender, wallet_info) = sender_info.unwrap();
 
-				method => {
 					let original_slate = slate.clone();
-					let sender = create_sender(method, &args.dest, &args.apisecret, tor_config)?;
 					slate = sender.send_tx(
 						&slate,
 						SlatePurpose::SendInitial,
 						&slatepack_secret,
 						recipient,
+						wallet_info,
 					)?;
 					// Restore back ttl, because it can be gone
 					slate.ttl_cutoff_height = original_slate.ttl_cutoff_height.clone();
@@ -1050,6 +1100,7 @@ where
 						SlatePurpose::InvoiceResponse,
 						&slatepack_secret,
 						sender_pk,
+						sender.check_other_wallet_version()?,
 					)?;
 					api.tx_lock_outputs(m, &slate, Some(args.dest.clone()), 1)?;
 				}
