@@ -658,8 +658,6 @@ fn verify_tx_proof(
 		.filter(|c| !outputs_ex.contains(c))
 		.collect();
 
-	let excess = &slate.participant_data[1].public_blind_excess;
-
 	let excess_parts: Vec<&PublicKey> = slate
 		.participant_data
 		.iter()
@@ -671,15 +669,6 @@ fn verify_tx_proof(
 
 	let commit_amount = secp.commit_value(tx_proof.amount)?;
 	inputs.push(commit_amount);
-
-	let commit_excess = Secp256k1::commit_sum(outputs.clone(), inputs)?;
-	let pubkey_excess = commit_excess.to_pubkey()?;
-
-	if excess != &pubkey_excess {
-		return Err(
-			ErrorKind::TxProofGenericError("Excess Public keys mismatch".to_string()).into(),
-		);
-	}
 
 	let mut input_com: Vec<pedersen::Commitment> = slate.tx.inputs_committed();
 	let mut output_com: Vec<pedersen::Commitment> = slate.tx.outputs_committed();
