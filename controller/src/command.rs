@@ -439,7 +439,7 @@ where
 				"http" | "mwcmqs" => {
 					let sender =
 						create_sender(&args.method, &args.dest, &args.apisecret, tor_config)?;
-					let other_wallet_version = sender.check_other_wallet_version()?;
+					let other_wallet_version = sender.check_other_wallet_version(&args.dest)?;
 					if let Some(other_wallet_version) = &other_wallet_version {
 						if init_args.target_slate_version.is_none() {
 							init_args.target_slate_version =
@@ -1100,7 +1100,7 @@ where
 						SlatePurpose::InvoiceResponse,
 						&slatepack_secret,
 						sender_pk,
-						sender.check_other_wallet_version()?,
+						sender.check_other_wallet_version(&args.dest)?,
 					)?;
 					api.tx_lock_outputs(m, &slate, Some(args.dest.clone()), 1)?;
 				}

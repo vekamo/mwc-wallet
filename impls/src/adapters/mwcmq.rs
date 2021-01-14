@@ -138,7 +138,10 @@ impl MwcMqsChannel {
 }
 
 impl SlateSender for MwcMqsChannel {
-	fn check_other_wallet_version(&self) -> Result<Option<(SlateVersion, Option<String>)>, Error> {
+	fn check_other_wallet_version(
+		&self,
+		_destination_address: &String,
+	) -> Result<Option<(SlateVersion, Option<String>)>, Error> {
 		Ok(None)
 	}
 

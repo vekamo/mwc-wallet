@@ -375,7 +375,7 @@ pub trait OwnerRpcV3 {
 	) -> Result<(bool, WalletInfo), ErrorKind>;
 
 	/**
-		Networked version of [Owner::init_send_tx](struct.Owner.html#method.init_send_tx).
+	Networked version of [Owner::init_send_tx](struct.Owner.html#method.init_send_tx).
 	```
 	# // Full data request
 	# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
@@ -727,7 +727,7 @@ pub trait OwnerRpcV3 {
 	fn init_send_tx(&self, token: Token, args: InitTxArgs) -> Result<VersionedSlate, ErrorKind>;
 
 	/**
-		Networked version of [Owner::issue_invoice_tx](struct.Owner.html#method.issue_invoice_tx).
+	Networked version of [Owner::issue_invoice_tx](struct.Owner.html#method.issue_invoice_tx).
 
 	```
 	# // Minimal list of arguments
@@ -923,7 +923,7 @@ pub trait OwnerRpcV3 {
 	) -> Result<VersionedSlate, ErrorKind>;
 
 	/**
-		 Networked version of [Owner::process_invoice_tx](struct.Owner.html#method.process_invoice_tx).
+	Networked version of [Owner::process_invoice_tx](struct.Owner.html#method.process_invoice_tx).
 
 	```
 	# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(

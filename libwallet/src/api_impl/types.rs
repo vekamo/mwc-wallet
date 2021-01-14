@@ -312,8 +312,6 @@ pub struct VersionInfo {
 	pub foreign_api_version: u16,
 	/// Slate version
 	pub supported_slate_versions: Vec<SlateVersion>,
-	/// slatepack_address (dalek public key), normally it match tor address
-	pub slatepack_address: Option<String>,
 }
 
 /// Packaged Payment Proof

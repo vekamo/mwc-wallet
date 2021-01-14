@@ -191,16 +191,7 @@ where
 	/// ```
 
 	pub fn check_version(&self) -> Result<VersionInfo, Error> {
-		let mut w_lock = self.wallet_inst.lock();
-		let w = w_lock.lc_provider()?.wallet_inst()?;
-		if let Some(m) = self.middleware.as_ref() {
-			m(
-				ForeignCheckMiddlewareFn::CheckVersion,
-				w.w2n_client().get_version_info(),
-				None,
-			)?;
-		}
-		let version = foreign::check_version(&mut **w, (&self.keychain_mask).as_ref())?;
+		let version = foreign::check_version()?;
 		Ok(version)
 	}
 

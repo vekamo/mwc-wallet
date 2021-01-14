@@ -75,21 +75,11 @@ pub fn set_receive_account(account: String) {
 }
 
 /// Return the version info
-pub fn check_version<'a, T: ?Sized, C, K>(
-	w: &mut T,
-	keychain_mask: Option<&SecretKey>,
-) -> Result<VersionInfo, Error>
-where
-	T: WalletBackend<'a, C, K>,
-	C: NodeClient + 'a,
-	K: Keychain + 'a,
-{
+pub fn check_version() -> Result<VersionInfo, Error> {
 	// Proof address will be the onion address (Dalec Paublic Key). It is exactly what we need
-	let address = get_proof_address(w, keychain_mask)?;
 	Ok(VersionInfo {
 		foreign_api_version: FOREIGN_API_VERSION,
 		supported_slate_versions: SlateVersion::iter().collect(),
-		slatepack_address: Some(address),
 	})
 }
 

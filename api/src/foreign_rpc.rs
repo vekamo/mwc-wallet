@@ -55,7 +55,6 @@ pub trait ForeignRpc {
 		"result": {
 			"Ok": {
 				"foreign_api_version": 2,
-				"slatepack_address": "fffqrotuelaodwjblwmifg36xjedjw4azbwvfexmxmmzsb6xvzbkhuqd",
 				"supported_slate_versions": [
 					"SP",
 					"V3B",
@@ -235,7 +234,7 @@ pub trait ForeignRpc {
 	fn verify_slate_messages(&self, slate: VersionedSlate) -> Result<(), ErrorKind>;
 
 	/**
-		Networked version of [Foreign::receive_tx](struct.Foreign.html#method.receive_tx).
+	Networked version of [Foreign::receive_tx](struct.Foreign.html#method.receive_tx).
 
 	# Json rpc example
 

@@ -39,9 +39,12 @@ pub use types::{
 
 /// Sends transactions to a corresponding SlateReceiver
 pub trait SlateSender {
-	/// Check other wallet version and address. Return None if it is impossible so wallet
-	/// will use least possible features.
-	fn check_other_wallet_version(&self) -> Result<Option<(SlateVersion, Option<String>)>, Error>;
+	/// Check other wallet version and address. Return None if it is impossible to make such a request
+	/// and sending will use least possible features.
+	fn check_other_wallet_version(
+		&self,
+		destination_address: &String,
+	) -> Result<Option<(SlateVersion, Option<String>)>, Error>;
 
 	/// Send a transaction slate to another listening wallet and return result
 	/// TODO: Probably need a slate wrapper type

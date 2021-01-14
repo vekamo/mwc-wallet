@@ -731,8 +731,9 @@ where
 								ErrorKind::GenericError(format!("Unable to create a sender, {}", e))
 							})?;
 
-					let other_wallet_version =
-						comm_adapter.check_other_wallet_version().map_err(|e| {
+					let other_wallet_version = comm_adapter
+						.check_other_wallet_version(&sa.dest)
+						.map_err(|e| {
 							ErrorKind::GenericError(format!(
 								"Unable to get other wallet info, {}",
 								e

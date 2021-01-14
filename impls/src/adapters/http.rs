@@ -27,6 +27,7 @@ use std::path::MAIN_SEPARATOR;
 use crate::tor::config as tor_config;
 use crate::tor::process as tor_process;
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
+use grin_wallet_libwallet::address;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::slatepack::SlatePurpose;
 
@@ -87,6 +88,7 @@ impl HttpDataSender {
 		&self,
 		url: &str,
 		timeout: Option<u128>,
+		destination_address: &String,
 	) -> Result<(SlateVersion, Option<String>), Error> {
 		let res_str: String;
 		let start_time = std::time::Instant::now();
@@ -169,20 +171,25 @@ impl HttpDataSender {
 			))
 		})?;
 
-		let slatepack_address: Option<String> =
-			serde_json::from_value(resp_value["slatepack_address"].clone()).map_err(|e| {
-				ErrorKind::GenericError(format!(
-					"Unable to read respond slatepack_address value {}, {}",
-					res_str, e
-				))
-			})?;
-
 		// trivial tests for now, but will be expanded later
 		if foreign_api_version < 2 {
 			let report = "Other wallet reports unrecognized API format.".to_string();
 			error!("{}", report);
 			return Err(ErrorKind::ClientCallback(report).into());
 		}
+
+		let slatepack_address: Option<String> =
+			if supported_slate_versions.contains(&"SP".to_owned()) {
+				match address::pubkey_from_onion_v3(destination_address) {
+					Ok(pk) => Some(address::onion_v3_from_pubkey(&pk)?),
+					Err(_) => {
+						// Destination is not tor address, so making foreign API request for get an address
+						Some(self.check_receiver_proof_address(url, timeout.clone())?)
+					}
+				}
+			} else {
+				None
+			};
 
 		if supported_slate_versions.contains(&"SP".to_owned()) {
 			return Ok((SlateVersion::SP, slatepack_address));
@@ -388,10 +395,17 @@ impl HttpDataSender {
 }
 
 impl SlateSender for HttpDataSender {
-	fn check_other_wallet_version(&self) -> Result<Option<(SlateVersion, Option<String>)>, Error> {
+	fn check_other_wallet_version(
+		&self,
+		destination_address: &String,
+	) -> Result<Option<(SlateVersion, Option<String>)>, Error> {
 		// we need to keep _tor in scope so that the process is not killed by drop.
 		let (url_str, _tor) = self.set_up_tor_send_process()?;
-		Ok(Some(self.check_other_version(&url_str, None)?))
+		Ok(Some(self.check_other_version(
+			&url_str,
+			None,
+			destination_address,
+		)?))
 	}
 
 	fn send_tx(
