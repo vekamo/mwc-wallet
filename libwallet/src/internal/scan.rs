@@ -1820,6 +1820,29 @@ fn report_transaction_collision(
 	transactions: &HashMap<String, WalletTxInfo>,
 	inputs: bool,
 ) {
+	// We don't want to teport collision for old transactions. Migration could be a reason. Those messages
+	// are aknowledged and users didn't recreate the wallet to get rid of them.
+	// 4-5 month from now transaction should be valid. Expected that all users are migrated the wallet by that time
+	let height_limit = if global::is_mainnet() {
+		450_000
+	} else {
+		500_000
+	};
+
+	let countable_txs = tx_uuid
+		.iter()
+		.map(|tx_uuid| transactions.get(tx_uuid))
+		.filter(|wtx| {
+			wtx.map(|tx| tx.tx_log.output_height > height_limit)
+				.unwrap_or(false)
+		})
+		.count();
+
+	if countable_txs == 0 {
+		// No report for legacy transactions.
+		return;
+	}
+
 	if let Some(ref s) = status_send_channel {
 		let mut cancelled_tx = String::new();
 		tx_uuid
