@@ -1,6 +1,6 @@
 [package]
 name = "mwc_wallet"
-version = "4.0.0"
+version = "4.1.0"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 description = "Simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
 license = "Apache-2.0"
@@ -33,12 +33,12 @@ lazy_static = "1"
 ed25519-dalek = "1.0.0-pre.4"
 x25519-dalek = "0.6"
 
-grin_wallet_api = { path = "./api", version = "4.0.0" }
-grin_wallet_impls = { path = "./impls", version = "4.0.0" }
-grin_wallet_libwallet = { path = "./libwallet", version = "4.0.0" }
-grin_wallet_controller = { path = "./controller", version = "4.0.0" }
-grin_wallet_config = { path = "./config", version = "4.0.0" }
-grin_wallet_util = { path = "./util", version = "4.0.0" }
+grin_wallet_api = { path = "./api", version = "4.1.0" }
+grin_wallet_impls = { path = "./impls", version = "4.1.0" }
+grin_wallet_libwallet = { path = "./libwallet", version = "4.1.0" }
+grin_wallet_controller = { path = "./controller", version = "4.1.0" }
+grin_wallet_config = { path = "./config", version = "4.1.0" }
+grin_wallet_util = { path = "./util", version = "4.1.0" }
 
 [build-dependencies]
 built = "0.3"
