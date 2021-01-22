@@ -27,7 +27,9 @@ use crate::grin_util::secp::key::PublicKey;
 
 use crate::internal::{keys, scan, selection, tx, updater};
 use crate::slate::{PaymentInfo, Slate};
-use crate::types::{AcctPathMapping, Context, NodeClient, TxLogEntry, WalletBackend, WalletInfo, OutputData};
+use crate::types::{
+	AcctPathMapping, Context, NodeClient, OutputData, TxLogEntry, WalletBackend, WalletInfo,
+};
 use crate::{
 	wallet_lock, InitTxArgs, IssueInvoiceTxArgs, NodeHeightResult, OutputCommitMapping,
 	PaymentProof, ScannedBlockInfo, TxLogEntryType, WalletInst, WalletLCProvider,
@@ -1446,10 +1448,10 @@ pub fn self_spend_particular_putput<'a, L, C, K>(
 	_minimum_confirmations: u64,
 	_seperate_tx: bool,
 ) -> Result<(), Error>
-	where
-		L: WalletLCProvider<'a, C, K>,
-		C: NodeClient + 'a,
-		K: Keychain + 'a,
+where
+	L: WalletLCProvider<'a, C, K>,
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
 {
 	scan::self_spend_particular_putput(
 		wallet_inst,

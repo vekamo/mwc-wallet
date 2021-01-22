@@ -1925,73 +1925,72 @@ where
 /// and this github ticket: https://github.com/mwcproject/mwc-qt-wallet/issues/508
 
 pub fn self_spend_particular_putput<'a, L, C, K>(
-    wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
-    keychain_mask: Option<&SecretKey>,
-    output: OutputData,
-    address: Option<String>,
-    _current_height: u64,
-    _minimum_confirmations: u64,
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
+	output: OutputData,
+	address: Option<String>,
+	_current_height: u64,
+	_minimum_confirmations: u64,
 ) -> Result<(), Error>
-    where
-        L: WalletLCProvider<'a, C, K>,
-        C: NodeClient + 'a,
-        K: Keychain + 'a,
+where
+	L: WalletLCProvider<'a, C, K>,
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
 {
-    //spend this output to the account itself.
-    let fee = tx_fee(1, 1, 1, None); //there is only one input and one output and one kernel
-    //let amount = output.eligible_to_spend(current_height, minimum_confirmations);
-    let amount = output.value;
+	//spend this output to the account itself.
+	let fee = tx_fee(1, 1, 1, None); //there is only one input and one output and one kernel
+								 //let amount = output.eligible_to_spend(current_height, minimum_confirmations);
+	let amount = output.value;
 
-    let mut output_vec = Vec::new();
-    output_vec.push(output.commit.unwrap());
-    let args = InitTxArgs {
-        src_acct_name: address.clone(),
-        amount: amount - fee,
-        minimum_confirmations: 2,
-        max_outputs: 500,
-        num_change_outputs: 1,
-        selection_strategy_is_use_all: true,
-        outputs: Some(output_vec),
-        ..Default::default()
-    };
+	let mut output_vec = Vec::new();
+	output_vec.push(output.commit.unwrap());
+	let args = InitTxArgs {
+		src_acct_name: address.clone(),
+		amount: amount - fee,
+		minimum_confirmations: 2,
+		max_outputs: 500,
+		num_change_outputs: 1,
+		selection_strategy_is_use_all: true,
+		outputs: Some(output_vec),
+		..Default::default()
+	};
 
-    let mut slate;
-    {
-        wallet_lock!(wallet_inst, w);
-        //send
-        slate = owner::init_send_tx(&mut **w, keychain_mask, &args, false, 1)?;
-        //receiver
-        let mut dest_account_name = None;
-        let address_string;
-        if address.is_some() {
-            address_string = address.clone().unwrap();
-            dest_account_name = Option::from(&*(address_string));
-        }
-        slate = foreign::receive_tx(
-            &mut **w,
-            keychain_mask,
-            &slate,
-            address.clone(),
-            None,
-            None,
-            dest_account_name,
-            None,
-            false,
-            false,
-        )?;
-        owner::tx_lock_outputs(&mut **w, keychain_mask, &slate, address, 0, false)?;
-        slate = owner::finalize_tx(&mut **w, keychain_mask, &slate, false, false)
-            .unwrap()
-            .0;
-    }
-    let client = {
-        let mut w_lock = wallet_inst.lock();
-        let w = w_lock.lc_provider()?.wallet_inst()?;
-        // Test keychain mask, to keep API consistent
-        let _ = w.keychain(keychain_mask)?;
-        w.w2n_client().clone()
-    };
-    owner::post_tx(&client, &slate.tx, false)?;
-    Ok(())
+	let mut slate;
+	{
+		wallet_lock!(wallet_inst, w);
+		//send
+		slate = owner::init_send_tx(&mut **w, keychain_mask, &args, false, 1)?;
+		//receiver
+		let mut dest_account_name = None;
+		let address_string;
+		if address.is_some() {
+			address_string = address.clone().unwrap();
+			dest_account_name = Option::from(&*(address_string));
+		}
+		slate = foreign::receive_tx(
+			&mut **w,
+			keychain_mask,
+			&slate,
+			address.clone(),
+			None,
+			None,
+			dest_account_name,
+			None,
+			false,
+			false,
+		)?;
+		owner::tx_lock_outputs(&mut **w, keychain_mask, &slate, address, 0, false)?;
+		slate = owner::finalize_tx(&mut **w, keychain_mask, &slate, false, false)
+			.unwrap()
+			.0;
+	}
+	let client = {
+		let mut w_lock = wallet_inst.lock();
+		let w = w_lock.lc_provider()?.wallet_inst()?;
+		// Test keychain mask, to keep API consistent
+		let _ = w.keychain(keychain_mask)?;
+		w.w2n_client().clone()
+	};
+	owner::post_tx(&client, &slate.tx, false)?;
+	Ok(())
 }
-
