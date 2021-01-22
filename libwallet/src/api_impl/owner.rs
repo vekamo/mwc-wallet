@@ -27,7 +27,7 @@ use crate::grin_util::secp::key::PublicKey;
 
 use crate::internal::{keys, scan, selection, tx, updater};
 use crate::slate::{PaymentInfo, Slate};
-use crate::types::{AcctPathMapping, Context, NodeClient, TxLogEntry, WalletBackend, WalletInfo};
+use crate::types::{AcctPathMapping, Context, NodeClient, TxLogEntry, WalletBackend, WalletInfo, OutputData};
 use crate::{
 	wallet_lock, InitTxArgs, IssueInvoiceTxArgs, NodeHeightResult, OutputCommitMapping,
 	PaymentProof, ScannedBlockInfo, TxLogEntryType, WalletInst, WalletLCProvider,
@@ -1434,4 +1434,30 @@ where
 	let recipient_mine = my_address_pubkey == recipient_pubkey;
 
 	Ok((sender_mine, recipient_mine))
+}
+
+///
+pub fn self_spend_particular_putput<'a, L, C, K>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
+	output: OutputData,
+	address: Option<String>,
+	_current_height: u64,
+	_minimum_confirmations: u64,
+	_seperate_tx: bool,
+) -> Result<(), Error>
+	where
+		L: WalletLCProvider<'a, C, K>,
+		C: NodeClient + 'a,
+		K: Keychain + 'a,
+{
+	scan::self_spend_particular_putput(
+		wallet_inst,
+		keychain_mask,
+		output,
+		address,
+		_current_height,
+		_minimum_confirmations,
+	)?;
+	Ok(())
 }
