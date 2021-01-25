@@ -5013,4 +5013,164 @@ mod tests {
 			None,
 		);
 	}
+
+	// Manual test that is used to test if workflow from the secondary currencies works.
+	// Since we need to support many combinations, it is easuer to have the semiautomatic test.
+	// Note: Test is expected to run against real ElectrumX & Nodes. The point of that test is to verify is
+	//   everything works with real blockchain
+	// The workflow ends at the BTC redeem/refund state. No needs to finish with MWC part of swap
+	#[cfg(not(target_os = "windows"))]
+	#[test]
+	//#[ignore]
+	fn test_address_for_btc() {
+		set_test_mode(true);
+		swap::set_testing_cur_time(1567632152);
+		global::set_local_chain_type(ChainTypes::Floonet);
+
+		let kc_sell = keychain(1);
+		let ctx_sell = context_sell(&kc_sell);
+		let currency = Currency::Bch;
+		let secondary_redeem_address = "2N1AYRdG2WjV56a3umewPYtp6cytoCuVK2b".to_string();
+		let btc_amount = 10_000;
+		let amount = GRIN_UNIT; // 1 mwc is fine
+
+		let nc = TestNodeClient::new(300_000);
+
+		let mut secondary_currency_node_client1 = ElectrumNodeClient::new(
+			"192.168.1.20:19335".to_string(),
+			currency.get_block1_tx_hash(!global::is_mainnet()),
+		);
+		let secondary_currency_node_client2 = ElectrumNodeClient::new(
+			"192.168.1.20:19335".to_string(),
+			currency.get_block1_tx_hash(!global::is_mainnet()),
+		);
+
+		{
+			// Check the client...
+			let _ = secondary_currency_node_client1.height().unwrap();
+		}
+
+		let electumx_client1 = Arc::new(Mutex::new(secondary_currency_node_client1));
+		let electumx_client2 = Arc::new(Mutex::new(secondary_currency_node_client2));
+		let mut swap_api = BtcSwapApi::new(
+			currency.clone(),
+			Arc::new(nc.clone()),
+			electumx_client1,
+			electumx_client2,
+		);
+
+		//let swap_api_sa : & SwapApi<ExtKeychain> = &swap_api as &SwapApi<ExtKeychain>;
+
+		let mut swap_sell = swap_api
+			.create_swap_offer(
+				&kc_sell,
+				&ctx_sell,
+				amount,
+				btc_amount,
+				currency.clone(),
+				secondary_redeem_address,
+				true, // lock MWC first
+				1,
+				1,
+				3600,
+				3600,
+				"file".to_string(),
+				"/tmp/del.me".to_string(),
+				None,
+				None,
+			)
+			.unwrap();
+
+		nc.mine_blocks(2);
+		for input in swap_sell.lock_slate.tx.inputs_committed() {
+			nc.push_output(input);
+		}
+
+		let kc_buy = keychain(2);
+		let ctx_buy = context_buy(&kc_buy);
+
+		let sec_update = swap_api.build_offer_message_secondary_update(&kc_sell, &mut swap_sell);
+		let offer_message = SellApi::offer_message(&swap_sell, sec_update.clone()).unwrap();
+
+		let (uuid, offer_update, secondary_update) = offer_message.unwrap_offer().unwrap();
+
+		let mut swap_buy =
+			BuyApi::accept_swap_offer(&kc_buy, &ctx_buy, uuid, offer_update, secondary_update, &nc)
+				.unwrap();
+
+		let sec_update =
+			swap_api.build_accept_offer_message_secondary_update(&kc_buy, &mut swap_buy);
+		let accept_offer_message = BuyApi::accept_offer_message(&swap_buy, sec_update).unwrap();
+
+		let (_uuid, accept_offer_update, secondary_update) =
+			accept_offer_message.unwrap_accept_offer().unwrap();
+		let btc_update = secondary_update
+			.unwrap_btc()
+			.unwrap()
+			.unwrap_accept_offer()
+			.unwrap();
+		SellApi::accepted_offer(&kc_sell, &mut swap_sell, &ctx_sell, accept_offer_update).unwrap();
+		let btc_data = swap_sell.secondary_data.unwrap_btc_mut().unwrap();
+		btc_data.accepted_offer(btc_update).unwrap();
+
+		// Locking MWC
+		swap::publish_transaction(&nc, &swap_sell.lock_slate.tx, false).unwrap();
+		nc.mine_blocks(2);
+
+		// Generatring lock address as get_secondary_lock_address does
+		/*let input_script = swap_api.script(&swap_buy).unwrap();
+		let adrress = swap_buy.secondary_data.unwrap_btc().unwrap().address(
+			swap_sell.secondary_currency,
+			&input_script,
+			swap_sell.network,
+		).unwrap();*/
+
+		let lock_address = (&swap_api as &dyn SwapApi<ExtKeychain>)
+			.get_secondary_lock_address(&swap_buy)
+			.unwrap();
+		//let lock_address = swap_api.get_secondary_lock_address(&swap_buy).unwrap();
+		println!(
+			"Lock address: {}. please deposit {} {}  and press Enter",
+			lock_address,
+			currency.amount_to_hr_string(btc_amount, true),
+			currency
+		);
+
+		if true {
+			// Here Byer can do a refund. In case of test, the refund time is already here
+			swap_api
+				.post_secondary_refund_tx(
+					&kc_buy,
+					&ctx_buy,
+					&mut swap_buy,
+					Some("bchtest:ppwtgtkeul26977nhy8xg2n5dtz2983hvuv5kea6vc".to_string()),
+					true,
+				)
+				.unwrap();
+			return;
+		}
+
+		// going to redeem step...
+		BuyApi::init_redeem(&kc_buy, &mut swap_buy, &ctx_buy).unwrap();
+		let init_redeem_message = BuyApi::init_redeem_message(&swap_buy).unwrap();
+		let (_uuid, init_redeem, _secondary_update) =
+			init_redeem_message.unwrap_init_redeem().unwrap();
+		SellApi::init_redeem(&kc_sell, &mut swap_sell, &ctx_sell, init_redeem).unwrap();
+
+		let redeem_message = SellApi::redeem_message(&swap_sell).unwrap();
+		let (_uuid, redeem, _secondary_update) = redeem_message.unwrap_redeem().unwrap();
+		BuyApi::finalize_redeem_slate(&kc_buy, &mut swap_buy, &ctx_buy, redeem.redeem_participant)
+			.unwrap();
+
+		swap::publish_transaction(&nc, &swap_buy.redeem_slate.tx, false).unwrap();
+		nc.mine_blocks(1);
+
+		let found = crate::swap::fsm::seller_swap::check_mwc_redeem(&mut swap_sell, &nc).unwrap();
+		assert!(found);
+
+		// Seller does redeem
+		swap_api
+			.publish_secondary_transaction(&kc_sell, &mut swap_sell, &ctx_sell, true)
+			.unwrap();
+	}
 }

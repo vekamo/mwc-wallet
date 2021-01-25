@@ -27,8 +27,7 @@ use crate::swap::types::{
 };
 use crate::swap::{ErrorKind, SellApi, Swap, SwapApi};
 use crate::{NodeClient, Slate};
-use bitcoin::Script;
-use bitcoin_hashes::sha256d;
+use bitcoin::{Script, Txid};
 use failure::_core::marker::PhantomData;
 use grin_keychain::{Identifier, Keychain, SwitchCommitmentType};
 use grin_util::secp::aggsig::export_secnonce_single as generate_nonce;
@@ -315,7 +314,7 @@ where
 	fn get_btc_confirmation_number(
 		&self,
 		btc_tip: &u64,
-		tx_hash: Option<sha256d::Hash>,
+		tx_hash: Option<Txid>,
 	) -> Result<Option<u64>, ErrorKind> {
 		let result: Option<u64> = match tx_hash {
 			None => None,
@@ -540,10 +539,14 @@ where
 			Err(_) => self.btc_node_client2.lock().height()?,
 		};
 		let btc_data = swap.secondary_data.unwrap_btc()?;
-		let secondary_redeem_conf =
-			self.get_btc_confirmation_number(&btc_tip, btc_data.redeem_tx.clone())?;
-		let secondary_refund_conf =
-			self.get_btc_confirmation_number(&btc_tip, btc_data.refund_tx.clone())?;
+		let secondary_redeem_conf = self.get_btc_confirmation_number(
+			&btc_tip,
+			btc_data.redeem_tx.as_ref().map(|h| h.clone().into()),
+		)?;
+		let secondary_refund_conf = self.get_btc_confirmation_number(
+			&btc_tip,
+			btc_data.refund_tx.as_ref().map(|h| h.clone().into()),
+		)?;
 
 		// BTC lock account...
 		// Checking Amount, it can be too hight as well
@@ -692,12 +695,12 @@ where
 	/// Get a secondary address for the lock account
 	fn get_secondary_lock_address(&self, swap: &Swap) -> Result<String, ErrorKind> {
 		let input_script = self.script(swap)?;
-		let adrress = swap.secondary_data.unwrap_btc()?.address(
+		let address = swap.secondary_data.unwrap_btc()?.address(
 			swap.secondary_currency,
 			&input_script,
 			swap.network,
 		)?;
-		Ok(adrress.to_string())
+		Ok(address.to_string())
 	}
 
 	/// Check if tx fee for the secondary is different from the posted
@@ -717,7 +720,7 @@ where
 		assert!(!swap.is_seller());
 
 		let refund_address_str = refund_address.ok_or(ErrorKind::Generic(
-			"Please define BTC refund address".to_string(),
+			"Please define refund address".to_string(),
 		))?;
 
 		swap.secondary_currency

@@ -40,7 +40,7 @@ use bitcoin_hashes::{hash160, Hash};
 /// BTC transaction ready to post (any type). Here it is a redeem tx
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BtcTtansaction {
-	pub txid: sha256d::Hash,
+	pub txid: sha256d::Hash, // keep it is a hash for data compatibility.
 	#[serde(serialize_with = "bytes_to_hex", deserialize_with = "bytes_from_hex")]
 	pub tx: Vec<u8>,
 }
@@ -58,9 +58,9 @@ pub struct BtcData {
 	)]
 	pub refund: Option<PublicKey>,
 	/// Refund transaction Hash
-	pub refund_tx: Option<sha256d::Hash>,
+	pub refund_tx: Option<sha256d::Hash>, // keep it as a hash for data compatibility.
 	/// BTX redeem transaction hash, needed for checking if it is posted
-	pub redeem_tx: Option<sha256d::Hash>,
+	pub redeem_tx: Option<sha256d::Hash>, // keep it as a hash for data compatibility.
 	/// Last transaction fee that was used for BTC. Needed to detect the fact that it is changed.
 	pub tx_fee: Option<f32>,
 }
@@ -270,7 +270,7 @@ impl BtcData {
 
 		BchTx {
 			lock_time: tx.lock_time,
-			version: tx.version,
+			version: tx.version as u32,
 			inputs,
 			outputs,
 		}
@@ -370,7 +370,7 @@ impl BtcData {
 
 		Ok((
 			BtcTtansaction {
-				txid: tx.txid(),
+				txid: tx.txid().as_hash(),
 				tx: cursor.into_inner(),
 			},
 			tx,
@@ -514,7 +514,7 @@ impl BtcData {
 		debug_assert!(actual_size >= tx_size - 5);
 
 		Ok(BtcTtansaction {
-			txid: tx.txid(),
+			txid: tx.txid().as_hash(),
 			tx: cursor.into_inner(),
 		})
 	}
@@ -762,9 +762,9 @@ mod tests {
 				rng.fill_bytes(&mut hash);
 				let hash = hash160::Hash::from_slice(&hash).unwrap();
 				let payload = if rng.gen_bool(0.5) {
-					Payload::PubkeyHash(hash)
+					Payload::PubkeyHash(hash.into())
 				} else {
-					Payload::ScriptHash(hash)
+					Payload::ScriptHash(hash.into())
 				};
 				let script_pubkey = payload.script_pubkey();
 				output.push(TxOut {
@@ -821,6 +821,13 @@ mod tests {
 		assert!(diff <= count); // Our size estimation should be very close to the real size
 
 		// Moment of truth: our redeem tx should be valid
-		tx.verify(&funding_txs).unwrap();
+		let verify_fn = |out_point: &OutPoint| match funding_txs.get(&out_point.txid) {
+			Some(tx) => match tx.output.get(out_point.vout as usize) {
+				Some(out) => Some(out.clone()),
+				None => None,
+			},
+			None => None,
+		};
+		tx.verify(verify_fn).unwrap();
 	}
 }

@@ -188,18 +188,14 @@ impl Currency {
 					}
 				}
 
-				match addr.payload {
-					bitcoin::util::address::Payload::PubkeyHash(_) => (),
-					_ => {
-						return Err(ErrorKind::Generic(
-							"Expected BTC Pay-to-public-key-hash address".to_string(),
-						))
-					}
-				}
+				// We have to support all type of keys:
+				// bitcoin::util::address::Payload::PubkeyHash  - it is Legacy Public Key
+				// bitcoin::util::address::Payload::WitnessProgram - Segwit
+				// bitcoin::util::address::Payload::ScriptHash - Multisig (Legacy )
 			}
 			Currency::Bch => {
 				let nw = Self::bch_network();
-				let (v, addr_type) = match bch::address::cashaddr_decode(&address, nw) {
+				let (v, _addr_type) = match bch::address::cashaddr_decode(&address, nw) {
 					Err(e) => {
 						// Try legacy address
 						// Intentionally return error from first call. Legacy address error is not interesting much
@@ -214,14 +210,9 @@ impl Currency {
 					}
 					Ok((v, addr_type)) => (v, addr_type),
 				};
-				if addr_type != bch::address::AddressType::P2PKH {
-					return Err(ErrorKind::Generic(
-						"Expected BTC Pay-to-public-key-hash address".to_string(),
-					));
-				}
 				if v.len() != 160 / 8 {
 					return Err(ErrorKind::Generic(
-						"Swap supporting only Legacy of 160 bit BCH addresses".to_string(),
+						"Swap supports only Legacy of 160 bit BCH addresses".to_string(),
 					));
 				}
 			}

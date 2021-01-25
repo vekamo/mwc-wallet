@@ -944,7 +944,10 @@ where
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // Return true if mwc redeemed by Buyer. So we are good to claim BTC
-fn check_mwc_redeem<C: NodeClient>(swap: &mut Swap, node_client: &C) -> Result<bool, ErrorKind> {
+pub(crate) fn check_mwc_redeem<C: NodeClient>(
+	swap: &mut Swap,
+	node_client: &C,
+) -> Result<bool, ErrorKind> {
 	// Trying to find redeem
 	if let Some((kernel, _h)) = swap.find_redeem_kernel(node_client)? {
 		// Replace kernel

@@ -16,8 +16,7 @@ use crate::grin_util::Mutex;
 use crate::swap::types::Currency;
 use crate::swap::ErrorKind;
 use bitcoin::consensus::Decodable;
-use bitcoin::{OutPoint, Transaction};
-use bitcoin_hashes::sha256d;
+use bitcoin::{OutPoint, Transaction, Txid};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::io::Cursor;
@@ -40,7 +39,7 @@ pub struct Output {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(remote = "OutPoint")]
 struct OutPointRef {
-	pub txid: sha256d::Hash,
+	pub txid: Txid,
 	pub vout: u32,
 }
 
@@ -70,7 +69,7 @@ pub trait BtcNodeClient: Sync + Send + 'static {
 	/// Return (height, tx)
 	fn transaction(
 		&mut self,
-		tx_hash: &sha256d::Hash, // tx hash
+		tx_hash: &Txid, // tx hash
 	) -> Result<Option<(Option<u64>, Transaction)>, ErrorKind>;
 }
 
@@ -80,11 +79,11 @@ pub struct TestBtcNodeClientState {
 	/// current height
 	pub height: u64,
 	/// Transactions to heights
-	pub tx_heights: HashMap<sha256d::Hash, u64>,
+	pub tx_heights: HashMap<Txid, u64>,
 	/// Mined transactions
-	pub txs: HashMap<sha256d::Hash, Transaction>,
+	pub txs: HashMap<Txid, Transaction>,
 	/// Pending transactions
-	pub pending: HashMap<sha256d::Hash, Transaction>,
+	pub pending: HashMap<Txid, Transaction>,
 }
 
 /// Mock BTC node client
@@ -235,7 +234,15 @@ impl BtcNodeClient for TestBtcNodeClient {
 			return Err(ErrorKind::ElectrumNodeClient("Already in chain".into()));
 		}
 
-		tx.verify(&state.txs)
+		let verify_fn = |out_point: &OutPoint| match state.txs.get(&out_point.txid) {
+			Some(tx) => match tx.output.get(out_point.vout as usize) {
+				Some(out) => Some(out.clone()),
+				None => None,
+			},
+			None => None,
+		};
+
+		tx.verify(verify_fn)
 			.map_err(|e| ErrorKind::ElectrumNodeClient(format!("{}", e)))?;
 		state.pending.insert(txid, tx.clone());
 
@@ -244,7 +251,7 @@ impl BtcNodeClient for TestBtcNodeClient {
 
 	fn transaction(
 		&mut self,
-		tx_hash: &sha256d::Hash,
+		tx_hash: &Txid,
 	) -> Result<Option<(Option<u64>, Transaction)>, ErrorKind> {
 		let state = self.state.lock();
 

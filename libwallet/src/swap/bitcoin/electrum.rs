@@ -17,7 +17,7 @@ use super::rpc::*;
 use crate::swap::types::Currency;
 use crate::swap::ErrorKind;
 use bitcoin::consensus::Decodable;
-use bitcoin::{OutPoint, Script, Transaction};
+use bitcoin::{OutPoint, Script, Transaction, Txid};
 use bitcoin_hashes::sha256d::Hash;
 use grin_util::{from_hex, to_hex};
 use serde::{Deserialize, Serialize};
@@ -352,11 +352,11 @@ impl BtcNodeClient for ElectrumNodeClient {
 		// Outputs can have duplicates. I saw that at BCH few times. User will see that like
 		// was posted twice as needed. In a moment that will be fixed by ElectrumX.
 		// Because of that we are using hash map for dedups...
-		let outputs: HashMap<bitcoin::hashes::sha256d::Hash, Output> = utxos
+		let outputs: HashMap<bitcoin::Txid, Output> = utxos
 			.into_iter()
 			.filter_map(|u| {
 				Hash::from_str(&u.tx_hash).ok().map(|h| {
-					let out_point = OutPoint::new(h, u.tx_pos);
+					let out_point = OutPoint::new(h.into(), u.tx_pos);
 					Output {
 						out_point,
 						value: u.value,
@@ -378,7 +378,7 @@ impl BtcNodeClient for ElectrumNodeClient {
 	/// Request a transaction from the node
 	fn transaction(
 		&mut self,
-		tx_hash: &Hash,
+		tx_hash: &Txid,
 	) -> Result<Option<(Option<u64>, Transaction)>, ErrorKind> {
 		let head_height = self.height()?;
 
