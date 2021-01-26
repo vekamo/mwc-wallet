@@ -348,11 +348,10 @@ where
 		secondary_currency: Currency,
 		_is_seller: bool,
 	) -> Result<usize, ErrorKind> {
-		if secondary_currency != Currency::Btc && secondary_currency != Currency::Bch {
-			return Err(ErrorKind::UnexpectedCoinType);
+		match secondary_currency {
+			Currency::Btc | Currency::Bch | Currency::Ltc => Ok(4),
+			//_ => return Err(ErrorKind::UnexpectedCoinType),
 		}
-
-		Ok(4)
 	}
 
 	fn create_context(
@@ -365,8 +364,9 @@ where
 		keys: Vec<Identifier>,
 		parent_key_id: Identifier,
 	) -> Result<Context, ErrorKind> {
-		if secondary_currency != Currency::Btc && secondary_currency != Currency::Bch {
-			return Err(ErrorKind::UnexpectedCoinType);
+		match secondary_currency {
+			Currency::Btc | Currency::Bch | Currency::Ltc => (),
+			//_ => return Err(ErrorKind::UnexpectedCoinType),
 		}
 
 		let secp = keychain.secp();
@@ -436,8 +436,9 @@ where
 				))
 			})?;
 
-		if secondary_currency != Currency::Btc && secondary_currency != Currency::Bch {
-			return Err(ErrorKind::UnexpectedCoinType);
+		match secondary_currency {
+			Currency::Btc | Currency::Bch | Currency::Ltc => (),
+			//_ => return Err(ErrorKind::UnexpectedCoinType),
 		}
 
 		let height = self.node_client.get_chain_tip()?.0;

@@ -24,7 +24,6 @@ use grin_util::secp::key::SecretKey;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fmt;
-use std::str::FromStr;
 
 /// MWC Network where SWAP happens.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,13 +85,15 @@ pub enum Currency {
 	Btc,
 	/// Bitcoin Cash
 	Bch,
+	/// Litecoin
+	Ltc,
 }
 
 impl Currency {
 	/// Satoshi to 1 conversion
 	pub fn exponent(&self) -> usize {
 		match self {
-			Currency::Btc | Currency::Bch => 8,
+			Currency::Btc | Currency::Bch | Currency::Ltc => 8,
 		}
 	}
 
@@ -100,6 +101,7 @@ impl Currency {
 	pub fn block_time_period_sec(&self) -> i64 {
 		match self {
 			Currency::Btc | Currency::Bch => 10 * 60,
+			Currency::Ltc => 60 * 2 + 30, // Blocks period is 2.5 minutes
 		}
 	}
 
@@ -161,7 +163,7 @@ impl Currency {
 	pub fn validate_address(&self, address: &String) -> Result<(), ErrorKind> {
 		match self {
 			Currency::Btc => {
-				let addr = Address::from_str(address).map_err(|e| {
+				let addr = Address::new_btc().from_str(address).map_err(|e| {
 					ErrorKind::Generic(format!("Unable to parse BTC address {}, {}", address, e))
 				})?;
 				match addr.network {
@@ -216,6 +218,34 @@ impl Currency {
 					));
 				}
 			}
+			Currency::Ltc => {
+				let addr = Address::new_ltc().from_str(address).map_err(|e| {
+					ErrorKind::Generic(format!("Unable to parse LTC address {}, {}", address, e))
+				})?;
+				match addr.network {
+					bitcoin::network::constants::Network::Bitcoin => {
+						if !global::is_mainnet() {
+							return Err(ErrorKind::Generic(
+								"Address is from main LTC network, expected test network"
+									.to_string(),
+							));
+						}
+					}
+					bitcoin::network::constants::Network::Testnet => {
+						if global::is_mainnet() {
+							return Err(ErrorKind::Generic(
+								"Address is from test LTC network, expected main network"
+									.to_string(),
+							));
+						}
+					}
+					_ => {
+						return Err(ErrorKind::Generic(
+							"Address is from invalid LTC network".to_string(),
+						))
+					}
+				}
+			}
 		}
 		Ok(())
 	}
@@ -253,9 +283,16 @@ impl Currency {
 					}
 				}
 			}
+			Currency::Ltc => {
+				// Converting to BTC address
+				let addr = Address::new_ltc().from_str(&address).map_err(|e| {
+					ErrorKind::Generic(format!("Unable to parse LTC address {}, {}", address, e))
+				})?;
+				addr.to_btc().to_string()
+			}
 		};
 
-		let addr = Address::from_str(&addr_str).map_err(|e| {
+		let addr = Address::new_btc().from_str(&addr_str).map_err(|e| {
 			ErrorKind::Generic(format!("Unable to parse BTC address {}, {}", address, e))
 		})?;
 		Ok(addr.script_pubkey())
@@ -278,6 +315,13 @@ impl Currency {
 					Network::Mainnet => 24.0 as f32, // It is current average fee for BCH network, August 2020
 				}
 			}
+			Currency::Ltc => {
+				// Default values
+				match network {
+					Network::Floonet => 1.4 as f32,
+					Network::Mainnet => 100.0 as f32, // It is current average fee for BCH network, August 2020
+				}
+			}
 		}
 	}
 
@@ -285,6 +329,7 @@ impl Currency {
 	pub fn get_fee_units(&self) -> String {
 		match self {
 			Currency::Btc | Currency::Bch => "satoshi per byte".to_string(),
+			Currency::Ltc => "litoshi per byte".to_string(),
 		}
 	}
 
@@ -296,11 +341,17 @@ impl Currency {
 				Currency::Btc | Currency::Bch => {
 					"f0315ffc38709d70ad5647e22048358dd3745f3ce3874223c80a7c92fab0c8ba".to_string()
 				}
+				Currency::Ltc => {
+					"f7a718f20ea4529351892e70a563f1c58af5e720798e475cc677302ebef92513".to_string()
+				}
 			}
 		} else {
 			match self {
 				Currency::Btc | Currency::Bch => {
 					"0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098".to_string()
+				}
+				Currency::Ltc => {
+					"fa3906a4219078364372d0e2715f93e822edd0b47ce146c71ba7ba57179b50f6".to_string()
 				}
 			}
 		}
@@ -312,6 +363,7 @@ impl fmt::Display for Currency {
 		let disp = match &self {
 			Currency::Btc => "BTC",
 			Currency::Bch => "BCH",
+			Currency::Ltc => "LTC",
 		};
 		write!(f, "{}", disp)
 	}

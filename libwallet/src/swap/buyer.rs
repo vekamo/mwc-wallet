@@ -185,10 +185,9 @@ impl BuyApi {
 		}
 
 		// Checking Secondary data. Focus on timing issues
-		if offer.secondary_currency != Currency::Btc && offer.secondary_currency != Currency::Bch {
-			return Err(ErrorKind::InvalidMessageData(
-				"Unexpected currency value".to_string(),
-			));
+		match offer.secondary_currency {
+			Currency::Btc | Currency::Bch | Currency::Ltc => (),
+			// _ => return Err(ErrorKind::InvalidMessageData("Unexpected currency value".to_string())),
 		}
 		// Comparing BTC lock time with expected
 		let btc_data = BtcData::from_offer(

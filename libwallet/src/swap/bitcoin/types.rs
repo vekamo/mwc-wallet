@@ -177,7 +177,7 @@ impl BtcData {
 	) -> Result<String, ErrorKind> {
 		match currency {
 			Currency::Btc => {
-				let address = Address::p2sh(script, btc_network(network));
+				let address = Address::new_btc().p2sh(script, btc_network(network));
 				Ok(address.to_string())
 			}
 			Currency::Bch => {
@@ -193,6 +193,10 @@ impl BtcData {
 					))
 				})?;
 				Ok(address)
+			}
+			Currency::Ltc => {
+				let address = Address::new_ltc().p2sh(script, btc_network(network));
+				Ok(address.to_string())
 			}
 		}
 	}
@@ -311,7 +315,7 @@ impl BtcData {
 			total_amount.saturating_sub((tx_size as f32 * fee_sat_per_byte + 0.5) as u64);
 
 		match currency {
-			Currency::Btc => {
+			Currency::Btc | Currency::Ltc => {
 				// Sign for inputs
 				for idx in 0..tx.input.len() {
 					let hash = tx.signature_hash(idx, &input_script, 0x01);
@@ -387,7 +391,7 @@ impl BtcData {
 		redeem_signature: &mut Signature,
 	) -> Result<Script, ErrorKind> {
 		let (cosign_ser, redeem_ser) = match currency {
-			Currency::Btc => {
+			Currency::Btc | Currency::Ltc => {
 				let mut cosign_ser = cosign_signature.serialize_der();
 				cosign_ser.push(0x01); // SIGHASH_ALL
 
@@ -454,7 +458,7 @@ impl BtcData {
 			total_amount.saturating_sub((tx_size as f32 * fee_sat_per_byte + 0.5) as u64);
 
 		match currency {
-			Currency::Btc => {
+			Currency::Btc | Currency::Ltc => {
 				// Sign for inputs
 				for idx in 0..tx.input.len() {
 					let hash = tx.signature_hash(idx, input_script, 0x01);
@@ -532,7 +536,7 @@ impl BtcData {
 				sign_ser.push(0x41); // SIGHASH_ALL
 				sign_ser
 			}
-			Currency::Btc => {
+			Currency::Btc | Currency::Ltc => {
 				let mut sign_ser = signature.serialize_der();
 				sign_ser.push(0x01); // SIGHASH_ALL
 				sign_ser
@@ -796,7 +800,7 @@ mod tests {
 			funding_txs.insert(tx.txid(), tx);
 		}
 
-		let redeem_address = Address::p2pkh(
+		let redeem_address = Address::new_btc().p2pkh(
 			&BTCPublicKey {
 				compressed: true,
 				key: PublicKey::from_secret_key(&secp, &SecretKey::new(rng)).unwrap(),

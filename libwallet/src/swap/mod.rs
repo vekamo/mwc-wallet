@@ -100,7 +100,7 @@ mod tests {
 	use crate::{NodeClient, Slate, SlateVersion, VersionedSlate};
 	use bitcoin_lib::network::constants::Network as BtcNetwork;
 	use bitcoin_lib::util::key::PublicKey as BtcPublicKey;
-	use bitcoin_lib::{Address, Transaction as BtcTransaction, TxOut};
+	use bitcoin_lib::{Address, AddressType, Transaction as BtcTransaction, TxOut};
 	use grin_core::core::transaction::Weighting;
 	use grin_core::core::verifier_cache::LruVerifierCache;
 	use grin_core::core::{Inputs, KernelFeatures, Transaction, TxKernel};
@@ -113,7 +113,6 @@ mod tests {
 	use std::fs::{read_to_string, write};
 	use std::mem;
 	#[cfg(not(target_os = "windows"))]
-	use std::str::FromStr;
 	use std::sync::Arc;
 
 	use super::bitcoin::*;
@@ -185,9 +184,10 @@ mod tests {
 			.unwrap()
 	}
 
+	// Method is used for testing. Normally we have multiple currencies, so the names must be different...
 	fn btc_address(kc: &ExtKeychain) -> String {
 		let key = PublicKey::from_secret_key(kc.secp(), &key(kc, 2, 0)).unwrap();
-		let address = Address::p2pkh(
+		let address = Address::new_btc().p2pkh(
 			&BtcPublicKey {
 				compressed: true,
 				key,
@@ -667,7 +667,7 @@ mod tests {
 			}
 			_ => panic!("Invalid action"),
 		};
-		let address = Address::from_str(&address).unwrap();
+		let address = Address::new_btc().from_str(&address).unwrap();
 
 		// Buyer: first deposit
 		let tx_1 = BtcTransaction {
@@ -5014,34 +5014,197 @@ mod tests {
 		);
 	}
 
+	// Address parsing and generation adopted at bitcoin library. Here are the tests
+	// Note!!! Add addresses are temprary, Dev team doesn't have any access to them.
+	// If you send anything there, you will lost those funds.
+	#[test]
+	fn test_bitcoin_lib_address_parsing() {
+		// BTC addresses
+
+		// mainnet, segwit
+		let address = Address::new_btc()
+			.from_str("bc1q9p6etejnpzvwkkyt9qcl94hvd8tzwwq6afjyk3")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Bitcoin);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2wpkh);
+		assert_eq!(
+			address.to_string(),
+			"bc1q9p6etejnpzvwkkyt9qcl94hvd8tzwwq6afjyk3"
+		);
+
+		// mainnet, pk hash (Legacy address)
+		let address = Address::new_btc()
+			.from_str("1KN4Q4czMUro6vTJU7b4PBJECreWCEB6Uq")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Bitcoin);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2pkh);
+		assert_eq!(address.to_string(), "1KN4Q4czMUro6vTJU7b4PBJECreWCEB6Uq");
+
+		// mainnet, multisig (Legacy)
+		let address = Address::new_btc()
+			.from_str("3N732nEbUkmYWGmHXcYE4GZnV9kDHydAWn")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Bitcoin);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2sh);
+		assert_eq!(address.to_string(), "3N732nEbUkmYWGmHXcYE4GZnV9kDHydAWn");
+
+		// mainnet, multisig (Segwit)
+		let address = Address::new_btc()
+			.from_str("bc1qpc59yxhkf46scr0jy690sv0xj3edvufgf356zxqrn6ltawf3x0kq0llant")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Bitcoin);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2wsh);
+		assert_eq!(
+			address.to_string(),
+			"bc1qpc59yxhkf46scr0jy690sv0xj3edvufgf356zxqrn6ltawf3x0kq0llant"
+		);
+
+		// testnet, segwit
+		let address = Address::new_btc()
+			.from_str("tb1q90vsej82xcy7cn9wexggvy6gtqees0w8ngj7z0")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Testnet);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2wpkh);
+		assert_eq!(
+			address.to_string(),
+			"tb1q90vsej82xcy7cn9wexggvy6gtqees0w8ngj7z0"
+		);
+
+		// testnet, pk hash (Legacy address)
+		let address = Address::new_btc()
+			.from_str("mowAPBbAdbkiNDzNDsYUPtYzTN2Zvz6JqT")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Testnet);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2pkh);
+		assert_eq!(address.to_string(), "mowAPBbAdbkiNDzNDsYUPtYzTN2Zvz6JqT");
+
+		// testnet, multisig (Legacy)
+		let address = Address::new_btc()
+			.from_str("2N58JuGyrj1A9hKUKK6srqMUR3GFwtLoRem")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Testnet);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2sh);
+		assert_eq!(address.to_string(), "2N58JuGyrj1A9hKUKK6srqMUR3GFwtLoRem");
+
+		// testnet, multisig (Segwit)
+		let address = Address::new_btc()
+			.from_str("tb1qc3gjhdpnnc5lg5aqy2xqkpwnlqtsv98503957te787pwt36v6l4s6d3xua")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Testnet);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2wsh);
+		assert_eq!(
+			address.to_string(),
+			"tb1qc3gjhdpnnc5lg5aqy2xqkpwnlqtsv98503957te787pwt36v6l4s6d3xua"
+		);
+
+		// BCH - skipped, not coveted with bitcoin library. BCH are very different and there are another library to work with them
+
+		// LTC
+
+		// testnet, segwit
+		let address = Address::new_ltc()
+			.from_str("tltc1qvh2vseq03wyyk8e7fj245p49uw7lxph0yjq07x")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Testnet);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2wpkh);
+		assert_eq!(
+			address.to_string(),
+			"tltc1qvh2vseq03wyyk8e7fj245p49uw7lxph0yjq07x"
+		);
+
+		// testnet, pk hash (Legacy address)
+		let address = Address::new_ltc()
+			.from_str("mpQgPACKj4AVDa89xvwDrjRietyQG4Lzgg")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Testnet);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2pkh);
+		assert_eq!(address.to_string(), "mpQgPACKj4AVDa89xvwDrjRietyQG4Lzgg");
+
+		// testnet, multisig (Legacy)
+		let address = Address::new_ltc()
+			.from_str("QUFqWUwTb7XsugzZkie6BQzaSRFVJWWXG7")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Testnet);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2sh);
+		assert_eq!(address.to_string(), "QUFqWUwTb7XsugzZkie6BQzaSRFVJWWXG7");
+
+		// testnet, multisig (Segwit)
+		let address = Address::new_ltc()
+			.from_str("tltc1q3ye4xgaqn0h6zttxne88fuv8zkzepst54udqr73jhmra8fsuxgfqgxfzsk")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Testnet);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2wsh);
+		assert_eq!(
+			address.to_string(),
+			"tltc1q3ye4xgaqn0h6zttxne88fuv8zkzepst54udqr73jhmra8fsuxgfqgxfzsk"
+		);
+
+		// mainnet, segwit
+		let address = Address::new_ltc()
+			.from_str("ltc1q9p6etejnpzvwkkyt9qcl94hvd8tzwwq6e4gqwp")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Bitcoin);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2wpkh);
+		assert_eq!(
+			address.to_string(),
+			"ltc1q9p6etejnpzvwkkyt9qcl94hvd8tzwwq6e4gqwp"
+		);
+
+		// mainnet, pk hash (Legacy address)
+		let address = Address::new_ltc()
+			.from_str("LPNrdDV83eDbEQGn34p16A6MiZk3uFj5Nw")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Bitcoin);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2pkh);
+		assert_eq!(address.to_string(), "LPNrdDV83eDbEQGn34p16A6MiZk3uFj5Nw");
+
+		// mainnet, multisig (Legacy)
+		let address = Address::new_ltc()
+			.from_str("MNyckn2AK1uw2HLccnSbHPmZe92hAyTifB")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Bitcoin);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2sh);
+		assert_eq!(address.to_string(), "MNyckn2AK1uw2HLccnSbHPmZe92hAyTifB");
+
+		// mainnet, multisig (Segwit)
+		let address = Address::new_ltc()
+			.from_str("ltc1qh60u6pfxvxhllspvxcnx2894m69vgr262840m4zljdg9ww28aazs9rll7j")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Bitcoin);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2wsh);
+		assert_eq!(
+			address.to_string(),
+			"ltc1qh60u6pfxvxhllspvxcnx2894m69vgr262840m4zljdg9ww28aazs9rll7j"
+		);
+	}
+
 	// Manual test that is used to test if workflow from the secondary currencies works.
 	// Since we need to support many combinations, it is easuer to have the semiautomatic test.
 	// Note: Test is expected to run against real ElectrumX & Nodes. The point of that test is to verify is
 	//   everything works with real blockchain
 	// The workflow ends at the BTC redeem/refund state. No needs to finish with MWC part of swap
-	#[cfg(not(target_os = "windows"))]
 	#[test]
-	//#[ignore]
-	fn test_address_for_btc() {
+	#[ignore]
+	fn test_btc_chain_ops() {
 		set_test_mode(true);
 		swap::set_testing_cur_time(1567632152);
 		global::set_local_chain_type(ChainTypes::Floonet);
 
 		let kc_sell = keychain(1);
 		let ctx_sell = context_sell(&kc_sell);
-		let currency = Currency::Bch;
-		let secondary_redeem_address = "2N1AYRdG2WjV56a3umewPYtp6cytoCuVK2b".to_string();
+		let currency = Currency::Ltc;
+		let secondary_redeem_address = "mpQgPACKj4AVDa89xvwDrjRietyQG4Lzgg".to_string();
 		let btc_amount = 10_000;
 		let amount = GRIN_UNIT; // 1 mwc is fine
 
 		let nc = TestNodeClient::new(300_000);
 
 		let mut secondary_currency_node_client1 = ElectrumNodeClient::new(
-			"192.168.1.20:19335".to_string(),
+			"192.168.1.20:19341".to_string(),
 			currency.get_block1_tx_hash(!global::is_mainnet()),
 		);
 		let secondary_currency_node_client2 = ElectrumNodeClient::new(
-			"192.168.1.20:19335".to_string(),
+			"192.168.1.20:19341".to_string(),
 			currency.get_block1_tx_hash(!global::is_mainnet()),
 		);
 
@@ -5143,7 +5306,10 @@ mod tests {
 					&kc_buy,
 					&ctx_buy,
 					&mut swap_buy,
-					Some("bchtest:ppwtgtkeul26977nhy8xg2n5dtz2983hvuv5kea6vc".to_string()),
+					Some(
+						"tltc1qntu4nucpcsm9vnn0wz38u7qmpnkfdlan76u7g7rqyhwfz5lstmlqfx35z8"
+							.to_string(),
+					),
 					true,
 				)
 				.unwrap();
