@@ -235,7 +235,7 @@ checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
 [[package]]
 name = "bitcoin"
 version = "0.26.0"
-source = "git+https://github.com/mwcproject/rust-bitcoin?branch=zkp#e95ec419efc369d3761cf1792c85103a1b1fc507"
+source = "git+https://github.com/mwcproject/rust-bitcoin?branch=zkp#0061cca70b3be65dd31a7c8d562c84fd03191238"
 dependencies = [
  "bech32",
  "bitcoin_hashes",
