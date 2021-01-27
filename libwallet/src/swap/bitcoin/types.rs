@@ -32,6 +32,7 @@ use grin_util::secp::key::{PublicKey, SecretKey};
 use grin_util::secp::{Message, Secp256k1, Signature};
 use std::io::Cursor;
 use std::ops::Deref;
+use crate::grin_util::to_hex;
 
 use bch::messages::{Tx as BchTx, TxIn as BchTxIn, TxOut as BchTxOut};
 use bitcoin_hashes::hex::ToHex;
@@ -179,7 +180,7 @@ impl BtcData {
 			Currency::Btc => {
 				let address = Address::new_btc().p2sh(script, btc_network(network));
 				Ok(address.to_string())
-			}
+			},
 			Currency::Bch => {
 				let address = bch::address::cashaddr_encode(
 					&hash160::Hash::hash(&script[..]),
@@ -188,16 +189,39 @@ impl BtcData {
 				)
 				.map_err(|e| {
 					ErrorKind::BchError(format!(
-						"Unable to encode BCH address fron script hash, {}",
+						"Unable to encode BCH address from script hash, {}",
 						e
 					))
 				})?;
 				Ok(address)
-			}
+			},
 			Currency::Ltc => {
 				let address = Address::new_ltc().p2sh(script, btc_network(network));
 				Ok(address.to_string())
-			}
+			},
+			Currency::Bsv => {
+				// Bsv deleted pay to script hash, so we need a script instead
+				// https://github.com/moneybutton/bips/blob/master/bip-0276.mediawiki
+				let mut script_res = Vec::new();
+				script_res.push(1); // version
+				match network {
+					Network::Mainnet => {
+						script_res.push(1); // mainnet: 1
+					},
+					Network::Floonet => {
+						script_res.push(2); // testnet: 1
+					}
+				}
+				script_res.append(&mut script.to_bytes().to_vec());
+
+				let mut script_res = format!("bitcoin-script:{}", to_hex(&script_res));
+
+				let checksum = crate::slatepack::generate_check(script_res.as_bytes())?;
+				debug_assert!(checksum.len()==4);
+
+				script_res.push_str( &to_hex(&checksum) );
+				Ok(script_res)
+			},
 		}
 	}
 
@@ -365,6 +389,7 @@ impl BtcData {
 					)?;
 				}
 			}
+			Currency::Bsv => panic!("BSV not supported"),
 		};
 
 		let mut cursor = Cursor::new(Vec::with_capacity(tx_size));
@@ -411,6 +436,7 @@ impl BtcData {
 
 				(cosign_ser, redeem_ser)
 			}
+			Currency::Bsv => panic!("BSV not supported"),
 		};
 
 		let script_sig = Builder::new()
@@ -506,6 +532,7 @@ impl BtcData {
 					)?;
 				}
 			}
+			Currency::Bsv => panic!("BSV not supported"),
 		};
 
 		let mut cursor = Cursor::new(Vec::with_capacity(tx_size));
@@ -541,6 +568,7 @@ impl BtcData {
 				sign_ser.push(0x01); // SIGHASH_ALL
 				sign_ser
 			}
+			Currency::Bsv => panic!("BSV not supported"),
 		};
 
 		let script_sig = Builder::new()

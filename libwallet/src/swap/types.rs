@@ -85,22 +85,25 @@ pub enum Currency {
 	Btc,
 	/// Bitcoin Cash
 	Bch,
-	/// Litecoin
+	/// Litecoin, the BTC clone
 	Ltc,
+	/// BSV, orthodox coin that cut the Swap support intentionally on Feb 2020. Keeping htis code
+	/// until we finish support for the rest of the coins.
+	Bsv
 }
 
 impl Currency {
 	/// Satoshi to 1 conversion
 	pub fn exponent(&self) -> usize {
 		match self {
-			Currency::Btc | Currency::Bch | Currency::Ltc => 8,
+			Currency::Btc | Currency::Bch | Currency::Ltc | Currency::Bsv => 8,
 		}
 	}
 
 	/// Block period for this coin (seconds)
 	pub fn block_time_period_sec(&self) -> i64 {
 		match self {
-			Currency::Btc | Currency::Bch => 10 * 60,
+			Currency::Btc | Currency::Bch | Currency::Bsv => 10 * 60,
 			Currency::Ltc => 60 * 2 + 30, // Blocks period is 2.5 minutes
 		}
 	}
@@ -159,6 +162,25 @@ impl Currency {
 		}
 	}
 
+	fn validate_address_network(addr : &Address, coin_name: &str) -> Result<(), ErrorKind> {
+		match addr.network {
+			bitcoin::network::constants::Network::Bitcoin => {
+				if !global::is_mainnet() {
+					return Err(ErrorKind::Generic(format!("Address is from main {} network, expected test network", coin_name)));
+				}
+			}
+			bitcoin::network::constants::Network::Testnet => {
+				if global::is_mainnet() {
+					return Err(ErrorKind::Generic(format!("Address is from test {} network, expected main network", coin_name)));
+				}
+			}
+			_ => {
+				return Err(ErrorKind::Generic(format!("Address is from invalid {} network", coin_name)))
+			}
+		}
+		Ok(())
+	}
+
 	/// Validate the secondary address
 	pub fn validate_address(&self, address: &String) -> Result<(), ErrorKind> {
 		match self {
@@ -166,34 +188,7 @@ impl Currency {
 				let addr = Address::new_btc().from_str(address).map_err(|e| {
 					ErrorKind::Generic(format!("Unable to parse BTC address {}, {}", address, e))
 				})?;
-				match addr.network {
-					bitcoin::network::constants::Network::Bitcoin => {
-						if !global::is_mainnet() {
-							return Err(ErrorKind::Generic(
-								"Address is from main BTC network, expected test network"
-									.to_string(),
-							));
-						}
-					}
-					bitcoin::network::constants::Network::Testnet => {
-						if global::is_mainnet() {
-							return Err(ErrorKind::Generic(
-								"Address is from test BTC network, expected main network"
-									.to_string(),
-							));
-						}
-					}
-					_ => {
-						return Err(ErrorKind::Generic(
-							"Address is from invalid BTC network".to_string(),
-						))
-					}
-				}
-
-				// We have to support all type of keys:
-				// bitcoin::util::address::Payload::PubkeyHash  - it is Legacy Public Key
-				// bitcoin::util::address::Payload::WitnessProgram - Segwit
-				// bitcoin::util::address::Payload::ScriptHash - Multisig (Legacy )
+				Self::validate_address_network(&addr, "BTC")?;
 			}
 			Currency::Bch => {
 				let nw = Self::bch_network();
@@ -222,28 +217,19 @@ impl Currency {
 				let addr = Address::new_ltc().from_str(address).map_err(|e| {
 					ErrorKind::Generic(format!("Unable to parse LTC address {}, {}", address, e))
 				})?;
-				match addr.network {
-					bitcoin::network::constants::Network::Bitcoin => {
-						if !global::is_mainnet() {
-							return Err(ErrorKind::Generic(
-								"Address is from main LTC network, expected test network"
-									.to_string(),
-							));
-						}
-					}
-					bitcoin::network::constants::Network::Testnet => {
-						if global::is_mainnet() {
-							return Err(ErrorKind::Generic(
-								"Address is from test LTC network, expected main network"
-									.to_string(),
-							));
-						}
-					}
-					_ => {
-						return Err(ErrorKind::Generic(
-							"Address is from invalid LTC network".to_string(),
-						))
-					}
+				Self::validate_address_network(&addr, "LTC")?;
+			}
+			Currency::Bsv => {
+				let addr = Address::new_btc().from_str(address).map_err(|e| {
+					ErrorKind::Generic(format!("Unable to parse BSV address {}, {}", address, e))
+				})?;
+				Self::validate_address_network(&addr, "BSV")?;
+
+				match &addr.payload {
+					bitcoin::util::address::Payload::PubkeyHash(_) | bitcoin::util::address::Payload::ScriptHash(_) => (),
+					_ => return Err(ErrorKind::Generic(
+						"Address is not supported by BSV".to_string(),
+					))
 				}
 			}
 		}
@@ -253,7 +239,7 @@ impl Currency {
 	/// Generate a script for this address. Address MUST be Hash160
 	pub fn address_2_script_pubkey(&self, address: &String) -> Result<bitcoin::Script, ErrorKind> {
 		let addr_str = match self {
-			Currency::Btc => address.clone(),
+			Currency::Btc | Currency::Bsv => address.clone(),
 			Currency::Bch => {
 				// With BCH problem that it doesn't have functionality to build scripts for pay to pubkey
 				// That is why we will use BTC library to do that.
@@ -322,13 +308,20 @@ impl Currency {
 					Network::Mainnet => 100.0 as f32, // It is current average fee for BCH network, August 2020
 				}
 			}
+			Currency::Bsv => {
+				// Default values
+				match network {
+					Network::Floonet => 1.0 as f32,
+					Network::Mainnet => 1.0 as f32, // It is current average fee for BCH network, August 2020
+				}
+			}
 		}
 	}
 
 	/// Fee units for this coin
 	pub fn get_fee_units(&self) -> String {
 		match self {
-			Currency::Btc | Currency::Bch => "satoshi per byte".to_string(),
+			Currency::Btc | Currency::Bch | Currency::Bsv => "satoshi per byte".to_string(),
 			Currency::Ltc => "litoshi per byte".to_string(),
 		}
 	}
@@ -338,7 +331,7 @@ impl Currency {
 		// Bch is clone of BTC, so even the same transaction does exist. For other alts that will not be true
 		if testnet {
 			match self {
-				Currency::Btc | Currency::Bch => {
+				Currency::Btc | Currency::Bch | Currency::Bsv => {
 					"f0315ffc38709d70ad5647e22048358dd3745f3ce3874223c80a7c92fab0c8ba".to_string()
 				}
 				Currency::Ltc => {
@@ -347,7 +340,7 @@ impl Currency {
 			}
 		} else {
 			match self {
-				Currency::Btc | Currency::Bch => {
+				Currency::Btc | Currency::Bch | Currency::Bsv => {
 					"0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098".to_string()
 				}
 				Currency::Ltc => {
@@ -364,6 +357,7 @@ impl fmt::Display for Currency {
 			Currency::Btc => "BTC",
 			Currency::Bch => "BCH",
 			Currency::Ltc => "LTC",
+			Currency::Bsv => "BSV",
 		};
 		write!(f, "{}", disp)
 	}
@@ -376,6 +370,8 @@ impl TryFrom<&str> for Currency {
 		match value.to_lowercase().as_str() {
 			"btc" => Ok(Currency::Btc),
 			"bch" => Ok(Currency::Bch),
+			"ltc" => Ok(Currency::Ltc),
+			"bsv" => Ok(Currency::Bsv),
 			_ => Err(ErrorKind::InvalidCurrency(value.to_string())),
 		}
 	}

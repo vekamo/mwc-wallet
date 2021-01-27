@@ -186,7 +186,7 @@ impl BuyApi {
 
 		// Checking Secondary data. Focus on timing issues
 		match offer.secondary_currency {
-			Currency::Btc | Currency::Bch | Currency::Ltc => (),
+			Currency::Btc | Currency::Bch | Currency::Ltc | Currency::Bsv => (),
 			// _ => return Err(ErrorKind::InvalidMessageData("Unexpected currency value".to_string())),
 		}
 		// Comparing BTC lock time with expected

@@ -189,8 +189,9 @@ fn format_slatepack(slatepack: &str) -> Result<String, Error> {
 	Ok(formatter)
 }
 
-// Returns the first four bytes of a double sha256 hash of some bytes
-fn generate_check(payload: &[u8]) -> Result<Vec<u8>, Error> {
+/// Returns the first four bytes of a double sha256 hash of some bytes
+/// This method is reused for swaps for BSV, just don't want to duplicates
+pub fn generate_check(payload: &[u8]) -> Result<Vec<u8>, Error> {
 	let mut first_hash = Sha256::new();
 	first_hash.input(payload);
 	let mut second_hash = Sha256::new();

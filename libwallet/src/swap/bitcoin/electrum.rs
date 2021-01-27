@@ -347,7 +347,20 @@ impl BtcNodeClient for ElectrumNodeClient {
 		// A full SPV client should validate the Merkle proofs of the transactions
 		// that created these outputs
 		let client = self.client()?;
-		let utxos = client.unspent(&currency.address_2_script_pubkey(address)?)?;
+		let script = if address.starts_with("bitcoin-script:") {
+			// Converting back from the script... Address is a hex
+			let prefix_len = "bitcoin-script:".len();
+			// https://github.com/moneybutton/bips/blob/master/bip-0276.mediawiki
+			let script_hex: String = address.chars().skip(prefix_len + 4).take(address.len()-prefix_len-4-8).collect();
+			let script_bin = from_hex(&script_hex)
+				.map_err(|e| ErrorKind::Generic(format!("Unable to convert bitcoin-script address '{}' into Script hex, {}",address, e)))?;
+			Script::from(script_bin)
+		}
+		else {
+			currency.address_2_script_pubkey(address)?
+		};
+
+		let utxos = client.unspent(&script)?;
 
 		// Outputs can have duplicates. I saw that at BCH few times. User will see that like
 		// was posted twice as needed. In a moment that will be fixed by ElectrumX.
