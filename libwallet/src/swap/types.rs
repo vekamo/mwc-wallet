@@ -89,7 +89,7 @@ pub enum Currency {
 	Ltc,
 	/// BSV, orthodox coin that cut the Swap support intentionally on Feb 2020. Keeping htis code
 	/// until we finish support for the rest of the coins.
-	Bsv
+	Bsv,
 }
 
 impl Currency {
@@ -162,20 +162,29 @@ impl Currency {
 		}
 	}
 
-	fn validate_address_network(addr : &Address, coin_name: &str) -> Result<(), ErrorKind> {
+	fn validate_address_network(addr: &Address, coin_name: &str) -> Result<(), ErrorKind> {
 		match addr.network {
 			bitcoin::network::constants::Network::Bitcoin => {
 				if !global::is_mainnet() {
-					return Err(ErrorKind::Generic(format!("Address is from main {} network, expected test network", coin_name)));
+					return Err(ErrorKind::Generic(format!(
+						"Address is from main {} network, expected test network",
+						coin_name
+					)));
 				}
 			}
 			bitcoin::network::constants::Network::Testnet => {
 				if global::is_mainnet() {
-					return Err(ErrorKind::Generic(format!("Address is from test {} network, expected main network", coin_name)));
+					return Err(ErrorKind::Generic(format!(
+						"Address is from test {} network, expected main network",
+						coin_name
+					)));
 				}
 			}
 			_ => {
-				return Err(ErrorKind::Generic(format!("Address is from invalid {} network", coin_name)))
+				return Err(ErrorKind::Generic(format!(
+					"Address is from invalid {} network",
+					coin_name
+				)))
 			}
 		}
 		Ok(())
@@ -226,10 +235,13 @@ impl Currency {
 				Self::validate_address_network(&addr, "BSV")?;
 
 				match &addr.payload {
-					bitcoin::util::address::Payload::PubkeyHash(_) | bitcoin::util::address::Payload::ScriptHash(_) => (),
-					_ => return Err(ErrorKind::Generic(
-						"Address is not supported by BSV".to_string(),
-					))
+					bitcoin::util::address::Payload::PubkeyHash(_)
+					| bitcoin::util::address::Payload::ScriptHash(_) => (),
+					_ => {
+						return Err(ErrorKind::Generic(
+							"Address is not supported by BSV".to_string(),
+						))
+					}
 				}
 			}
 		}

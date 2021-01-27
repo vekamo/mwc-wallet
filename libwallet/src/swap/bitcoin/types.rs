@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::client::Output;
+use crate::grin_util::to_hex;
 use crate::swap::message::SecondaryUpdate;
 use crate::swap::ser::*;
 use crate::swap::swap;
@@ -32,7 +33,6 @@ use grin_util::secp::key::{PublicKey, SecretKey};
 use grin_util::secp::{Message, Secp256k1, Signature};
 use std::io::Cursor;
 use std::ops::Deref;
-use crate::grin_util::to_hex;
 
 use bch::messages::{Tx as BchTx, TxIn as BchTxIn, TxOut as BchTxOut};
 use bitcoin_hashes::hex::ToHex;
@@ -180,7 +180,7 @@ impl BtcData {
 			Currency::Btc => {
 				let address = Address::new_btc().p2sh(script, btc_network(network));
 				Ok(address.to_string())
-			},
+			}
 			Currency::Bch => {
 				let address = bch::address::cashaddr_encode(
 					&hash160::Hash::hash(&script[..]),
@@ -194,11 +194,11 @@ impl BtcData {
 					))
 				})?;
 				Ok(address)
-			},
+			}
 			Currency::Ltc => {
 				let address = Address::new_ltc().p2sh(script, btc_network(network));
 				Ok(address.to_string())
-			},
+			}
 			Currency::Bsv => {
 				// Bsv deleted pay to script hash, so we need a script instead
 				// https://github.com/moneybutton/bips/blob/master/bip-0276.mediawiki
@@ -207,7 +207,7 @@ impl BtcData {
 				match network {
 					Network::Mainnet => {
 						script_res.push(1); // mainnet: 1
-					},
+					}
 					Network::Floonet => {
 						script_res.push(2); // testnet: 1
 					}
@@ -217,11 +217,11 @@ impl BtcData {
 				let mut script_res = format!("bitcoin-script:{}", to_hex(&script_res));
 
 				let checksum = crate::slatepack::generate_check(script_res.as_bytes())?;
-				debug_assert!(checksum.len()==4);
+				debug_assert!(checksum.len() == 4);
 
-				script_res.push_str( &to_hex(&checksum) );
+				script_res.push_str(&to_hex(&checksum));
 				Ok(script_res)
-			},
+			}
 		}
 	}
 

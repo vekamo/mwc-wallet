@@ -351,12 +351,19 @@ impl BtcNodeClient for ElectrumNodeClient {
 			// Converting back from the script... Address is a hex
 			let prefix_len = "bitcoin-script:".len();
 			// https://github.com/moneybutton/bips/blob/master/bip-0276.mediawiki
-			let script_hex: String = address.chars().skip(prefix_len + 4).take(address.len()-prefix_len-4-8).collect();
-			let script_bin = from_hex(&script_hex)
-				.map_err(|e| ErrorKind::Generic(format!("Unable to convert bitcoin-script address '{}' into Script hex, {}",address, e)))?;
+			let script_hex: String = address
+				.chars()
+				.skip(prefix_len + 4)
+				.take(address.len() - prefix_len - 4 - 8)
+				.collect();
+			let script_bin = from_hex(&script_hex).map_err(|e| {
+				ErrorKind::Generic(format!(
+					"Unable to convert bitcoin-script address '{}' into Script hex, {}",
+					address, e
+				))
+			})?;
 			Script::from(script_bin)
-		}
-		else {
+		} else {
 			currency.address_2_script_pubkey(address)?
 		};
 
