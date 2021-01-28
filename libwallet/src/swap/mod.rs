@@ -112,7 +112,6 @@ mod tests {
 	#[cfg(not(target_os = "windows"))]
 	use std::fs::{read_to_string, write};
 	use std::mem;
-	#[cfg(not(target_os = "windows"))]
 	use std::sync::Arc;
 
 	use super::bitcoin::*;
