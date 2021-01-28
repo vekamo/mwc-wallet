@@ -349,7 +349,7 @@ where
 		_is_seller: bool,
 	) -> Result<usize, ErrorKind> {
 		match secondary_currency {
-			Currency::Btc | Currency::Bch | Currency::Ltc | Currency::Bsv => Ok(4),
+			Currency::Btc | Currency::Bch | Currency::Ltc | Currency::Bsv | Currency::Dash => Ok(4),
 			//_ => return Err(ErrorKind::UnexpectedCoinType),
 		}
 	}
@@ -365,7 +365,7 @@ where
 		parent_key_id: Identifier,
 	) -> Result<Context, ErrorKind> {
 		match secondary_currency {
-			Currency::Btc | Currency::Bch | Currency::Ltc | Currency::Bsv => (),
+			Currency::Btc | Currency::Bch | Currency::Ltc | Currency::Bsv | Currency::Dash => (),
 			//_ => return Err(ErrorKind::UnexpectedCoinType),
 		}
 
@@ -437,7 +437,7 @@ where
 			})?;
 
 		match secondary_currency {
-			Currency::Btc | Currency::Bch | Currency::Ltc | Currency::Bsv => (),
+			Currency::Btc | Currency::Bch | Currency::Ltc | Currency::Bsv | Currency::Dash => (),
 			//_ => return Err(ErrorKind::UnexpectedCoinType),
 		}
 

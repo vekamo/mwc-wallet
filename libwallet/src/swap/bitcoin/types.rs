@@ -222,6 +222,10 @@ impl BtcData {
 				script_res.push_str(&to_hex(&checksum));
 				Ok(script_res)
 			}
+			Currency::Dash => {
+				let address = Address::new_dash().p2sh(script, btc_network(network));
+				Ok(address.to_string())
+			}
 		}
 	}
 
@@ -339,7 +343,7 @@ impl BtcData {
 			total_amount.saturating_sub((tx_size as f32 * fee_sat_per_byte + 0.5) as u64);
 
 		match currency {
-			Currency::Btc | Currency::Ltc => {
+			Currency::Btc | Currency::Ltc | Currency::Dash => {
 				// Sign for inputs
 				for idx in 0..tx.input.len() {
 					let hash = tx.signature_hash(idx, &input_script, 0x01);
@@ -416,7 +420,7 @@ impl BtcData {
 		redeem_signature: &mut Signature,
 	) -> Result<Script, ErrorKind> {
 		let (cosign_ser, redeem_ser) = match currency {
-			Currency::Btc | Currency::Ltc => {
+			Currency::Btc | Currency::Ltc | Currency::Dash => {
 				let mut cosign_ser = cosign_signature.serialize_der();
 				cosign_ser.push(0x01); // SIGHASH_ALL
 
@@ -484,7 +488,7 @@ impl BtcData {
 			total_amount.saturating_sub((tx_size as f32 * fee_sat_per_byte + 0.5) as u64);
 
 		match currency {
-			Currency::Btc | Currency::Ltc => {
+			Currency::Btc | Currency::Ltc | Currency::Dash => {
 				// Sign for inputs
 				for idx in 0..tx.input.len() {
 					let hash = tx.signature_hash(idx, input_script, 0x01);
@@ -563,7 +567,7 @@ impl BtcData {
 				sign_ser.push(0x41); // SIGHASH_ALL
 				sign_ser
 			}
-			Currency::Btc | Currency::Ltc => {
+			Currency::Btc | Currency::Ltc | Currency::Dash => {
 				let mut sign_ser = signature.serialize_der();
 				sign_ser.push(0x01); // SIGHASH_ALL
 				sign_ser

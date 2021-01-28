@@ -90,13 +90,15 @@ pub enum Currency {
 	/// BSV, orthodox coin that cut the Swap support intentionally on Feb 2020. Keeping htis code
 	/// until we finish support for the rest of the coins.
 	Bsv,
+	/// Dash
+	Dash,
 }
 
 impl Currency {
 	/// Satoshi to 1 conversion
 	pub fn exponent(&self) -> usize {
 		match self {
-			Currency::Btc | Currency::Bch | Currency::Ltc | Currency::Bsv => 8,
+			Currency::Btc | Currency::Bch | Currency::Ltc | Currency::Bsv | Currency::Dash => 8,
 		}
 	}
 
@@ -104,7 +106,8 @@ impl Currency {
 	pub fn block_time_period_sec(&self) -> i64 {
 		match self {
 			Currency::Btc | Currency::Bch | Currency::Bsv => 10 * 60,
-			Currency::Ltc => 60 * 2 + 30, // Blocks period is 2.5 minutes
+			Currency::Ltc => 60 * 2 + 30,  // Blocks period is 2.5 minutes
+			Currency::Dash => 60 * 2 + 39, // 2.65 Minutes
 		}
 	}
 
@@ -244,6 +247,23 @@ impl Currency {
 					}
 				}
 			}
+			Currency::Dash => {
+				let addr = Address::new_dash().from_str(address).map_err(|e| {
+					ErrorKind::Generic(format!("Unable to parse Dash address {}, {}", address, e))
+				})?;
+				Self::validate_address_network(&addr, "Dash")?;
+
+				match &addr.payload {
+					bitcoin::util::address::Payload::PubkeyHash(_)
+					| bitcoin::util::address::Payload::ScriptHash(_) => (),
+					_ => {
+						// Dash doesn't have Segwit
+						return Err(ErrorKind::Generic(
+							"Address is not supported by Dash".to_string(),
+						));
+					}
+				}
+			}
 		}
 		Ok(())
 	}
@@ -288,6 +308,13 @@ impl Currency {
 				})?;
 				addr.to_btc().to_string()
 			}
+			Currency::Dash => {
+				// Converting to BTC address
+				let addr = Address::new_dash().from_str(&address).map_err(|e| {
+					ErrorKind::Generic(format!("Unable to parse Dash address {}, {}", address, e))
+				})?;
+				addr.to_btc().to_string()
+			}
 		};
 
 		let addr = Address::new_btc().from_str(&addr_str).map_err(|e| {
@@ -310,21 +337,28 @@ impl Currency {
 				// Default values
 				match network {
 					Network::Floonet => 1.4 as f32,
-					Network::Mainnet => 24.0 as f32, // It is current average fee for BCH network, August 2020
+					Network::Mainnet => 24.0 as f32,
 				}
 			}
 			Currency::Ltc => {
 				// Default values
 				match network {
 					Network::Floonet => 1.4 as f32,
-					Network::Mainnet => 100.0 as f32, // It is current average fee for BCH network, August 2020
+					Network::Mainnet => 100.0 as f32,
 				}
 			}
 			Currency::Bsv => {
 				// Default values
 				match network {
 					Network::Floonet => 1.0 as f32,
-					Network::Mainnet => 1.0 as f32, // It is current average fee for BCH network, August 2020
+					Network::Mainnet => 1.0 as f32,
+				}
+			}
+			Currency::Dash => {
+				// Default values
+				match network {
+					Network::Floonet => 1.4 as f32,
+					Network::Mainnet => 26.0 as f32,
 				}
 			}
 		}
@@ -335,6 +369,7 @@ impl Currency {
 		match self {
 			Currency::Btc | Currency::Bch | Currency::Bsv => "satoshi per byte".to_string(),
 			Currency::Ltc => "litoshi per byte".to_string(),
+			Currency::Dash => "duff per byte".to_string(),
 		}
 	}
 
@@ -349,6 +384,9 @@ impl Currency {
 				Currency::Ltc => {
 					"f7a718f20ea4529351892e70a563f1c58af5e720798e475cc677302ebef92513".to_string()
 				}
+				Currency::Dash => {
+					"b4fd581bc4bfe51a5a66d8b823bd6ee2b492f0ddc44cf7e820550714cedc117f".to_string()
+				}
 			}
 		} else {
 			match self {
@@ -357,6 +395,9 @@ impl Currency {
 				}
 				Currency::Ltc => {
 					"fa3906a4219078364372d0e2715f93e822edd0b47ce146c71ba7ba57179b50f6".to_string()
+				}
+				Currency::Dash => {
+					"ef3ee42b51e2a19c4820ef182844a36db1201c61eb0dec5b42f84be4ad1a1ca7".to_string()
 				}
 			}
 		}
@@ -370,6 +411,7 @@ impl fmt::Display for Currency {
 			Currency::Bch => "BCH",
 			Currency::Ltc => "LTC",
 			Currency::Bsv => "BSV",
+			Currency::Dash => "Dash",
 		};
 		write!(f, "{}", disp)
 	}
@@ -384,6 +426,7 @@ impl TryFrom<&str> for Currency {
 			"bch" => Ok(Currency::Bch),
 			"ltc" => Ok(Currency::Ltc),
 			"bsv" => Ok(Currency::Bsv),
+			"dash" => Ok(Currency::Dash),
 			_ => Err(ErrorKind::InvalidCurrency(value.to_string())),
 		}
 	}
