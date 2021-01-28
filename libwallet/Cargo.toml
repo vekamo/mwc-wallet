@@ -40,6 +40,7 @@ hex = "0.3"
 base64 = "0.9"
 colored ="1.6"
 bitcoin = { version = "0.26", git = "https://github.com/mwcproject/rust-bitcoin", branch = "zkp", features = ["bitcoinconsensus"] }
+# bitcoin = { version = "0.26", path = "../../rust-bitcoin", features = ["bitcoinconsensus"] }
 bitcoin_hashes = { version = "0.9.1", features = ["serde"] }
 serial_test = "0.4.0"
 bch = { git = "https://github.com/mwcproject/rust-bch", branch = "master" }

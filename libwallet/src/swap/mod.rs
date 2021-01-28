@@ -5175,6 +5175,40 @@ mod tests {
 			address.to_string(),
 			"ltc1qh60u6pfxvxhllspvxcnx2894m69vgr262840m4zljdg9ww28aazs9rll7j"
 		);
+
+		// DASH
+
+		// Mainnet, pk (Legacy)
+		let address = Address::new_dash()
+			.from_str("XbgxFwr9UvsUSWhr9zMMvBChKw4aaFryeW")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Bitcoin);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2pkh);
+		assert_eq!(address.to_string(), "XbgxFwr9UvsUSWhr9zMMvBChKw4aaFryeW");
+
+		// mainnet, multisig (Legacy)
+		let address = Address::new_dash()
+			.from_str("7iFKZHTR2R19ie6yn6CZvEqrhJA2HFutmK")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Bitcoin);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2sh);
+		assert_eq!(address.to_string(), "7iFKZHTR2R19ie6yn6CZvEqrhJA2HFutmK");
+
+		// Testnet, pk (Legacy)
+		let address = Address::new_dash()
+			.from_str("yY9X94xxyGbCocayg4QCxYrXgkLrQfpNkK")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Testnet);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2pkh);
+		assert_eq!(address.to_string(), "yY9X94xxyGbCocayg4QCxYrXgkLrQfpNkK");
+
+		// testnet, multisig (Legacy)
+		let address = Address::new_dash()
+			.from_str("8kGdHo4UhmQ9dmayTBtZNJUf972z58SmEc")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Testnet);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2sh);
+		assert_eq!(address.to_string(), "8kGdHo4UhmQ9dmayTBtZNJUf972z58SmEc");
 	}
 
 	// Manual test that is used to test if workflow from the secondary currencies works.

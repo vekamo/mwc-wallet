@@ -37,15 +37,8 @@ jobs:
     vmImage: ubuntu-latest
   strategy:
     matrix:
-      config/libwallet/api:
-        CI_JOB: test
-        CI_JOB_ARGS: config libwallet api
-      impls:
-        CI_JOB: test
-        CI_JOB_ARGS: impls
-      controller/all:
-        CI_JOB: test
-        CI_JOB_ARGS: controller .
+      test:
+        CI_JOB: test-all
       release:
         CI_JOB: release
         PLATFORM: linux-amd64
