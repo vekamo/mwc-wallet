@@ -1,4 +1,4 @@
-# MWC Floonet (Testnet) Faucet
+# MWC Floonet Faucet / MWC Testnet Faucet
 
 If you neeed some coins to test with MWC floonet, please be free to use the faucet that listen on MWC MQS address `xmgEvZ4MCCGMJnRnNXKHBbHmSGWQchNr9uZpY5J1XXnsCFS45fsU`.
 
