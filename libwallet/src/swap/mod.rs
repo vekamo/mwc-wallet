@@ -5301,7 +5301,7 @@ mod tests {
 		let kc_sell = keychain(1);
 		let ctx_sell = context_sell(&kc_sell);
 		let currency = Currency::Dash;
-		let secondary_redeem_address = "8yyjfgWdQuFgVgmUqpSjegECsRqH4vZvcb".to_string();
+		let secondary_redeem_address = "yff6sdou1THkaQpKHbqL81SbRNQN1n3CQw".to_string();
 		let btc_amount = 100_000_000 / 50;
 		let amount = GRIN_UNIT; // 1 mwc is fine
 
@@ -5408,14 +5408,14 @@ mod tests {
 			currency
 		);
 
-		if true {
+		if false {
 			// Here Byer can do a refund. In case of test, the refund time is already here
 			swap_api
 				.post_secondary_refund_tx(
 					&kc_buy,
 					&ctx_buy,
 					&mut swap_buy,
-					Some("8yyjfgWdQuFgVgmUqpSjegECsRqH4vZvcb".to_string()),
+					Some("yff6sdou1THkaQpKHbqL81SbRNQN1n3CQw".to_string()),
 					true,
 				)
 				.unwrap();

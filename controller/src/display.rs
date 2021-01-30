@@ -749,7 +749,7 @@ pub fn swap_trade(
 		"    Current {} transaction fee: {} {}",
 		swap.secondary_currency,
 		swap.secondary_fee.to_string().bold().yellow(),
-		swap.secondary_currency.get_fee_units()
+		swap.secondary_currency.get_fee_units().0
 	);
 
 	println!("");
