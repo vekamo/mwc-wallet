@@ -96,7 +96,10 @@ impl ElectrumRpcClient {
 				if o.id.map(|res_id| res_id == id).unwrap_or(false) {
 					let res_copy = o.result.clone();
 					let obj: T = serde_json::from_value(o.result).map_err(|e| {
-						ErrorKind::ElectrumNodeClient(format!("Unable to decode response '{}', {}", res_copy, e))
+						ErrorKind::ElectrumNodeClient(format!(
+							"Unable to decode response '{}', {}",
+							res_copy, e
+						))
 					})?;
 					return Ok(obj);
 				}

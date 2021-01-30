@@ -102,7 +102,13 @@ impl Currency {
 	/// Satoshi to 1 conversion
 	pub fn exponent(&self) -> usize {
 		match self {
-			Currency::Btc | Currency::Bch | Currency::Ltc | Currency::Bsv | Currency::Dash | Currency::Zec | Currency::Doge => 8,
+			Currency::Btc
+			| Currency::Bch
+			| Currency::Ltc
+			| Currency::Bsv
+			| Currency::Dash
+			| Currency::Zec
+			| Currency::Doge => 8,
 		}
 	}
 
@@ -272,7 +278,10 @@ impl Currency {
 			}
 			Currency::Zec => {
 				let addr = Address::new_zec().from_str(address).map_err(|e| {
-					ErrorKind::Generic(format!("Unable to parse ZCash transparent address {}, {}", address, e))
+					ErrorKind::Generic(format!(
+						"Unable to parse ZCash transparent address {}, {}",
+						address, e
+					))
 				})?;
 				Self::validate_address_network(&addr, "ZCash")?;
 
@@ -289,7 +298,10 @@ impl Currency {
 			}
 			Currency::Doge => {
 				let addr = Address::new_doge().from_str(address).map_err(|e| {
-					ErrorKind::Generic(format!("Unable to parse Dogecoin address {}, {}", address, e))
+					ErrorKind::Generic(format!(
+						"Unable to parse Dogecoin address {}, {}",
+						address, e
+					))
 				})?;
 				Self::validate_address_network(&addr, "Doge")?;
 
@@ -365,7 +377,10 @@ impl Currency {
 			Currency::Doge => {
 				// Converting to BTC address
 				let addr = Address::new_doge().from_str(&address).map_err(|e| {
-					ErrorKind::Generic(format!("Unable to parse Dogecoin address {}, {}", address, e))
+					ErrorKind::Generic(format!(
+						"Unable to parse Dogecoin address {}, {}",
+						address, e
+					))
 				})?;
 				addr.to_btc().to_string()
 			}
@@ -438,7 +453,9 @@ impl Currency {
 	/// - true: per byte, false: flat unit price
 	pub fn get_fee_units(&self) -> (String, u64, bool) {
 		match self {
-			Currency::Btc | Currency::Bch | Currency::Bsv => ("satoshi per byte".to_string(), 1, true),
+			Currency::Btc | Currency::Bch | Currency::Bsv => {
+				("satoshi per byte".to_string(), 1, true)
+			}
 			Currency::Ltc => ("litoshi per byte".to_string(), 1, true),
 			Currency::Dash => ("duff per byte".to_string(), 1, true),
 			Currency::Zec => ("ZEC".to_string(), 100_000_000, false),
@@ -498,7 +515,7 @@ impl fmt::Display for Currency {
 			Currency::Bsv => "BSV",
 			Currency::Dash => "Dash",
 			Currency::Zec => "ZCash",
-			Currency::Doge => "Doge"
+			Currency::Doge => "Doge",
 		};
 		write!(f, "{}", disp)
 	}

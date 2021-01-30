@@ -5284,8 +5284,6 @@ mod tests {
 		assert_eq!(address.network, BtcNetwork::Testnet);
 		assert_eq!(address.address_type().unwrap(), AddressType::P2sh);
 		assert_eq!(address.to_string(), "2MsQug2PDbor2ndqYu9MxMij3MZFZ3EkGk9");
-
-
 	}
 
 	// Manual test that is used to test if workflow from the secondary currencies works.
@@ -5417,10 +5415,7 @@ mod tests {
 					&kc_buy,
 					&ctx_buy,
 					&mut swap_buy,
-					Some(
-						"8yyjfgWdQuFgVgmUqpSjegECsRqH4vZvcb"
-							.to_string(),
-					),
+					Some("8yyjfgWdQuFgVgmUqpSjegECsRqH4vZvcb".to_string()),
 					true,
 				)
 				.unwrap();

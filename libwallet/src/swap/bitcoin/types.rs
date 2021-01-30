@@ -350,14 +350,12 @@ impl BtcData {
 		let (_, k, is_per_byte) = currency.get_fee_units();
 		let fee = if is_per_byte {
 			(tx_size as f32 * fee * k as f32 + 0.5) as u64
-		}
-		else {
-			( fee * k as f32 + 0.5) as u64
+		} else {
+			(fee * k as f32 + 0.5) as u64
 		};
 
 		// Subtract fee from output
-		tx.output[0].value =
-			total_amount.saturating_sub( fee );
+		tx.output[0].value = total_amount.saturating_sub(fee);
 
 		match currency {
 			Currency::Btc | Currency::Ltc | Currency::Dash | Currency::Zec | Currency::Doge => {
@@ -504,13 +502,11 @@ impl BtcData {
 		let (_, k, is_per_byte) = currency.get_fee_units();
 		let fee = if is_per_byte {
 			(tx_size as f32 * fee * k as f32 + 0.5) as u64
-		}
-		else {
-			( fee * k as f32 + 0.5) as u64
+		} else {
+			(fee * k as f32 + 0.5) as u64
 		};
 
-		tx.output[0].value =
-			total_amount.saturating_sub(fee );
+		tx.output[0].value = total_amount.saturating_sub(fee);
 
 		match currency {
 			Currency::Btc | Currency::Ltc | Currency::Dash | Currency::Zec | Currency::Doge => {

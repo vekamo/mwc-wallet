@@ -186,7 +186,12 @@ impl BuyApi {
 
 		// Checking Secondary data. Focus on timing issues
 		match offer.secondary_currency {
-			Currency::Btc | Currency::Bch | Currency::Ltc | Currency::Dash | Currency::Zec | Currency::Doge => (),
+			Currency::Btc
+			| Currency::Bch
+			| Currency::Ltc
+			| Currency::Dash
+			| Currency::Zec
+			| Currency::Doge => (),
 			Currency::Bsv => {
 				return Err(ErrorKind::InvalidMessageData(
 					"Unexpected currency value".to_string(),
