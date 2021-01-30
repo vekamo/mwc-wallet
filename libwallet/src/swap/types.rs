@@ -92,13 +92,17 @@ pub enum Currency {
 	Bsv,
 	/// Dash
 	Dash,
+	/// ZCash
+	Zec,
+	/// Dogecoin
+	Doge,
 }
 
 impl Currency {
 	/// Satoshi to 1 conversion
 	pub fn exponent(&self) -> usize {
 		match self {
-			Currency::Btc | Currency::Bch | Currency::Ltc | Currency::Bsv | Currency::Dash => 8,
+			Currency::Btc | Currency::Bch | Currency::Ltc | Currency::Bsv | Currency::Dash | Currency::Zec | Currency::Doge => 8,
 		}
 	}
 
@@ -108,6 +112,8 @@ impl Currency {
 			Currency::Btc | Currency::Bch | Currency::Bsv => 10 * 60,
 			Currency::Ltc => 60 * 2 + 30,  // Blocks period is 2.5 minutes
 			Currency::Dash => 60 * 2 + 39, // 2.65 Minutes
+			Currency::Zec => 75,
+			Currency::Doge => 60,
 		}
 	}
 
@@ -264,6 +270,40 @@ impl Currency {
 					}
 				}
 			}
+			Currency::Zec => {
+				let addr = Address::new_zec().from_str(address).map_err(|e| {
+					ErrorKind::Generic(format!("Unable to parse ZCash transparent address {}, {}", address, e))
+				})?;
+				Self::validate_address_network(&addr, "ZCash")?;
+
+				match &addr.payload {
+					bitcoin::util::address::Payload::PubkeyHash(_)
+					| bitcoin::util::address::Payload::ScriptHash(_) => (),
+					_ => {
+						// Dash doesn't have Segwit
+						return Err(ErrorKind::Generic(
+							"Address is not supported by ZCash".to_string(),
+						));
+					}
+				}
+			}
+			Currency::Doge => {
+				let addr = Address::new_doge().from_str(address).map_err(|e| {
+					ErrorKind::Generic(format!("Unable to parse Dogecoin address {}, {}", address, e))
+				})?;
+				Self::validate_address_network(&addr, "Doge")?;
+
+				match &addr.payload {
+					bitcoin::util::address::Payload::PubkeyHash(_)
+					| bitcoin::util::address::Payload::ScriptHash(_) => (),
+					_ => {
+						// Dash doesn't have Segwit
+						return Err(ErrorKind::Generic(
+							"Address is not supported by DOgecoin".to_string(),
+						));
+					}
+				}
+			}
 		}
 		Ok(())
 	}
@@ -315,6 +355,20 @@ impl Currency {
 				})?;
 				addr.to_btc().to_string()
 			}
+			Currency::Zec => {
+				// Converting to BTC address
+				let addr = Address::new_zec().from_str(&address).map_err(|e| {
+					ErrorKind::Generic(format!("Unable to parse ZCash address {}, {}", address, e))
+				})?;
+				addr.to_btc().to_string()
+			}
+			Currency::Doge => {
+				// Converting to BTC address
+				let addr = Address::new_doge().from_str(&address).map_err(|e| {
+					ErrorKind::Generic(format!("Unable to parse Dogecoin address {}, {}", address, e))
+				})?;
+				addr.to_btc().to_string()
+			}
 		};
 
 		let addr = Address::new_btc().from_str(&addr_str).map_err(|e| {
@@ -361,15 +415,34 @@ impl Currency {
 					Network::Mainnet => 26.0 as f32,
 				}
 			}
+			Currency::Zec => {
+				// Default values
+				match network {
+					Network::Floonet => 0.0001 as f32,
+					Network::Mainnet => 0.0001 as f32,
+				}
+			}
+			Currency::Doge => {
+				// Default values
+				match network {
+					Network::Floonet => 1.0 as f32,
+					Network::Mainnet => 3.0 as f32,
+				}
+			}
 		}
 	}
 
 	/// Fee units for this coin
-	pub fn get_fee_units(&self) -> String {
+	/// - Unit String
+	/// - Unit multiplier
+	/// - true: per byte, false: flat unit price
+	pub fn get_fee_units(&self) -> (String, u64, bool) {
 		match self {
-			Currency::Btc | Currency::Bch | Currency::Bsv => "satoshi per byte".to_string(),
-			Currency::Ltc => "litoshi per byte".to_string(),
-			Currency::Dash => "duff per byte".to_string(),
+			Currency::Btc | Currency::Bch | Currency::Bsv => ("satoshi per byte".to_string(), 1, true),
+			Currency::Ltc => ("litoshi per byte".to_string(), 1, true),
+			Currency::Dash => ("duff per byte".to_string(), 1, true),
+			Currency::Zec => ("ZEC".to_string(), 100_000_000, false),
+			Currency::Doge => ("doge".to_string(), 100_000_000, false),
 		}
 	}
 
@@ -387,6 +460,12 @@ impl Currency {
 				Currency::Dash => {
 					"b4fd581bc4bfe51a5a66d8b823bd6ee2b492f0ddc44cf7e820550714cedc117f".to_string()
 				}
+				Currency::Zec => {
+					"f37e9f691fffb635de0999491d906ee85ba40cd36dae9f6e5911a8277d7c5f75".to_string()
+				}
+				Currency::Doge => {
+					"6b591fe460c9cfb75d4406c3787c913022be1caa8641415932ee8c5228ff2e3b".to_string()
+				}
 			}
 		} else {
 			match self {
@@ -398,6 +477,12 @@ impl Currency {
 				}
 				Currency::Dash => {
 					"ef3ee42b51e2a19c4820ef182844a36db1201c61eb0dec5b42f84be4ad1a1ca7".to_string()
+				}
+				Currency::Zec => {
+					"851bf6fbf7a976327817c738c489d7fa657752445430922d94c983c0b9ed4609".to_string()
+				}
+				Currency::Doge => {
+					"6b591fe460c9cfb75d4406c3787c913022be1caa8641415932ee8c5228ff2e3b".to_string()
 				}
 			}
 		}
@@ -412,6 +497,8 @@ impl fmt::Display for Currency {
 			Currency::Ltc => "LTC",
 			Currency::Bsv => "BSV",
 			Currency::Dash => "Dash",
+			Currency::Zec => "ZCash",
+			Currency::Doge => "Doge"
 		};
 		write!(f, "{}", disp)
 	}
@@ -427,6 +514,8 @@ impl TryFrom<&str> for Currency {
 			"ltc" => Ok(Currency::Ltc),
 			"bsv" => Ok(Currency::Bsv),
 			"dash" => Ok(Currency::Dash),
+			"zec" | "zcash" => Ok(Currency::Zec),
+			"doge" => Ok(Currency::Doge),
 			_ => Err(ErrorKind::InvalidCurrency(value.to_string())),
 		}
 	}

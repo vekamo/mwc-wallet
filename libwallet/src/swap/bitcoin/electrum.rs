@@ -94,8 +94,9 @@ impl ElectrumRpcClient {
 			RpcResponse::ResponseOk(o) => {
 				debug!("Get a response back: {:?}", o);
 				if o.id.map(|res_id| res_id == id).unwrap_or(false) {
+					let res_copy = o.result.clone();
 					let obj: T = serde_json::from_value(o.result).map_err(|e| {
-						ErrorKind::ElectrumNodeClient(format!("Unable to decode response, {}", e))
+						ErrorKind::ElectrumNodeClient(format!("Unable to decode response '{}', {}", res_copy, e))
 					})?;
 					return Ok(obj);
 				}
@@ -251,6 +252,7 @@ pub struct ElectrumTransaction {
 	pub blocktime: Option<u64>,
 	#[serde(default)]
 	pub confirmations: Option<u64>,
+	#[serde(alias = "txid")]
 	pub hash: String,
 	pub hex: String,
 	pub locktime: u64,

@@ -226,6 +226,14 @@ impl BtcData {
 				let address = Address::new_dash().p2sh(script, btc_network(network));
 				Ok(address.to_string())
 			}
+			Currency::Zec => {
+				let address = Address::new_zec().p2sh(script, btc_network(network));
+				Ok(address.to_string())
+			}
+			Currency::Doge => {
+				let address = Address::new_doge().p2sh(script, btc_network(network));
+				Ok(address.to_string())
+			}
 		}
 	}
 
@@ -316,7 +324,7 @@ impl BtcData {
 		secp: &Secp256k1,
 		redeem_address: &String,
 		input_script: &Script,
-		fee_sat_per_byte: f32,
+		fee: f32,
 		cosign_secret: &SecretKey,
 		redeem_secret: &SecretKey,
 		conf_outputs: &Vec<Output>,
@@ -339,11 +347,20 @@ impl BtcData {
 		let tx_size = tx.get_weight() / 4 + script_sig_size * tx.input.len();
 
 		// Subtract fee from output
+		let (_, k, is_per_byte) = currency.get_fee_units();
+		let fee = if is_per_byte {
+			(tx_size as f32 * fee * k as f32 + 0.5) as u64
+		}
+		else {
+			( fee * k as f32 + 0.5) as u64
+		};
+
+		// Subtract fee from output
 		tx.output[0].value =
-			total_amount.saturating_sub((tx_size as f32 * fee_sat_per_byte + 0.5) as u64);
+			total_amount.saturating_sub( fee );
 
 		match currency {
-			Currency::Btc | Currency::Ltc | Currency::Dash => {
+			Currency::Btc | Currency::Ltc | Currency::Dash | Currency::Zec | Currency::Doge => {
 				// Sign for inputs
 				for idx in 0..tx.input.len() {
 					let hash = tx.signature_hash(idx, &input_script, 0x01);
@@ -420,7 +437,7 @@ impl BtcData {
 		redeem_signature: &mut Signature,
 	) -> Result<Script, ErrorKind> {
 		let (cosign_ser, redeem_ser) = match currency {
-			Currency::Btc | Currency::Ltc | Currency::Dash => {
+			Currency::Btc | Currency::Ltc | Currency::Dash | Currency::Zec | Currency::Doge => {
 				let mut cosign_ser = cosign_signature.serialize_der();
 				cosign_ser.push(0x01); // SIGHASH_ALL
 
@@ -462,7 +479,7 @@ impl BtcData {
 		secp: &Secp256k1,
 		refund_address: &String,
 		input_script: &Script,
-		fee_sat_per_byte: f32,
+		fee: f32,
 		btc_lock_time: i64,
 		buyer_btc_secret: &SecretKey,
 		conf_outputs: &Vec<Output>,
@@ -484,11 +501,19 @@ impl BtcData {
 		let tx_size = tx.get_weight() / 4 + script_sig_size * tx.input.len();
 
 		// Subtract fee from output
+		let (_, k, is_per_byte) = currency.get_fee_units();
+		let fee = if is_per_byte {
+			(tx_size as f32 * fee * k as f32 + 0.5) as u64
+		}
+		else {
+			( fee * k as f32 + 0.5) as u64
+		};
+
 		tx.output[0].value =
-			total_amount.saturating_sub((tx_size as f32 * fee_sat_per_byte + 0.5) as u64);
+			total_amount.saturating_sub(fee );
 
 		match currency {
-			Currency::Btc | Currency::Ltc | Currency::Dash => {
+			Currency::Btc | Currency::Ltc | Currency::Dash | Currency::Zec | Currency::Doge => {
 				// Sign for inputs
 				for idx in 0..tx.input.len() {
 					let hash = tx.signature_hash(idx, input_script, 0x01);
@@ -567,7 +592,7 @@ impl BtcData {
 				sign_ser.push(0x41); // SIGHASH_ALL
 				sign_ser
 			}
-			Currency::Btc | Currency::Ltc | Currency::Dash => {
+			Currency::Btc | Currency::Ltc | Currency::Dash | Currency::Zec | Currency::Doge => {
 				let mut sign_ser = signature.serialize_der();
 				sign_ser.push(0x01); // SIGHASH_ALL
 				sign_ser

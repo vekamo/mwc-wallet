@@ -5209,6 +5209,83 @@ mod tests {
 		assert_eq!(address.network, BtcNetwork::Testnet);
 		assert_eq!(address.address_type().unwrap(), AddressType::P2sh);
 		assert_eq!(address.to_string(), "8kGdHo4UhmQ9dmayTBtZNJUf972z58SmEc");
+
+		// ZCash
+		// For ZCash we are supporting only transaparrent addresses. It shouldbe enough for swaps.
+
+		// mainnnet, pk (Legacy)
+		let address = Address::new_zec()
+			.from_str("t1bU6mLTSoBTJ6LmM3SNwjnU211xqHNpfgk")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Bitcoin);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2pkh);
+		assert_eq!(address.to_string(), "t1bU6mLTSoBTJ6LmM3SNwjnU211xqHNpfgk");
+
+		// mainnet, multisig (Legacy)
+		let address = Address::new_zec()
+			.from_str("t3XyYW8yBFRuMnfvm5KLGFbEVz25kckZXym")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Bitcoin);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2sh);
+		assert_eq!(address.to_string(), "t3XyYW8yBFRuMnfvm5KLGFbEVz25kckZXym");
+
+		// testnet, pk (Legacy)
+		let address = Address::new_zec()
+			.from_str("tmLaEMAHxJjNhFcZWNmdB8HWnyfkdVe2Pfd")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Testnet);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2pkh);
+		assert_eq!(address.to_string(), "tmLaEMAHxJjNhFcZWNmdB8HWnyfkdVe2Pfd");
+
+		// Testnet, multisig (Legacy)
+		let address = Address::new_zec()
+			.from_str("t27eWDgjFYJGVXmzrXeVjnb5J3uXDM9xH9v")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Testnet);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2sh);
+		assert_eq!(address.to_string(), "t27eWDgjFYJGVXmzrXeVjnb5J3uXDM9xH9v");
+
+		// Dogecoin
+
+		// mainnet, pk (Legacy)
+		let address = Address::new_doge()
+			.from_str("D5cvREcimMb1uRKVEUYoCzjdE5b2D8HsRP")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Bitcoin);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2pkh);
+		assert_eq!(address.to_string(), "D5cvREcimMb1uRKVEUYoCzjdE5b2D8HsRP");
+
+		// mainnet, multisig (Legacy)
+		let address = Address::new_doge()
+			.from_str("9v7AhpobcssNGwBaJEgCm26KJgwi8yTsbo")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Bitcoin);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2sh);
+		assert_eq!(address.to_string(), "9v7AhpobcssNGwBaJEgCm26KJgwi8yTsbo");
+
+		// testnet, pk (Legacy)
+		let address = Address::new_doge()
+			.from_str("nnkguAAdJP1Aco6818knbvpCLtGgywXZdT")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Testnet);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2pkh);
+		assert_eq!(address.to_string(), "nnkguAAdJP1Aco6818knbvpCLtGgywXZdT");
+		let address = Address::new_doge()
+			.from_str("nYAVBkVii35TVtz7SxqSn6XpTGBbdDkhja")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Testnet);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2pkh);
+		assert_eq!(address.to_string(), "nYAVBkVii35TVtz7SxqSn6XpTGBbdDkhja");
+
+		// testnet, multisig (Legacy)
+		let address = Address::new_doge()
+			.from_str("2MsQug2PDbor2ndqYu9MxMij3MZFZ3EkGk9")
+			.unwrap();
+		assert_eq!(address.network, BtcNetwork::Testnet);
+		assert_eq!(address.address_type().unwrap(), AddressType::P2sh);
+		assert_eq!(address.to_string(), "2MsQug2PDbor2ndqYu9MxMij3MZFZ3EkGk9");
+
+
 	}
 
 	// Manual test that is used to test if workflow from the secondary currencies works.
@@ -5225,25 +5302,26 @@ mod tests {
 
 		let kc_sell = keychain(1);
 		let ctx_sell = context_sell(&kc_sell);
-		let currency = Currency::Ltc;
-		let secondary_redeem_address = "mpQgPACKj4AVDa89xvwDrjRietyQG4Lzgg".to_string();
-		let btc_amount = 10_000;
+		let currency = Currency::Dash;
+		let secondary_redeem_address = "8yyjfgWdQuFgVgmUqpSjegECsRqH4vZvcb".to_string();
+		let btc_amount = 100_000_000 / 50;
 		let amount = GRIN_UNIT; // 1 mwc is fine
 
 		let nc = TestNodeClient::new(300_000);
 
 		let mut secondary_currency_node_client1 = ElectrumNodeClient::new(
-			"192.168.1.20:19341".to_string(),
+			"192.168.1.5:19349".to_string(),
 			currency.get_block1_tx_hash(!global::is_mainnet()),
 		);
 		let secondary_currency_node_client2 = ElectrumNodeClient::new(
-			"192.168.1.20:19341".to_string(),
+			"192.168.1.5:19349".to_string(),
 			currency.get_block1_tx_hash(!global::is_mainnet()),
 		);
 
 		{
 			// Check the client...
-			let _ = secondary_currency_node_client1.height().unwrap();
+			let h = secondary_currency_node_client1.height().unwrap();
+			println!("The blockchain height {}", h);
 		}
 
 		let electumx_client1 = Arc::new(Mutex::new(secondary_currency_node_client1));
@@ -5326,7 +5404,7 @@ mod tests {
 			.unwrap();
 		//let lock_address = swap_api.get_secondary_lock_address(&swap_buy).unwrap();
 		println!(
-			"Lock address: {}. please deposit {} {}  and press Enter",
+			"Lock address: {}. please deposit {} {} and press Enter",
 			lock_address,
 			currency.amount_to_hr_string(btc_amount, true),
 			currency
@@ -5340,7 +5418,7 @@ mod tests {
 					&ctx_buy,
 					&mut swap_buy,
 					Some(
-						"tltc1qntu4nucpcsm9vnn0wz38u7qmpnkfdlan76u7g7rqyhwfz5lstmlqfx35z8"
+						"8yyjfgWdQuFgVgmUqpSjegECsRqH4vZvcb"
 							.to_string(),
 					),
 					true,
