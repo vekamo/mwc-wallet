@@ -29,14 +29,16 @@ use bitcoin::{Address, Script, Transaction, TxIn, TxOut, VarInt};
 use bitcoin_hashes::sha256d;
 use byteorder::{ByteOrder, LittleEndian};
 use grin_keychain::{Identifier, SwitchCommitmentType};
-use grin_util::secp::key::{PublicKey, SecretKey};
-use grin_util::secp::{Message, Secp256k1, Signature};
+use grin_util::secp::key::PublicKey;
+use grin_util::secp::{Message, Signature};
 use std::io::Cursor;
 use std::ops::Deref;
 
 use bch::messages::{Tx as BchTx, TxIn as BchTxIn, TxOut as BchTxOut};
 use bitcoin_hashes::hex::ToHex;
 use bitcoin_hashes::{hash160, Hash};
+
+use zcash_primitives::transaction as zcash_tx;
 
 /// BTC transaction ready to post (any type). Here it is a redeem tx
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -240,7 +242,6 @@ impl BtcData {
 	// Build input/output for redeem or refund btc transaciton
 	// Inputs need to have amounts for BCH signature
 	fn build_input_outputs(
-		&self,
 		currency: &Currency,
 		redeem_address: &String,
 		conf_outputs: &Vec<Output>,
@@ -316,119 +317,7 @@ impl BtcData {
 		}
 	}
 
-	/// Build BTC redeem transactions
-	/// Update self.redeem_tx  with result
-	pub(crate) fn build_redeem_tx(
-		&self,
-		currency: &Currency,
-		secp: &Secp256k1,
-		redeem_address: &String,
-		input_script: &Script,
-		fee: f32,
-		cosign_secret: &SecretKey,
-		redeem_secret: &SecretKey,
-		conf_outputs: &Vec<Output>,
-	) -> Result<(BtcTtansaction, Transaction, usize, usize), ErrorKind> {
-		let (input, output, total_amount) =
-			self.build_input_outputs(currency, redeem_address, conf_outputs)?;
-
-		let mut tx = Transaction {
-			version: 2,
-			lock_time: 0,
-			input: input.iter().map(|i| i.0.clone()).collect(),
-			output,
-		};
-
-		// Calculate tx size
-		let mut script_sig_size = input_script.len();
-		script_sig_size += VarInt(script_sig_size as u64).len();
-		script_sig_size += 2 * (1 + 72 + 1); // Signatures
-		script_sig_size += 2; // Opcodes
-		let tx_size = tx.get_weight() / 4 + script_sig_size * tx.input.len();
-
-		// Subtract fee from output
-		let (_, k, is_per_byte) = currency.get_fee_units();
-		let fee = if is_per_byte {
-			(tx_size as f32 * fee * k as f32 + 0.5) as u64
-		} else {
-			(fee * k as f32 + 0.5) as u64
-		};
-
-		// Subtract fee from output
-		tx.output[0].value = total_amount.saturating_sub(fee);
-
-		match currency {
-			Currency::Btc | Currency::Ltc | Currency::Dash | Currency::Zec | Currency::Doge => {
-				// Sign for inputs
-				for idx in 0..tx.input.len() {
-					let hash = tx.signature_hash(idx, &input_script, 0x01);
-					let msg = Message::from_slice(hash.deref())?;
-
-					tx.input
-						.get_mut(idx)
-						.ok_or(ErrorKind::Generic("Not found expected input".to_string()))?
-						.script_sig = self.redeem_script_sig(
-						currency,
-						input_script,
-						&mut secp.sign(&msg, cosign_secret)?,
-						&mut secp.sign(&msg, redeem_secret)?,
-					)?;
-				}
-			}
-			Currency::Bch => {
-				// Sign for inputs
-				let bch_tx = Self::convert_tx_to_bch(&tx);
-
-				for idx in 0..tx.input.len() {
-					// Actually BCH team doesn't allow to reuse the cache. REALLY?  WHY?
-					let mut cache = bch::transaction::sighash::SigHashCache::new();
-
-					let sighash_type = bch::transaction::sighash::SIGHASH_ALL
-						| bch::transaction::sighash::SIGHASH_FORKID;
-					let hash = bch::transaction::sighash::sighash(
-						&bch_tx,
-						idx,
-						input_script.as_bytes(),
-						bch::util::Amount(input[idx].1 as i64),
-						sighash_type,
-						&mut cache,
-					)
-					.map_err(|e| ErrorKind::BchError(format!("sighash failed, {}", e)))?;
-
-					let msg = Message::from_slice(&hash.0)?;
-
-					tx.input
-						.get_mut(idx)
-						.ok_or(ErrorKind::Generic("Not found expected input".to_string()))?
-						.script_sig = self.redeem_script_sig(
-						currency,
-						input_script,
-						&mut secp.sign(&msg, cosign_secret)?,
-						&mut secp.sign(&msg, redeem_secret)?,
-					)?;
-				}
-			}
-			Currency::Bsv => panic!("BSV not supported"),
-		};
-
-		let mut cursor = Cursor::new(Vec::with_capacity(tx_size));
-		let actual_size = tx
-			.consensus_encode(&mut cursor)
-			.map_err(|e| ErrorKind::Generic(format!("Unable to encode redeem tx, {}", e)))?;
-
-		Ok((
-			BtcTtansaction {
-				txid: tx.txid().as_hash(),
-				tx: cursor.into_inner(),
-			},
-			tx,
-			tx_size,
-			actual_size,
-		))
-	}
-
-	fn redeem_script_sig(
-		&self,
+	pub(crate) fn redeem_script_sig(
 		currency: &Currency,
 		input_script: &Script,
 		cosign_signature: &mut Signature,
@@ -469,33 +358,47 @@ impl BtcData {
 		Ok(script_sig)
 	}
 
-	/// Build BTC redeem transactions
-	/// Update self.redeem_tx  with result
-	pub(crate) fn refund_tx(
-		&mut self,
+	/// Build BTC Spend Lock transaction. That can be redeem transactrion or Refund. It depend on
+	/// script_sig method. That can be  BtcData::refund_script_sig  or BtcData::redeem_script_sig
+	/// btc_lock_time must be 0 for redeem and btc_lock_time for refund
+	/// Return:  Options values must be defined for BTC only. They can be used for tests only
+	pub(crate) fn spend_lock_transaction(
 		currency: &Currency,
-		secp: &Secp256k1,
-		refund_address: &String,
+		address: &String, // refund or
 		input_script: &Script,
 		fee: f32,
 		btc_lock_time: i64,
-		buyer_btc_secret: &SecretKey,
 		conf_outputs: &Vec<Output>,
-	) -> Result<BtcTtansaction, ErrorKind> {
+		script_sig: impl Fn(&Message) -> Result<Script, ErrorKind>,
+	) -> Result<
+		(
+			BtcTtansaction,
+			Option<Transaction>,
+			Option<usize>,
+			Option<usize>,
+		),
+		ErrorKind,
+	> {
 		let (input, output, total_amount) =
-			self.build_input_outputs(currency, refund_address, conf_outputs)?;
+			Self::build_input_outputs(currency, address, conf_outputs)?;
 		let mut tx = Transaction {
 			version: 2,
-			lock_time: (btc_lock_time + 1) as u32, // lock time must be larger for BCH
+			lock_time: if btc_lock_time == 0 {
+				0
+			} else {
+				(btc_lock_time + 1) as u32
+			}, // lock time must be larger for BCH
 			input: input.iter().map(|i| i.0.clone()).collect(),
 			output,
 		};
 
+		let number_of_signatures = if btc_lock_time > 0 { 1 } else { 2 };
+
 		// Calculate tx size
 		let mut script_sig_size = input_script.len();
 		script_sig_size += VarInt(script_sig_size as u64).len();
-		script_sig_size += 1 * (1 + 72 + 1); // Signature (uno for refund)
-		script_sig_size += 1; // Opcodes
+		script_sig_size += number_of_signatures * (1 + 72 + 1); // Signature (uno for refund)
+		script_sig_size += number_of_signatures; // Opcodes (by accident they match number of signatures)
 		let tx_size = tx.get_weight() / 4 + script_sig_size * tx.input.len();
 
 		// Subtract fee from output
@@ -509,7 +412,7 @@ impl BtcData {
 		tx.output[0].value = total_amount.saturating_sub(fee);
 
 		match currency {
-			Currency::Btc | Currency::Ltc | Currency::Dash | Currency::Zec | Currency::Doge => {
+			Currency::Btc | Currency::Ltc | Currency::Dash | Currency::Doge => {
 				// Sign for inputs
 				for idx in 0..tx.input.len() {
 					let hash = tx.signature_hash(idx, input_script, 0x01);
@@ -518,11 +421,7 @@ impl BtcData {
 					tx.input
 						.get_mut(idx)
 						.ok_or(ErrorKind::Generic("Not found expected input".to_string()))?
-						.script_sig = self.refund_script_sig(
-						currency,
-						&mut secp.sign(&msg, buyer_btc_secret)?,
-						input_script,
-					)?;
+						.script_sig = script_sig(&msg)?;
 				}
 			}
 			Currency::Bch => {
@@ -537,7 +436,7 @@ impl BtcData {
 						| bch::transaction::sighash::SIGHASH_FORKID;
 					let hash = bch::transaction::sighash::sighash(
 						&bch_tx,
-						0,
+						idx,
 						input_script.as_bytes(),
 						bch::util::Amount(input[idx].1 as i64),
 						sighash_type,
@@ -550,12 +449,79 @@ impl BtcData {
 					tx.input
 						.get_mut(idx)
 						.ok_or(ErrorKind::Generic("Not found expected input".to_string()))?
-						.script_sig = self.refund_script_sig(
-						currency,
-						&mut secp.sign(&msg, buyer_btc_secret)?,
-						input_script,
-					)?;
+						.script_sig = script_sig(&msg)?;
 				}
+			}
+			Currency::Zec => {
+				// We are builddinbg TransactionData directly from the data. Seems like it is the best option for now.
+				// The issue that librustzcash => zcash_primitive doesn't even support the inputs from scripts.
+				// But furtunatelly it is expected to be BTC compatible. So we can just copy the data form the Bitcoin
+				// TransactionData is smrt enough to sign everything and provide the binary data that will act like BTC Tx.
+
+				let mut zcash_tx_data = zcash_tx::TransactionData::new();
+				zcash_tx_data.lock_time = tx.lock_time;
+				//zcash_tx_data.expiry_height = zcash_primitives::consensus::BlockHeight::from_u32(1266946 + 20);
+				for inp in &tx.input {
+					zcash_tx_data.vin.push(zcash_tx::components::TxIn {
+						prevout: zcash_tx::components::OutPoint::new(
+							inp.previous_output.txid.as_hash().into_inner(),
+							inp.previous_output.vout,
+						),
+						script_sig: zcash_primitives::legacy::Script::default(),
+						sequence: inp.sequence,
+					});
+				}
+				for out in &tx.output {
+					zcash_tx_data.vout.push(zcash_tx::components::TxOut {
+						value: zcash_tx::components::Amount::from_u64(out.value).map_err(|_| {
+							ErrorKind::Generic("Unable convert amount for ZCash".to_string())
+						})?,
+						script_pubkey: zcash_primitives::legacy::Script(
+							out.script_pubkey.to_bytes(),
+						),
+					});
+				}
+
+				// Sign inputs ZCash way. Zcash massages are uniques, we have to mainatain it's own branch for that
+				let mut sighash = [0u8; 32];
+				for idx in 0..zcash_tx_data.vin.len() {
+					sighash.copy_from_slice(&zcash_tx::signature_hash_data(
+						&zcash_tx_data,
+						zcash_primitives::consensus::BranchId::Canopy,
+						zcash_tx::SIGHASH_ALL,
+						zcash_tx::SignableInput::transparent(
+							idx,
+							&zcash_primitives::legacy::Script(input_script.to_bytes()),
+							zcash_tx::components::Amount::from_u64(input[idx].1).map_err(|_| {
+								ErrorKind::Generic("Invalid input amount".to_string())
+							})?,
+						),
+					));
+
+					let msg = Message::from_slice(&sighash).expect("32 bytes");
+
+					zcash_tx_data.vin[idx].script_sig =
+						zcash_primitives::legacy::Script(script_sig(&msg)?.to_bytes());
+				}
+
+				let zcash_tx = zcash_tx_data.freeze()?;
+				let mut raw_tx = vec![];
+				zcash_tx.write(&mut raw_tx)?;
+
+				return Ok((
+					BtcTtansaction {
+						txid: sha256d::Hash::from_slice(&zcash_tx.txid().0).map_err(|e| {
+							ErrorKind::Generic(format!(
+								"Unable to convert Hash data for ZCash, {}",
+								e
+							))
+						})?,
+						tx: raw_tx,
+					},
+					None,
+					None,
+					None,
+				));
 			}
 			Currency::Bsv => panic!("BSV not supported"),
 		};
@@ -566,17 +532,21 @@ impl BtcData {
 			.map_err(|e| ErrorKind::Generic(format!("Unable to encode redeem tx, {}", e)))?;
 
 		// By some reasons length is floating, probably encoding can do some optimization . Let'e keep an eye on it, we don't want to calcucate fee badly.
-		debug_assert!(actual_size <= tx_size);
+		debug_assert!(actual_size <= tx_size + 1);
 		debug_assert!(actual_size >= tx_size - 5);
 
-		Ok(BtcTtansaction {
-			txid: tx.txid().as_hash(),
-			tx: cursor.into_inner(),
-		})
+		Ok((
+			BtcTtansaction {
+				txid: tx.txid().as_hash(),
+				tx: cursor.into_inner(),
+			},
+			Some(tx),
+			Some(tx_size),
+			Some(actual_size),
+		))
 	}
 
-	fn refund_script_sig(
-		&self,
+	pub(crate) fn refund_script_sig(
 		currency: &Currency,
 		signature: &mut Signature,
 		input_script: &Script,
@@ -712,7 +682,7 @@ mod tests {
 	use grin_core::global;
 	use grin_core::global::ChainTypes;
 	use grin_util::from_hex;
-	use grin_util::secp::key::PublicKey;
+	use grin_util::secp::key::{PublicKey, SecretKey};
 	use grin_util::secp::{ContextFlag, Secp256k1};
 	use rand::{thread_rng, Rng, RngCore};
 	use std::collections::HashMap;
@@ -861,20 +831,27 @@ mod tests {
 			btc_network(network),
 		);
 
-		// Generate redeem transaction
-		let (_btc_tx, tx, est_size, actual_size) = data
-			.build_redeem_tx(
+		let redeem_script_sig = |msg: &Message| {
+			BtcData::redeem_script_sig(
 				&Currency::Btc,
-				&secp,
-				&redeem_address.to_string(),
 				&input_script,
-				10.0,
-				&cosign,
-				&redeem,
-				&confirmed_outputs,
+				&mut secp.sign(msg, &cosign)?,
+				&mut secp.sign(msg, &redeem)?,
 			)
-			.unwrap();
-		let diff = (est_size as i64 - actual_size as i64).abs() as usize;
+		};
+
+		// Generate redeem transaction
+		let (_btc_tx, tx, est_size, actual_size) = BtcData::spend_lock_transaction(
+			&Currency::Btc,
+			&redeem_address.to_string(),
+			&input_script,
+			10.0,
+			0,
+			&confirmed_outputs,
+			redeem_script_sig,
+		)
+		.unwrap();
+		let diff = (est_size.unwrap() as i64 - actual_size.unwrap() as i64).abs() as usize;
 		assert!(diff <= count); // Our size estimation should be very close to the real size
 
 		// Moment of truth: our redeem tx should be valid
@@ -885,6 +862,6 @@ mod tests {
 			},
 			None => None,
 		};
-		tx.verify(verify_fn).unwrap();
+		tx.unwrap().verify(verify_fn).unwrap();
 	}
 }

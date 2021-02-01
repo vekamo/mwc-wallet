@@ -45,6 +45,8 @@ bitcoin_hashes = { version = "0.9.1", features = ["serde"] }
 serial_test = "0.4.0"
 bch = { git = "https://github.com/mwcproject/rust-bch", branch = "master" }
 native-tls = "0.2"
+zcash_primitives = { version = "0.4.0", git = "https://github.com/mwcproject/librustzcash", branch = "master", features = ["transparent-inputs"] }
+#zcash_primitives = { path = "../../librustzcash/zcash_primitives", features = ["transparent-inputs"] }
 
 smaz = "0.1"
 bitstream-io = "0.9"

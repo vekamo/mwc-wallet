@@ -31,6 +31,7 @@ use bitcoin::{Script, Txid};
 use failure::_core::marker::PhantomData;
 use grin_keychain::{Identifier, Keychain, SwitchCommitmentType};
 use grin_util::secp::aggsig::export_secnonce_single as generate_nonce;
+use grin_util::secp::Message;
 use grin_wallet_util::grin_core::core::Committed;
 use std::sync::Arc;
 
@@ -192,9 +193,6 @@ where
 		let cosign_secret = keychain.derive_key(0, cosign_id, SwitchCommitmentType::None)?;
 		let redeem_secret = SellApi::calculate_redeem_secret(keychain, swap)?;
 
-		// This function should only be called once
-		let btc_data = swap.secondary_data.unwrap_btc()?;
-
 		let (pending_amount, confirmed_amount, _, mut conf_outputs) =
 			self.btc_balance(swap, input_script, 0)?;
 		if pending_amount + confirmed_amount == 0 {
@@ -206,15 +204,25 @@ where
 		// Sort needed for transaction hash stabilization. We want all calls  return the same Hash
 		conf_outputs.sort_by(|a, b| a.out_point.txid.cmp(&b.out_point.txid));
 
-		let (btc_transaction, _, _, _) = btc_data.build_redeem_tx(
+		let secondary_currency = self.secondary_currency.clone();
+		let secp = keychain.secp();
+		let redeem_script_sig = |msg: &Message| {
+			BtcData::redeem_script_sig(
+				&secondary_currency,
+				input_script,
+				&mut secp.sign(msg, &cosign_secret)?,
+				&mut secp.sign(msg, &redeem_secret)?,
+			)
+		};
+
+		let (btc_transaction, _, _, _) = BtcData::spend_lock_transaction(
 			&self.secondary_currency,
-			keychain.secp(),
 			&redeem_address_str,
 			&input_script,
 			swap.secondary_fee,
-			&cosign_secret,
-			&redeem_secret,
+			0,
 			&conf_outputs,
+			redeem_script_sig,
 		)?;
 
 		Ok(btc_transaction)
@@ -245,16 +253,25 @@ where
 		)?;
 
 		let btc_lock_time = swap.get_time_btc_lock_script();
-		let btc_data = swap.secondary_data.unwrap_btc_mut()?;
-		let refund_tx = btc_data.refund_tx(
+		let secp = keychain.secp();
+		let secondary_currency = self.secondary_currency.clone();
+
+		let refund_script_sig = |msg: &Message| {
+			BtcData::refund_script_sig(
+				&secondary_currency,
+				&mut secp.sign(msg, &refund_key)?,
+				input_script,
+			)
+		};
+
+		let (refund_tx, _, _, _) = BtcData::spend_lock_transaction(
 			&self.secondary_currency,
-			keychain.secp(),
 			refund_address,
 			input_script,
 			swap.secondary_fee,
 			btc_lock_time,
-			&refund_key,
 			&conf_outputs,
+			refund_script_sig,
 		)?;
 
 		let tx = refund_tx.tx.clone();
@@ -264,6 +281,7 @@ where
 			}
 		}
 
+		let btc_data = swap.secondary_data.unwrap_btc_mut()?;
 		btc_data.refund_tx = Some(refund_tx.txid);
 		btc_data.tx_fee = Some(swap.secondary_fee);
 		Ok(())

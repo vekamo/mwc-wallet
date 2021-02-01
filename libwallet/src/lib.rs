@@ -66,6 +66,7 @@ pub mod swap;
 mod types;
 extern crate bitcoin as bitcoin_lib;
 extern crate bitcoin_hashes;
+extern crate zcash_primitives as zcash;
 
 pub use crate::slatepack::{SlatePurpose, Slatepack, SlatepackArmor, Slatepacker};
 
