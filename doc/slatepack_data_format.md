@@ -6,7 +6,7 @@
   * [Reference-level explanation](./slatepack_data_format.md/#Reference-level-explanation)
     * [Slatepack Address](./slatepack_data_format.md/#Slatepack-Address )
     * [Message Armor](./slatepack_data_format.md/#Message-Armor)
-    * [Encryption/Decryption](./slatepack_data_format.md/#Encryption/Decryption)
+    * [Encryption/Decryption](./slatepack_data_format.md/#EncryptionDecryption)
     * [Binary Data Format](./slatepack_data_format.md/#Binary-Data-Format)
 
 # About
