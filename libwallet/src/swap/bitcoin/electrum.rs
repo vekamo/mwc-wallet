@@ -255,8 +255,6 @@ pub struct ElectrumTransaction {
 	pub blocktime: Option<u64>,
 	#[serde(default)]
 	pub confirmations: Option<u64>,
-	#[serde(alias = "txid")]
-	pub hash: String,
 	pub hex: String,
 	pub locktime: u64,
 	pub size: u64,

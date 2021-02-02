@@ -5300,19 +5300,19 @@ mod tests {
 
 		let kc_sell = keychain(1);
 		let ctx_sell = context_sell(&kc_sell);
-		let currency = Currency::Zec;
-		let secondary_redeem_address = "tmJdx12xczKyYgUCzu12VkyV9wQFJS9h5Fe".to_string();
-		let btc_amount = 100_000_000 / 50;
+		let currency = Currency::Btc;
+		let secondary_redeem_address = "tb1qp6a3fc7fryx6s9tvhnsy96x57gmmu3j90a9hwe".to_string();
+		let btc_amount = 10_000;
 		let amount = GRIN_UNIT; // 1 mwc is fine
 
 		let nc = TestNodeClient::new(300_000);
 
 		let mut secondary_currency_node_client1 = ElectrumNodeClient::new(
-			"192.168.1.5:19353".to_string(),
+			"192.168.1.5:19339".to_string(),
 			currency.get_block1_tx_hash(!global::is_mainnet()),
 		);
 		let secondary_currency_node_client2 = ElectrumNodeClient::new(
-			"192.168.1.5:19353".to_string(),
+			"192.168.1.5:19339".to_string(),
 			currency.get_block1_tx_hash(!global::is_mainnet()),
 		);
 
@@ -5415,7 +5415,7 @@ mod tests {
 					&kc_buy,
 					&ctx_buy,
 					&mut swap_buy,
-					Some("tmJdx12xczKyYgUCzu12VkyV9wQFJS9h5Fe".to_string()),
+					Some("tb1qp6a3fc7fryx6s9tvhnsy96x57gmmu3j90a9hwe".to_string()),
 					true,
 				)
 				.unwrap();
