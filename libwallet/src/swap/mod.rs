@@ -5300,19 +5300,21 @@ mod tests {
 
 		let kc_sell = keychain(1);
 		let ctx_sell = context_sell(&kc_sell);
+		// Currently that network operations you are tesitng and Redeem address on your tesntnet wallet.
 		let currency = Currency::Btc;
 		let secondary_redeem_address = "tb1qp6a3fc7fryx6s9tvhnsy96x57gmmu3j90a9hwe".to_string();
+		// BTC amount in satoshi
 		let btc_amount = 10_000;
-		let amount = GRIN_UNIT; // 1 mwc is fine
+		let mwc_amount = GRIN_UNIT; // 1 mwc is fine
 
 		let nc = TestNodeClient::new(300_000);
 
 		let mut secondary_currency_node_client1 = ElectrumNodeClient::new(
-			"192.168.1.5:19339".to_string(),
+			"btc.test1.swap.mwc.mw:18339".to_string(),
 			currency.get_block1_tx_hash(!global::is_mainnet()),
 		);
 		let secondary_currency_node_client2 = ElectrumNodeClient::new(
-			"192.168.1.5:19339".to_string(),
+			"btc.test2.swap.mwc.mw:18339".to_string(),
 			currency.get_block1_tx_hash(!global::is_mainnet()),
 		);
 
@@ -5337,10 +5339,10 @@ mod tests {
 			.create_swap_offer(
 				&kc_sell,
 				&ctx_sell,
-				amount,
+				mwc_amount,
 				btc_amount,
 				currency.clone(),
-				secondary_redeem_address,
+				secondary_redeem_address.clone(),
 				true, // lock MWC first
 				1,
 				1,
@@ -5415,7 +5417,7 @@ mod tests {
 					&kc_buy,
 					&ctx_buy,
 					&mut swap_buy,
-					Some("tb1qp6a3fc7fryx6s9tvhnsy96x57gmmu3j90a9hwe".to_string()),
+					Some(secondary_redeem_address.clone()),
 					true,
 				)
 				.unwrap();
