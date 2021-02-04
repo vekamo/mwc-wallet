@@ -1,6 +1,6 @@
 # MWC Slatepacks
 
-# Contents : #
+## Contents : #
   * [About](./slatepack_data_format.md/#About)
   * [Community-level explanation](./slatepack_data_format.md/#Community-level-explanation)
   * [Reference-level explanation](./slatepack_data_format.md/#Reference-level-explanation)
@@ -18,26 +18,18 @@ Slatepacks are intented to simplify the exchange process for Slates in a secure 
 
 To address those issues MWC adopts grin's Slatepacks:  https://docs.grin.mw/wiki/transactions/slatepack/ <br>
 Altho MWC slatepacks look very similar, the implementation is very different.
-
 This document desribes the Slatepack format and our deviation from grins Implementation.
 
 # Community-level explanation
-Slatepacks Simplify the existing transaction building process in MWC in a few ways:
-
-Behind the scenes there are two synchronous methods and one asynchronous method supported by default.
-Tor and MQS are the synchronous transaction transport methods that are tried first. If not successful, the transaction process automatically falls back to using a copy and pastable SlatepackMessage string to complete the transaction asynchronously by exchanging the Slatepack message manually.
-
-So in easier words this simplyfies transactions alot as it's usable by a simple copy paste without the requirement to be online. Meanwhile it keeps the benefits of TOR transactions in case both parties are online. 
+Slatepacks Simplify the existing transaction process so that a transaction can be built using a copy and pastable SlatepackMessage string asynchronously.
+So in easier words this simplyfies transactions alot as it's usable by a simple copy paste without the requirement to be online or to exchange files.
 
 An Example to elaborate;
 
-```mwc-wallet send -d SlatepackAddress 1.337``` will first try to send MWC synchronously via Tor/MQS to the SlatepackAddress
-If that fails it will fall back to outputting an armored encrypted SlatepackMessage string that only you and the recipient can decipher if a TOR address was used. 
-In the case of MQS it will generate a non encrypted SlatepackMessage.
+```mwc-wallet send -d SlatepackAddress 1.337``` will generate an armored encrypted SlatepackMessage string that only you and the recipient can decipher if a TOR address was used as SlatepackAddress. In the case of MQS it will generate a non encrypted SlatepackMessage. <br>
+If a counterparty is unwilling or unable to provide a SlatepackAddress, an unencrypted plain text SlatepackMessage can still be exchanged
 This SlatepackMessage can then be exchanged manually by copy and paste.
 Example SlatepackAddress: f4ujdq2hzidsrwljst4mfxoaogolqzhwzbu4uxjke6w4ibclqgxaowid
-
-If a counterparty is unwilling or unable to provide a SlatepackAddress, an unencrypted plain text SlatepackMessage can still be exchanged
 
 Sending a mobile MWC transaction should be as easy as scanning a simple QR code encoded from a bech32 SlatepackAddress
 Or as easy as pasting the SlatepackAddress of your counterparty into your wallet for any other device.
