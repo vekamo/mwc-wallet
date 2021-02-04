@@ -499,7 +499,7 @@ impl Currency {
 					"851bf6fbf7a976327817c738c489d7fa657752445430922d94c983c0b9ed4609".to_string()
 				}
 				Currency::Doge => {
-					"6b591fe460c9cfb75d4406c3787c913022be1caa8641415932ee8c5228ff2e3b".to_string()
+					"5f7e779f7600f54e528686e91d5891f3ae226ee907f461692519e549105f521c".to_string()
 				}
 			}
 		}
