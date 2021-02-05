@@ -1000,11 +1000,14 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 
 	let secondary_currency = parse_required(args, "secondary_currency")?;
 	let secondary_currency = secondary_currency.to_lowercase();
-	if secondary_currency != "btc" && secondary_currency != "bch" {
-		return Err(ParseError::ArgumentError(format!(
-			"{} is not on the supported currency list.",
-			secondary_currency
-		)));
+	match secondary_currency.as_str() {
+		"btc" | "bch" | "ltc" | "zcash" | "dash" | "doge" => (),
+		_ => {
+			return Err(ParseError::ArgumentError(format!(
+				"{} is not on the supported currency list.",
+				secondary_currency
+			)))
+		}
 	}
 
 	let btc_amount = parse_required(args, "secondary_amount")?;

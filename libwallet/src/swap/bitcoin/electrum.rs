@@ -16,14 +16,12 @@ use super::client::*;
 use super::rpc::*;
 use crate::swap::types::Currency;
 use crate::swap::ErrorKind;
-use bitcoin::consensus::Decodable;
-use bitcoin::{OutPoint, Script, Transaction, Txid};
+use bitcoin::{OutPoint, Script, Txid};
 use bitcoin_hashes::sha256d::Hash;
 use grin_util::{from_hex, to_hex};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::io::Cursor;
 use std::mem::replace;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
@@ -399,10 +397,7 @@ impl BtcNodeClient for ElectrumNodeClient {
 		client.post_tx(tx)
 	}
 	/// Request a transaction from the node
-	fn transaction(
-		&mut self,
-		tx_hash: &Txid,
-	) -> Result<Option<(Option<u64>, Transaction)>, ErrorKind> {
+	fn transaction(&mut self, tx_hash: &Txid) -> Result<Option<u64>, ErrorKind> {
 		let head_height = self.height()?;
 
 		let client = self.client()?;
@@ -415,17 +410,7 @@ impl BtcNodeClient for ElectrumNodeClient {
 			Some(c) if c > 0 => Some(head_height.saturating_sub(c - 1)),
 			_ => None,
 		};
-
-		let tx_bytes = from_hex(tx.hex.as_str()).map_err(|e| {
-			ErrorKind::ElectrumNodeClient(format!("Unable to parse hex {}, {}", tx.hex, e))
-		})?;
-
-		let cursor = Cursor::new(tx_bytes);
-		let tx = Transaction::consensus_decode(cursor).map_err(|e| {
-			ErrorKind::ElectrumNodeClient(format!("Unable to parse transaction, {}", e))
-		})?;
-
-		Ok(Some((height, tx)))
+		Ok(height)
 	}
 }
 

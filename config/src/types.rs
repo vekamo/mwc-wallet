@@ -97,6 +97,22 @@ impl Default for WalletConfig {
 					("bch_main_2", "bch.main2.swap.mwc.mw:18333"),
 					("bch_test_1", "bch.test1.swap.mwc.mw:18335"),
 					("bch_test_2", "bch.test1.swap.mwc.mw:18335"),
+					("dash_main_1", "dash.main1.swap.mwc.mw:18351"),
+					("dash_main_2", "dash.main2.swap.mwc.mw:18351"),
+					("dash_test_1", "dash.test1.swap.mwc.mw:18349"),
+					("dash_test_2", "dash.test1.swap.mwc.mw:18349"),
+					("doge_main_1", "doge.main1.swap.mwc.mw:18359"),
+					("doge_main_2", "doge.main2.swap.mwc.mw:18359"),
+					("doge_test_1", "doge.test1.swap.mwc.mw:18357"),
+					("doge_test_2", "doge.test1.swap.mwc.mw:18357"),
+					("ltc_main_1", "ltc.main1.swap.mwc.mw:18343"),
+					("ltc_main_2", "ltc.main2.swap.mwc.mw:18343"),
+					("ltc_test_1", "ltc.test1.swap.mwc.mw:18341"),
+					("ltc_test_2", "ltc.test1.swap.mwc.mw:18341"),
+					("zcash_main_1", "zcash.main1.swap.mwc.mw:18355"),
+					("zcash_main_2", "zcash.main2.swap.mwc.mw:18355"),
+					("zcash_test_1", "zcash.test1.swap.mwc.mw:18353"),
+					("zcash_test_2", "zcash.test1.swap.mwc.mw:18353"),
 				]
 				.iter()
 				.cloned()

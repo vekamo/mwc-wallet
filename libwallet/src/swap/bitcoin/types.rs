@@ -228,7 +228,7 @@ impl BtcData {
 				let address = Address::new_dash().p2sh(script, btc_network(network));
 				Ok(address.to_string())
 			}
-			Currency::Zec => {
+			Currency::ZCash => {
 				let address = Address::new_zec().p2sh(script, btc_network(network));
 				Ok(address.to_string())
 			}
@@ -324,7 +324,7 @@ impl BtcData {
 		redeem_signature: &mut Signature,
 	) -> Result<Script, ErrorKind> {
 		let (cosign_ser, redeem_ser) = match currency {
-			Currency::Btc | Currency::Ltc | Currency::Dash | Currency::Zec | Currency::Doge => {
+			Currency::Btc | Currency::Ltc | Currency::Dash | Currency::ZCash | Currency::Doge => {
 				let mut cosign_ser = cosign_signature.serialize_der();
 				cosign_ser.push(0x01); // SIGHASH_ALL
 
@@ -452,7 +452,7 @@ impl BtcData {
 						.script_sig = script_sig(&msg)?;
 				}
 			}
-			Currency::Zec => {
+			Currency::ZCash => {
 				// We are builddinbg TransactionData directly from the data. Seems like it is the best option for now.
 				// The issue that librustzcash => zcash_primitive doesn't even support the inputs from scripts.
 				// But furtunatelly it is expected to be BTC compatible. So we can just copy the data form the Bitcoin
@@ -558,7 +558,7 @@ impl BtcData {
 				sign_ser.push(0x41); // SIGHASH_ALL
 				sign_ser
 			}
-			Currency::Btc | Currency::Ltc | Currency::Dash | Currency::Zec | Currency::Doge => {
+			Currency::Btc | Currency::Ltc | Currency::Dash | Currency::ZCash | Currency::Doge => {
 				let mut sign_ser = signature.serialize_der();
 				sign_ser.push(0x01); // SIGHASH_ALL
 				sign_ser

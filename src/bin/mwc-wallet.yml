@@ -547,6 +547,10 @@ subcommands:
             possible_values:
               - bch
               - btc
+              - ltc
+              - zcash
+              - dash
+              - doge
             default_value: bch
         - secondary_amount:
             help: Secondary currency amount excluding fees

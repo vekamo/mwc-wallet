@@ -66,11 +66,13 @@ pub trait BtcNodeClient: Sync + Send + 'static {
 	/// Post BTC tranaction,
 	fn post_tx(&mut self, tx: Vec<u8>) -> Result<(), ErrorKind>;
 	/// Get BTC transaction info.
-	/// Return (height, tx)
+	/// Return (height)
+	/// Note: we can't return transaction because it is not Only BTC now, so we don't have parser
+	/// to handle all possible coins. ZCash Tx is not parcable by BTC
 	fn transaction(
 		&mut self,
 		tx_hash: &Txid, // tx hash
-	) -> Result<Option<(Option<u64>, Transaction)>, ErrorKind>;
+	) -> Result<Option<u64>, ErrorKind>;
 }
 
 /// Mock BTC node for the testing
@@ -249,21 +251,17 @@ impl BtcNodeClient for TestBtcNodeClient {
 		Ok(())
 	}
 
-	fn transaction(
-		&mut self,
-		tx_hash: &Txid,
-	) -> Result<Option<(Option<u64>, Transaction)>, ErrorKind> {
+	fn transaction(&mut self, tx_hash: &Txid) -> Result<Option<u64>, ErrorKind> {
 		let state = self.state.lock();
 
-		if let Some(tx) = state.pending.get(tx_hash) {
-			return Ok(Some((None, tx.clone())));
+		if state.pending.contains_key(tx_hash) {
+			return Ok(Some(0));
 		}
 
-		let tx = state
-			.txs
-			.get(tx_hash)
-			.map(|t| (state.tx_heights.get(tx_hash).map(|h| *h), t.clone()));
-
-		Ok(tx)
+		let res = match state.txs.get(tx_hash) {
+			Some(_tx) => state.tx_heights.get(tx_hash).map(|h| *h),
+			None => None,
+		};
+		Ok(res)
 	}
 }

@@ -190,7 +190,7 @@ impl BuyApi {
 			| Currency::Bch
 			| Currency::Ltc
 			| Currency::Dash
-			| Currency::Zec
+			| Currency::ZCash
 			| Currency::Doge => (),
 			Currency::Bsv => {
 				return Err(ErrorKind::InvalidMessageData(

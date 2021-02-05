@@ -337,16 +337,14 @@ where
 		let result: Option<u64> = match tx_hash {
 			None => None,
 			Some(tx_hash) => {
-				let tx_resp = match self.btc_node_client1.lock().transaction(&tx_hash) {
-					Ok(r) => r,
+				let height = match self.btc_node_client1.lock().transaction(&tx_hash) {
+					Ok(h) => h,
 					Err(_) => self.btc_node_client2.lock().transaction(&tx_hash)?,
 				};
-				match tx_resp {
+				match height {
 					None => None,
-					Some((height, _tx)) => match height {
-						None => Some(0),
-						Some(h) => Some(btc_tip.saturating_sub(h) + 1),
-					},
+					Some(0) => Some(0),
+					Some(h) => Some(btc_tip.saturating_sub(h) + 1),
 				}
 			}
 		};
@@ -372,7 +370,7 @@ where
 			| Currency::Ltc
 			| Currency::Bsv
 			| Currency::Dash
-			| Currency::Zec
+			| Currency::ZCash
 			| Currency::Doge => Ok(4),
 			//_ => return Err(ErrorKind::UnexpectedCoinType),
 		}
@@ -394,7 +392,7 @@ where
 			| Currency::Ltc
 			| Currency::Bsv
 			| Currency::Dash
-			| Currency::Zec
+			| Currency::ZCash
 			| Currency::Doge => (),
 			//_ => return Err(ErrorKind::UnexpectedCoinType),
 		}
@@ -472,7 +470,7 @@ where
 			| Currency::Ltc
 			| Currency::Bsv
 			| Currency::Dash
-			| Currency::Zec
+			| Currency::ZCash
 			| Currency::Doge => (),
 			//_ => return Err(ErrorKind::UnexpectedCoinType),
 		}
