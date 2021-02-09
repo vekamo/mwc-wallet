@@ -20,6 +20,7 @@ use crate::grin_util::secp::key::SecretKey;
 use crate::grin_util::Mutex;
 use crate::internal::selection;
 use crate::internal::{tx, updater};
+use crate::proof::crypto::Hex;
 use crate::proof::proofaddress;
 use crate::proof::proofaddress::ProofAddressType;
 use crate::proof::proofaddress::ProvableAddress;
@@ -191,6 +192,17 @@ where
 	for t in &tx {
 		if t.tx_type == TxLogEntryType::TxReceived {
 			return Err(ErrorKind::TransactionAlreadyReceived(ret_slate.id.to_string()).into());
+		}
+		if let Some(offset) = t.kernel_offset {
+			let offset_skey = slate.tx.offset.secret_key()?;
+			let keychain = w.keychain(keychain_mask)?;
+			let offset_commit = keychain.secp().commit(0, offset_skey)?;
+			if offset == offset_commit {
+				return Err(ErrorKind::TransactionWithSameOffsetAlreadyReceived(
+					offset_commit.to_hex(),
+				)
+				.into());
+			}
 		}
 	}
 

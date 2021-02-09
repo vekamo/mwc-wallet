@@ -12,6 +12,7 @@
 // limitations under the License.
 
 //! core::libtx specific tests
+use grin_wallet_libwallet::proof::crypto::Hex;
 use grin_wallet_libwallet::Context;
 use grin_wallet_util::grin_core::core::transaction;
 use grin_wallet_util::grin_core::libtx::{aggsig, proof};
@@ -503,4 +504,33 @@ fn test_rewind_range_proof() {
 	)
 	.unwrap();
 	assert!(proof_info.is_none());
+}
+
+#[test]
+fn blind_factor() {
+	let receiver_keychain = ExtKeychain::from_random_seed(true).unwrap();
+
+	// This is the kernel offset that we use to split the key
+	// Summing these at the block level prevents the
+	// kernels from being used to reconstruct (or identify) individual transactions
+	let _kernel_offset = SecretKey::new(&mut thread_rng());
+
+	let bytes_32: [u8; 32] = [
+		2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+		27, 28, 29, 30, 31, 32, 33,
+	];
+
+	let kernel_offset = BlindingFactor::from_slice(&bytes_32);
+	let offset_skey = kernel_offset.secret_key().unwrap();
+	let offset_commit = receiver_keychain.secp().commit(0, offset_skey).unwrap();
+	//the hex string of the offset commit should remains the same.
+	let mut i = 0;
+
+	while i < 5 {
+		assert_eq!(
+			offset_commit.to_hex(),
+			"08460a7b966efffb36946f6dc3c17ff73ad789fc1c2df43c1258039ca2f9a1e3e6"
+		);
+		i = i + 1;
+	}
 }

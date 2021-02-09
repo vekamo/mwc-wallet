@@ -256,6 +256,7 @@ pub trait OwnerRpcV2: Sync + Send {
 				  "id": 0,
 				  "input_commits": [],
 				  "kernel_excess": "099beea8f814120ac8c559027e55cb26986ae40e279e3093a7d4a52d827a23f0e7",
+				  "kernel_offset": null,
 				  "kernel_lookup_min_height": 1,
 				  "messages": null,
 				  "num_inputs": 0,
@@ -282,6 +283,7 @@ pub trait OwnerRpcV2: Sync + Send {
 				  "id": 1,
 				  "input_commits": [],
 				  "kernel_excess": "09f7677adc7caf8bb44a4ee27d27dfe9ffa1010847a18b182bbb7100bb02f9259e",
+				  "kernel_offset": null,
 				  "kernel_lookup_min_height": 2,
 				  "messages": null,
 				  "num_inputs": 0,
@@ -2986,6 +2988,7 @@ where
 				tx.messages.clone(),
 				tx.stored_tx.clone(),
 				tx.kernel_excess.clone(),
+				tx.kernel_offset.clone(),
 				tx.kernel_lookup_min_height.clone(),
 				tx.payment_proof.clone(),
 				tx.input_commits

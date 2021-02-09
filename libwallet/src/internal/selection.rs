@@ -431,6 +431,11 @@ where
 	t.output_commits = commit_ped;
 	t.messages = messages;
 	t.ttl_cutoff_height = slate.ttl_cutoff_height;
+	//add the offset to the database tx record.
+	let offset_skey = slate.tx.offset.secret_key()?;
+	let offset_commit = keychain.secp().commit(0, offset_skey)?;
+	t.kernel_offset = Some(offset_commit);
+
 	if t.ttl_cutoff_height == Some(0) {
 		t.ttl_cutoff_height = None;
 	}

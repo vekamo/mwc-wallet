@@ -975,6 +975,10 @@ pub struct TxLogEntry {
 	#[serde(with = "secp_ser::option_commitment_serde")]
 	#[serde(default)]
 	pub kernel_excess: Option<pedersen::Commitment>,
+	/// Associated kernel offset, for later lookup if necessary
+	#[serde(with = "secp_ser::option_commitment_serde")]
+	#[serde(default)]
+	pub kernel_offset: Option<pedersen::Commitment>,
 	/// Height reported when transaction was created, if lookup
 	/// of kernel is necessary
 	#[serde(default)]
@@ -1036,6 +1040,7 @@ impl TxLogEntry {
 			messages: None,
 			stored_tx: None,
 			kernel_excess: None,
+			kernel_offset: None,
 			kernel_lookup_min_height: None,
 			payment_proof: None,
 			input_commits: vec![],
@@ -1063,6 +1068,7 @@ impl TxLogEntry {
 		messages: Option<ParticipantMessages>,
 		stored_tx: Option<String>,
 		kernel_excess: Option<pedersen::Commitment>,
+		kernel_offset: Option<pedersen::Commitment>,
 		kernel_lookup_min_height: Option<u64>,
 		payment_proof: Option<StoredProofInfo>,
 		input_commits: Vec<pedersen::Commitment>,
@@ -1087,6 +1093,7 @@ impl TxLogEntry {
 			messages,
 			stored_tx,
 			kernel_excess,
+			kernel_offset,
 			kernel_lookup_min_height,
 			payment_proof,
 			input_commits,

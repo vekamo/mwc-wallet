@@ -398,6 +398,9 @@ pub struct TxLogEntryAPI {
 	#[serde(with = "secp_ser::option_commitment_serde")]
 	#[serde(default)]
 	pub kernel_excess: Option<pedersen::Commitment>,
+	#[serde(with = "secp_ser::option_commitment_serde")]
+	#[serde(default)]
+	pub kernel_offset: Option<pedersen::Commitment>,
 	#[serde(default)]
 	pub kernel_lookup_min_height: Option<u64>,
 	#[serde(default)]
@@ -431,6 +434,7 @@ impl TxLogEntryAPI {
 			messages: tle.messages.clone(),
 			stored_tx: tle.stored_tx.clone(),
 			kernel_excess: tle.kernel_excess.clone(),
+			kernel_offset: tle.kernel_offset.clone(),
 			kernel_lookup_min_height: tle.kernel_lookup_min_height.clone(),
 			payment_proof: tle.payment_proof.clone(),
 			input_commits: tle.input_commits.iter().map(|c| to_hex(&c.0)).collect(),

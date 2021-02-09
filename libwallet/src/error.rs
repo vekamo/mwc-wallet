@@ -175,6 +175,13 @@ pub enum ErrorKind {
 	#[fail(display = "Transaction {} has already been received", _0)]
 	TransactionAlreadyReceived(String),
 
+	/// Transaction with same offset has already been received
+	#[fail(
+		display = "Transaction  with offset hex string {} has already been received",
+		_0
+	)]
+	TransactionWithSameOffsetAlreadyReceived(String),
+
 	/// Attempt to repost a transaction that's not completed and stored
 	#[fail(display = "Transaction building not completed: {}", _0)]
 	TransactionBuildingNotCompleted(u32),
