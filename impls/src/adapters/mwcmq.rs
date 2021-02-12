@@ -1124,6 +1124,7 @@ impl MWCMQSBroker {
 		}
 
 		cloned_running.store(false, Ordering::SeqCst);
+		reset_mwcmqs_brocker();
 	}
 
 	fn stop(&self) {
