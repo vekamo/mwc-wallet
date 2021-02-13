@@ -356,7 +356,14 @@ where
 		StateId::BuyerPostingSecondaryToMultisigAccount
 	}
 	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
-		Some(StateEtaInfo::new("Post BTC to lock account").end_time(swap.get_time_start_lock()))
+		let name = match self.swap_api.get_secondary_lock_address(swap) {
+			Ok(address) => format!(
+				"Send {} to lock account {}",
+				swap.secondary_currency, address
+			),
+			Err(_) => format!("Send {} to lock account", swap.secondary_currency),
+		};
+		Some(StateEtaInfo::new(&name).end_time(swap.get_time_start_lock()))
 	}
 	fn is_cancellable(&self) -> bool {
 		true
@@ -428,8 +435,9 @@ where
 				// Posted more then expected. We are not going forward. Deal is broken, probably it is a mistake. We are cancelling the trade because of that.
 				if chain_amount > swap.secondary_amount {
 					swap.add_journal_message(format!(
-						"{}. Expected {} {}, but get {} {}",
+						"{} {}. Expected {} {}, but get {} {}",
 						JOURNAL_CANCELLED_BYER_LOCK_TOO_MUCH_FUNDS,
+						self.swap_api.get_secondary_lock_address(swap)?,
 						swap.secondary_currency
 							.amount_to_hr_string(swap.secondary_amount, true),
 						swap.secondary_currency,
@@ -442,7 +450,11 @@ where
 
 				debug_assert!(chain_amount == swap.secondary_amount);
 
-				swap.add_journal_message("Funds have been posted to lock account".to_string());
+				swap.add_journal_message(format!(
+					"{} have been posted to lock account {}",
+					swap.secondary_currency,
+					self.swap_api.get_secondary_lock_address(swap)?
+				));
 				Ok(StateProcessRespond::new(
 					StateId::BuyerWaitingForLockConfirmations,
 				))
@@ -464,23 +476,24 @@ where
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// State BuyerWaitingForLockConfirmations
-pub struct BuyerWaitingForLockConfirmations<K>
+pub struct BuyerWaitingForLockConfirmations<'a, K>
 where
 	K: Keychain,
 {
 	keychain: Arc<K>,
+	swap_api: Arc<Box<dyn SwapApi<K> + 'a>>,
 }
-impl<K> BuyerWaitingForLockConfirmations<K>
+impl<'a, K> BuyerWaitingForLockConfirmations<'a, K>
 where
 	K: Keychain,
 {
 	/// Create new instance
-	pub fn new(keychain: Arc<K>) -> Self {
-		Self { keychain }
+	pub fn new(keychain: Arc<K>, swap_api: Arc<Box<dyn SwapApi<K> + 'a>>) -> Self {
+		Self { keychain, swap_api }
 	}
 }
 
-impl<K> State for BuyerWaitingForLockConfirmations<K>
+impl<'a, K> State for BuyerWaitingForLockConfirmations<'a, K>
 where
 	K: Keychain,
 {
@@ -527,13 +540,14 @@ where
 
 				if tx_conf.secondary_lock_amount < swap.secondary_amount {
 					swap.add_journal_message(format!(
-						"Waiting for posting {} {} to secondary lock account",
+						"Waiting for posting {} {} to lock account {}",
 						swap.secondary_currency.amount_to_hr_string(
 							swap.secondary_amount
 								.saturating_sub(tx_conf.secondary_lock_amount),
 							true
 						),
-						swap.secondary_currency
+						swap.secondary_currency,
+						self.swap_api.get_secondary_lock_address(swap)?
 					));
 					// Need to deposit more. Something happens? Likely will be cancelled because of timeout.
 					return Ok(StateProcessRespond::new(
@@ -573,6 +587,7 @@ where
 								mwc_required: swap.mwc_confirmations,
 								mwc_actual: mwc_lock,
 								currency: swap.secondary_currency,
+								address: self.swap_api.get_secondary_lock_address(swap)?,
 								sec_expected_to_be_posted: 0,
 								sec_required: swap.secondary_confirmations,
 								sec_actual: tx_conf.secondary_lock_conf,
@@ -986,7 +1001,7 @@ impl State for BuyerWaitForRedeemMwcConfirmations {
 		StateId::BuyerWaitForRedeemMwcConfirmations
 	}
 	fn get_eta(&self, _swap: &Swap) -> Option<StateEtaInfo> {
-		Some(StateEtaInfo::new("Wait For Redeem Tx Confirmations"))
+		Some(StateEtaInfo::new("Wait For MWC Redeem Tx Confirmations"))
 	}
 	fn is_cancellable(&self) -> bool {
 		false
@@ -1009,7 +1024,7 @@ impl State for BuyerWaitForRedeemMwcConfirmations {
 				if conf >= swap.mwc_confirmations {
 					// We are done
 					swap.add_journal_message(
-						"Redeem transacton has enough confirnation. The Swap trade is finished"
+						"MWC redeem transaction has enough confirmation. The Swap trade is finished"
 							.to_string(),
 					);
 					return Ok(StateProcessRespond::new(StateId::BuyerSwapComplete));
@@ -1171,8 +1186,11 @@ impl State for BuyerWaitingForRefundTime {
 	}
 	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
 		Some(
-			StateEtaInfo::new("Waiting for Secondary to unlock")
-				.start_time(swap.get_time_btc_lock_publish()),
+			StateEtaInfo::new(&format!(
+				"Waiting for {} to unlock",
+				swap.secondary_currency
+			))
+			.start_time(swap.get_time_btc_lock_publish()),
 		)
 	}
 	fn is_cancellable(&self) -> bool {
@@ -1211,6 +1229,7 @@ impl State for BuyerWaitingForRefundTime {
 				Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime)
 					.action(Action::WaitingForBtcRefund {
 						currency: swap.secondary_currency,
+						address: swap.unwrap_buyer()?.unwrap_or("XXXXX".to_string()),
 						required: time_limit as u64,
 						current: cur_time as u64,
 					})
@@ -1264,8 +1283,14 @@ where
 	}
 	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
 		Some(
-			StateEtaInfo::new("Post Refund for Secondary")
-				.start_time(swap.get_time_btc_lock_publish()),
+			StateEtaInfo::new(&format!(
+				"Post {} Refund to address {}",
+				swap.secondary_currency,
+				swap.unwrap_buyer()
+					.unwrap()
+					.unwrap_or("XXXXXXX".to_string())
+			))
+			.start_time(swap.get_time_btc_lock_publish()),
 		)
 	}
 	fn is_cancellable(&self) -> bool {
@@ -1300,7 +1325,10 @@ where
 
 				Ok(
 					StateProcessRespond::new(StateId::BuyerPostingRefundForSecondary).action(
-						Action::BuyerPublishSecondaryRefundTx(swap.secondary_currency),
+						Action::BuyerPublishSecondaryRefundTx {
+							currency: swap.secondary_currency,
+							address: swap.unwrap_buyer()?.unwrap_or("XXXXXX".to_string()),
+						},
 					),
 				)
 			}
@@ -1314,7 +1342,11 @@ where
 					true,
 				)?;
 				swap.posted_refund = Some(swap::get_cur_time());
-				swap.add_journal_message(format!("{} refund is posted", swap.secondary_currency));
+				swap.add_journal_message(format!(
+					"{} refund is posted to {}",
+					swap.secondary_currency,
+					swap.unwrap_buyer()?.unwrap_or("XXXXXX".to_string())
+				));
 				Ok(StateProcessRespond::new(
 					StateId::BuyerWaitingForRefundConfirmations,
 				))
@@ -1363,8 +1395,14 @@ where
 	fn get_state_id(&self) -> StateId {
 		StateId::BuyerWaitingForRefundConfirmations
 	}
-	fn get_eta(&self, _swap: &Swap) -> Option<StateEtaInfo> {
-		Some(StateEtaInfo::new("Wait for Refund confirmations"))
+	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
+		Some(StateEtaInfo::new(&format!(
+			"Wait for {} Refund confirmations, address {}",
+			swap.secondary_currency,
+			swap.unwrap_buyer()
+				.unwrap()
+				.unwrap_or("XXXXXXX".to_string())
+		)))
 	}
 	fn is_cancellable(&self) -> bool {
 		false
@@ -1413,6 +1451,7 @@ where
 							name: format!("{} Refund", swap.secondary_currency),
 							expected_to_be_posted: 0,
 							currency: swap.secondary_currency,
+							address: swap.unwrap_buyer()?.unwrap_or("XXXXX".to_string()),
 							required: swap.secondary_confirmations,
 							actual: tx_conf.secondary_refund_conf.unwrap_or(0),
 						},
@@ -1447,8 +1486,12 @@ impl State for BuyerCancelledRefunded {
 	fn get_state_id(&self) -> StateId {
 		StateId::BuyerCancelledRefunded
 	}
-	fn get_eta(&self, _swap: &Swap) -> Option<StateEtaInfo> {
-		Some(StateEtaInfo::new("Swap is cancelled, refund is redeemed"))
+	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
+		Some(StateEtaInfo::new(&format!(
+			"Swap is cancelled, {} refund is redeemed to address {}",
+			swap.secondary_currency,
+			swap.unwrap_buyer().unwrap().unwrap_or("XXXXXX".to_string())
+		)))
 	}
 	fn is_cancellable(&self) -> bool {
 		false

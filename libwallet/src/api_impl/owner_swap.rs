@@ -956,7 +956,10 @@ where
 
 			process_respond = fsm.process(Input::Execute, swap, &context, &tx_conf)?;
 		}
-		Action::SellerPublishTxSecondaryRedeem(_currency) => {
+		Action::SellerPublishTxSecondaryRedeem {
+			currency: _,
+			address: _,
+		} => {
 			process_respond = fsm.process(Input::Execute, swap, &context, &tx_conf)?;
 		}
 		Action::BuyerPublishMwcRedeemTx => {
@@ -1004,7 +1007,10 @@ where
 				)?;
 			}
 		}
-		Action::BuyerPublishSecondaryRefundTx(_currency) => {
+		Action::BuyerPublishSecondaryRefundTx {
+			currency: _,
+			address: _,
+		} => {
 			if swap.unwrap_buyer()?.is_none() {
 				return Err(ErrorKind::Generic(format!(
 					"Please specify '--buyer_refund_address' {} address for your refund",

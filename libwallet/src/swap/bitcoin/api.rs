@@ -664,10 +664,13 @@ where
 				Box::new(seller_swap::SellerWaitingForAcceptanceMessage::new(
 					kc.clone(),
 				)),
-				Box::new(seller_swap::SellerWaitingForBuyerLock::new()),
+				Box::new(seller_swap::SellerWaitingForBuyerLock::new(
+					swap_api.clone(),
+				)),
 				Box::new(seller_swap::SellerPostingLockMwcSlate::new(nc.clone())),
 				Box::new(seller_swap::SellerWaitingForLockConfirmations::new(
 					kc.clone(),
+					swap_api.clone(),
 				)),
 				Box::new(seller_swap::SellerWaitingForInitRedeemMessage::new(
 					kc.clone(),
@@ -705,6 +708,7 @@ where
 				)),
 				Box::new(buyer_swap::BuyerWaitingForLockConfirmations::new(
 					kc.clone(),
+					swap_api.clone(),
 				)),
 				Box::new(buyer_swap::BuyerSendingInitRedeemMessage::new()),
 				Box::new(buyer_swap::BuyerWaitingForRespondRedeemMessage::new(

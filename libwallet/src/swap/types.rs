@@ -744,7 +744,12 @@ pub enum Action {
 	/// Seller Publishing an MWC lock transaction to the network
 	SellerPublishMwcLockTx,
 	/// Seller Publishing BTC redeem transaction to the network
-	SellerPublishTxSecondaryRedeem(Currency),
+	SellerPublishTxSecondaryRedeem {
+		/// Type of secondary currency (BTC)
+		currency: Currency,
+		/// Redeem Address
+		address: String,
+	},
 	/// Deposit secondary currency
 	DepositSecondary {
 		/// Type of currency (BTC)
@@ -771,6 +776,8 @@ pub enum Action {
 		expected_to_be_posted: u64,
 		/// Type of currency (BTC)
 		currency: Currency,
+		/// Address to deposit
+		address: String,
 		/// Required number of confirmations
 		required: u64,
 		/// Actual number of confirmations
@@ -784,6 +791,8 @@ pub enum Action {
 		mwc_actual: u64,
 		/// Type of secondary currency (BTC)
 		currency: Currency,
+		/// Address to deposit
+		address: String,
 		/// Expected amount to be posted
 		sec_expected_to_be_posted: u64,
 		/// Required number of confirmations for secondary
@@ -798,7 +807,7 @@ pub enum Action {
 		/// Locking height
 		lock_height: u64,
 	},
-	/// Wait for the Grin redeem tx to be mined
+	/// Wait for the MWC redeem tx to be mined
 	WaitForMwcRefundUnlock {
 		/// Current mwc tip height
 		mwc_tip: u64,
@@ -813,12 +822,18 @@ pub enum Action {
 	SellerPublishMwcRefundTx,
 
 	/// Buyer publishing refund transaction
-	BuyerPublishSecondaryRefundTx(Currency),
-
+	BuyerPublishSecondaryRefundTx {
+		/// Type of currency (BTC)
+		currency: Currency,
+		/// Address for refund
+		address: String,
+	},
 	/// Waiting for btc refund to pass through
 	WaitingForBtcRefund {
 		/// Type of currency (BTC)
 		currency: Currency,
+		/// Address for refund
+		address: String,
 		/// Required time (tiemstamp)
 		required: u64,
 		/// Current (tiemstamp)
@@ -843,10 +858,16 @@ impl Action {
 			| Action::BuyerSendInitRedeemMessage(_)
 			| Action::SellerSendRedeemMessage(_)
 			| Action::SellerPublishMwcLockTx
-			| Action::SellerPublishTxSecondaryRedeem(_)
+			| Action::SellerPublishTxSecondaryRedeem {
+				currency: _,
+				address: _,
+			}
 			| Action::BuyerPublishMwcRedeemTx
 			| Action::SellerPublishMwcRefundTx
-			| Action::BuyerPublishSecondaryRefundTx(_) => true,
+			| Action::BuyerPublishSecondaryRefundTx {
+				currency: _,
+				address: _,
+			} => true,
 			_ => false,
 		}
 	}
@@ -864,7 +885,10 @@ impl Action {
 			Action::BuyerWaitingForRedeemMessage => "BuyerWaitingForRedeemMessage",
 			Action::WaitingForTradeBackup => "WaitingForTradeBackup",
 			Action::SellerPublishMwcLockTx => "SellerPublishMwcLockTx",
-			Action::SellerPublishTxSecondaryRedeem(_) => "SellerPublishTxSecondaryRedeem",
+			Action::SellerPublishTxSecondaryRedeem {
+				currency: _,
+				address: _,
+			} => "SellerPublishTxSecondaryRedeem",
 			Action::DepositSecondary {
 				currency: _,
 				amount: _,
@@ -879,6 +903,7 @@ impl Action {
 				name: _,
 				expected_to_be_posted: _,
 				currency: _,
+				address: _,
 				required: _,
 				actual: _,
 			} => "WaitForSecondaryConfirmations",
@@ -886,6 +911,7 @@ impl Action {
 				mwc_required: _,
 				mwc_actual: _,
 				currency: _,
+				address: _,
 				sec_expected_to_be_posted: _,
 				sec_required: _,
 				sec_actual: _,
@@ -900,9 +926,13 @@ impl Action {
 			} => "WaitForMwcRefundUnlock",
 			Action::BuyerPublishMwcRedeemTx => "BuyerPublishMwcRedeemTx",
 			Action::SellerPublishMwcRefundTx => "SellerPublishMwcRefundTx",
-			Action::BuyerPublishSecondaryRefundTx(_) => "BuyerPublishSecondaryRefundTx",
+			Action::BuyerPublishSecondaryRefundTx {
+				currency: _,
+				address: _,
+			} => "BuyerPublishSecondaryRefundTx",
 			Action::WaitingForBtcRefund {
 				currency: _,
+				address: _,
 				required: _,
 				current: _,
 			} => "WaitingForBtcRefund",
@@ -928,8 +958,8 @@ impl fmt::Display for Action {
 			}
 			Action::WaitingForTradeBackup => "Waiting when backup will be done".to_string(),
 			Action::SellerPublishMwcLockTx => "Posting MWC lock transaction".to_string(),
-			Action::SellerPublishTxSecondaryRedeem(currency) => {
-				format!("Posting {} redeem transaction", currency)
+			Action::SellerPublishTxSecondaryRedeem { currency , address } => {
+				format!("Posting {} redeem transaction to {}", currency, address)
 			}
 			Action::DepositSecondary {
 				currency,
@@ -953,21 +983,23 @@ impl fmt::Display for Action {
 				name,
 				expected_to_be_posted,
 				currency,
+				address,
 				required,
 				actual,
 			} => {
 				if *expected_to_be_posted == 0 {
-					format!("{}, waiting for confirmations. {} {}/{}", name, currency, actual, required)
+					format!("{}, waiting for confirmations for {} address {} {}/{}", name, currency, address, actual, required)
 				}
 				else {
 					let posted_str = currency.amount_to_hr_string(*expected_to_be_posted, true);
-					format!("{}, waiting for {} {} to be posted", name, posted_str, currency)
+					format!("{}, waiting for {} {} to be sent to {}", name, posted_str, currency, address)
 				}
 			}
 			Action::WaitForLockConfirmations {
 				mwc_required,
 				mwc_actual,
 				currency,
+				address,
 				sec_expected_to_be_posted,
 				sec_required,
 				sec_actual,
@@ -981,18 +1013,18 @@ impl fmt::Display for Action {
 
 				let sec_str = if *sec_expected_to_be_posted==0 {
 					if sec_actual.unwrap() == 0 {
-						format!("{} are in memory pool", currency)
+						format!("{} {} are in memory pool", currency, address)
 					}
 					else if sec_actual.unwrap() >= *sec_required {
-						format!("{} are locked", currency)
+						format!("{} {}, are locked", currency, address)
 					}
 					else {
-						format!("{} {}/{}", currency, sec_actual.unwrap(), sec_required)
+						format!("{} {}, {}/{}", currency, address, sec_actual.unwrap(), sec_required)
 					}
 				}
 				else {
 					let sec_posted_str = currency.amount_to_hr_string(*sec_expected_to_be_posted, true);
-					format!("Waiting for {} {} to be posted", sec_posted_str, currency)
+					format!("Waiting for {} {} to be sent to {}", sec_posted_str, currency, address)
 				};
 
 				format!("Locking, waiting for confirmations. {}; {}", mwc_str, sec_str)
@@ -1012,18 +1044,19 @@ impl fmt::Display for Action {
 			},
 			Action::BuyerPublishMwcRedeemTx => "Posting MWC redeem transaction".to_string(),
 			Action::SellerPublishMwcRefundTx => "Posting MWC refund transaction".to_string(),
-			Action::BuyerPublishSecondaryRefundTx(currency) => {
-				format!("Posting {} refund transaction", currency)
+			Action::BuyerPublishSecondaryRefundTx{ currency , address } => {
+				format!("Sending {} refund to {}", currency, address)
 			}
 			Action::WaitingForBtcRefund {
 				currency,
+				address,
 				required,
 				current,
 			} => {
 				let time_left_sec = required - current + 30; // 30 seconds for rounding
 				let hours = time_left_sec / 3600;
 				let minutes = (time_left_sec % 3600) / 60;
-				format!("Waiting for locked {} to be refunded. ({} hour{} and {} minute{} remaining)", currency, hours, if hours==1 {""} else {"s"} , minutes, if minutes==1 {""} else {"s"} )
+				format!("Waiting for locked {} to be refunded to {}. ({} hour{} and {} minute{} remaining)", currency, address, hours, if hours==1 {""} else {"s"} , minutes, if minutes==1 {""} else {"s"} )
 			}
 		};
 		write!(f, "{}", disp)

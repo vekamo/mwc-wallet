@@ -285,15 +285,31 @@ impl<K: Keychain> State for SellerWaitingForAcceptanceMessage<K> {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// SellerWaitingForBuyerLock state
-pub struct SellerWaitingForBuyerLock {}
-impl SellerWaitingForBuyerLock {
+pub struct SellerWaitingForBuyerLock<'a, K>
+where
+	K: Keychain + 'a,
+{
+	swap_api: Arc<Box<dyn SwapApi<K> + 'a>>,
+	phantom: PhantomData<&'a K>,
+}
+
+impl<'a, K> SellerWaitingForBuyerLock<'a, K>
+where
+	K: Keychain + 'a,
+{
 	/// Create new instance
-	pub fn new() -> Self {
-		Self {}
+	pub fn new(swap_api: Arc<Box<dyn SwapApi<K> + 'a>>) -> Self {
+		Self {
+			swap_api,
+			phantom: PhantomData,
+		}
 	}
 }
 
-impl State for SellerWaitingForBuyerLock {
+impl<'a, K> State for SellerWaitingForBuyerLock<'a, K>
+where
+	K: Keychain + 'a,
+{
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerWaitingForBuyerLock
 	}
@@ -301,10 +317,15 @@ impl State for SellerWaitingForBuyerLock {
 		if swap.seller_lock_first {
 			None
 		} else {
-			Some(
-				StateEtaInfo::new("Waiting For Buyer to start Locking coins")
-					.end_time(swap.get_time_start_lock()),
-			)
+			let name = match self.swap_api.get_secondary_lock_address(swap) {
+				Ok(address) => format!(
+					"Waiting For Buyer to send {} coins to {}",
+					swap.secondary_currency, address
+				),
+				Err(_) => format!("Post {} to lock account", swap.secondary_currency),
+			};
+
+			Some(StateEtaInfo::new(&name).end_time(swap.get_time_start_lock()))
 		}
 	}
 	fn is_cancellable(&self) -> bool {
@@ -351,8 +372,9 @@ impl State for SellerWaitingForBuyerLock {
 					if tx_conf.secondary_lock_amount > swap.secondary_amount {
 						// Posted too much, byer probably will cancel the deal, we are not going to lock the MWCs
 						swap.add_journal_message(format!(
-							"Cancelled because buyer posted funds greater than the agreed upon {} amount to the lock account",
-							swap.secondary_currency
+							"Cancelled because buyer sent funds greater than the agreed upon {} amount to the lock address {}",
+							swap.secondary_currency,
+							self.swap_api.get_secondary_lock_address(swap)?,
 						));
 						return Ok(StateProcessRespond::new(StateId::SellerCancelled));
 					}
@@ -360,17 +382,24 @@ impl State for SellerWaitingForBuyerLock {
 					if conf < 1 {
 						Ok(StateProcessRespond::new(StateId::SellerWaitingForBuyerLock)
 							.action(Action::WaitForSecondaryConfirmations {
-								name: "Buyer to lock funds".to_string(),
+								name: format!("Buyer to lock {}", swap.secondary_currency),
 								expected_to_be_posted: swap
 									.secondary_amount
 									.saturating_sub(tx_conf.secondary_lock_amount),
 								currency: swap.secondary_currency,
+								address: self
+									.swap_api
+									.get_secondary_lock_address(swap)
+									.unwrap_or("XXXXX".to_string()),
 								required: 1,
 								actual: conf,
 							})
 							.time_limit(time_limit))
 					} else {
-						swap.add_journal_message("Buyer start locking the funds".to_string());
+						swap.add_journal_message(format!(
+							"Buyer sent the funds to lock address {}",
+							self.swap_api.get_secondary_lock_address(swap)?
+						));
 						Ok(StateProcessRespond::new(StateId::SellerPostingLockMwcSlate))
 					}
 				}
@@ -522,24 +551,32 @@ where
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// State SellerWaitingForLockConfirmations
-pub struct SellerWaitingForLockConfirmations<K: Keychain> {
+pub struct SellerWaitingForLockConfirmations<'a, K: Keychain> {
 	keychain: Arc<K>,
+	swap_api: Arc<Box<dyn SwapApi<K> + 'a>>,
 }
-impl<K: Keychain> SellerWaitingForLockConfirmations<K> {
+impl<'a, K: Keychain> SellerWaitingForLockConfirmations<'a, K> {
 	/// Create a new instance
-	pub fn new(keychain: Arc<K>) -> Self {
-		Self { keychain }
+	pub fn new(keychain: Arc<K>, swap_api: Arc<Box<dyn SwapApi<K> + 'a>>) -> Self {
+		Self { keychain, swap_api }
 	}
 }
 
-impl<K: Keychain> State for SellerWaitingForLockConfirmations<K> {
+impl<'a, K: Keychain> State for SellerWaitingForLockConfirmations<'a, K> {
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerWaitingForLockConfirmations
 	}
 	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
+		let address_info = match self.swap_api.get_secondary_lock_address(swap) {
+			Ok(address) => format!(" {} lock address {}", swap.secondary_currency, address),
+			Err(_) => "".to_string(),
+		};
 		Some(
-			StateEtaInfo::new("Waiting for Lock funds confirmations")
-				.end_time(swap.get_time_message_redeem()),
+			StateEtaInfo::new(&format!(
+				"Waiting for Lock funds confirmations.{}",
+				address_info
+			))
+			.end_time(swap.get_time_message_redeem()),
 		)
 	}
 	fn is_cancellable(&self) -> bool {
@@ -614,6 +651,7 @@ impl<K: Keychain> State for SellerWaitingForLockConfirmations<K> {
 						mwc_required: swap.mwc_confirmations,
 						mwc_actual: mwc_lock,
 						currency: swap.secondary_currency,
+						address: self.swap_api.get_secondary_lock_address(swap)?,
 						sec_expected_to_be_posted: swap.secondary_amount
 							- tx_conf.secondary_lock_amount,
 						sec_required: swap.secondary_confirmations,
@@ -651,6 +689,7 @@ impl<K: Keychain> State for SellerWaitingForLockConfirmations<K> {
 						expected_to_be_posted: swap.secondary_amount
 							- tx_conf.secondary_lock_amount,
 						currency: swap.secondary_currency,
+						address: self.swap_api.get_secondary_lock_address(swap)?,
 						required: swap.secondary_confirmations,
 						actual: secondary_lock,
 					})
@@ -1165,8 +1204,12 @@ where
 	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
 		Some(
 			// Using script lock time as more pessimistic
-			StateEtaInfo::new("Post Secondary Redeem Transaction")
-				.end_time(swap.get_time_btc_lock_script() - swap.get_timeinterval_btc_lock()),
+			StateEtaInfo::new(&format!(
+				"Post {} Redeem Transaction, address {}",
+				swap.secondary_currency,
+				swap.unwrap_seller().unwrap_or(("XXXXXX".to_string(), 0)).0
+			))
+			.end_time(swap.get_time_btc_lock_script() - swap.get_timeinterval_btc_lock()),
 		)
 	}
 	fn is_cancellable(&self) -> bool {
@@ -1208,9 +1251,10 @@ where
 				Ok(
 					// Using script lock time for ETA as more pessimistic
 					StateProcessRespond::new(StateId::SellerRedeemSecondaryCurrency)
-						.action(Action::SellerPublishTxSecondaryRedeem(
-							swap.secondary_currency,
-						))
+						.action(Action::SellerPublishTxSecondaryRedeem {
+							currency: swap.secondary_currency,
+							address: swap.unwrap_seller()?.0,
+						})
 						.time_limit(
 							swap.get_time_btc_lock_script() - swap.get_timeinterval_btc_lock(),
 						),
@@ -1226,8 +1270,9 @@ where
 				debug_assert!(swap.secondary_data.unwrap_btc()?.redeem_tx.is_some());
 				swap.posted_redeem = Some(swap::get_cur_time());
 				swap.add_journal_message(format!(
-					"{} redeem transaction is posted",
-					swap.secondary_currency
+					"{} redeem transaction is sent, address {}",
+					swap.secondary_currency,
+					swap.unwrap_seller()?.0,
 				));
 				Ok(StateProcessRespond::new(
 					StateId::SellerWaitingForRedeemConfirmations,
@@ -1283,8 +1328,11 @@ where
 	fn get_state_id(&self) -> StateId {
 		StateId::SellerWaitingForRedeemConfirmations
 	}
-	fn get_eta(&self, _swap: &Swap) -> Option<StateEtaInfo> {
-		Some(StateEtaInfo::new("Wait For Redeem Tx Confirmations"))
+	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
+		Some(StateEtaInfo::new(&format!(
+			"Wait For {} Redeem Tx Confirmations",
+			swap.secondary_currency
+		)))
 	}
 	fn is_cancellable(&self) -> bool {
 		false
@@ -1341,6 +1389,7 @@ where
 							name: "Redeeming funds".to_string(),
 							expected_to_be_posted: 0,
 							currency: swap.secondary_currency,
+							address: swap.unwrap_seller()?.0,
 							required: swap.secondary_confirmations,
 							actual: tx_conf.secondary_redeem_conf.unwrap_or(0),
 						},
