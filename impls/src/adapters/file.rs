@@ -181,6 +181,13 @@ impl SlateGetter for PathToSlateGetter {
 							file_name, e
 						))
 					})?;
+					if content.len() < 3 {
+						return Err(ErrorKind::GenericError(format!(
+							"File {} is empty",
+							file_name
+						))
+						.into());
+					}
 					content
 				} else {
 					return Err(ErrorKind::GenericError(
