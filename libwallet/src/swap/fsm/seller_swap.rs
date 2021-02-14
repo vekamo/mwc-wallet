@@ -18,9 +18,10 @@ use super::state::{
 	JOURNAL_CANCELLED_BYER_LOCK_TOO_MUCH_FUNDS, JOURNAL_CANCELLED_BY_TIMEOUT,
 	JOURNAL_CANCELLED_BY_USER, JOURNAL_NOT_LOCKED,
 };
+use crate::swap::fsm::state;
 use crate::swap::fsm::state::{Input, State, StateEtaInfo, StateId, StateProcessRespond};
 use crate::swap::message::Message;
-use crate::swap::types::{Action, SwapTransactionsConfirmations};
+use crate::swap::types::{Action, Currency, SwapTransactionsConfirmations};
 use crate::swap::{swap, Context, ErrorKind, SellApi, Swap, SwapApi};
 use crate::NodeClient;
 use chrono::{Local, TimeZone};
@@ -1269,6 +1270,7 @@ where
 				)?;
 				debug_assert!(swap.secondary_data.unwrap_btc()?.redeem_tx.is_some());
 				swap.posted_redeem = Some(swap::get_cur_time());
+				swap.posted_secondary_height = Some(tx_conf.secondary_tip);
 				swap.add_journal_message(format!(
 					"{} redeem transaction is sent, address {}",
 					swap.secondary_currency,
@@ -1362,11 +1364,40 @@ where
 						return Ok(StateProcessRespond::new(StateId::SellerSwapComplete));
 					}
 
-					// If transaction in the memory pool fo a long time and fee is different  now, we should do a retry
+					// If transaction was published for a while ago and still in mem pool. we need to bump the fees.
+					// It is applicable to BTC only
+					if swap.secondary_currency == Currency::Btc && conf == 0 {
+						match swap.posted_secondary_height {
+							Some(h) => {
+								if h < tx_conf.secondary_tip
+									- state::SECONDARY_HEIGHT_TO_INCREASE_FEE
+								{
+									// we can bump the fees if there is enough amount. Tx redeem size is about 660 bytes. And we don't want to spend more then half of the BTC funds.
+									if swap.secondary_fee
+										* state::SECONDARY_INCREASE_FEE_K * 660.0
+										* 2.0 < swap.secondary_amount as f32
+									{
+										swap.secondary_fee *= state::SECONDARY_INCREASE_FEE_K;
+										swap.posted_secondary_height = None;
+										swap.posted_redeem = None;
+										swap.add_journal_message(format!(
+											"Fee for {} redeem transaction is increased. New fee is {} {}",
+											swap.secondary_currency,
+											swap.secondary_fee,
+											swap.secondary_currency.get_fee_units().0
+										));
+									}
+								}
+							}
+							None => (),
+						}
+					}
+
+					// If transaction in the memory pool for a long time or fee is different now, we should do a retry
 					if conf == 0
-						&& self.swap_api.is_secondary_tx_fee_changed(swap)?
-						&& swap.posted_redeem.unwrap_or(0)
-							< swap::get_cur_time() - super::state::POST_SECONDARY_RETRY_PERIOD
+						&& (self.swap_api.is_secondary_tx_fee_changed(swap)?
+							&& swap.posted_redeem.unwrap_or(0)
+								< swap::get_cur_time() - super::state::POST_SECONDARY_RETRY_PERIOD)
 					{
 						return Ok(StateProcessRespond::new(
 							StateId::SellerRedeemSecondaryCurrency,

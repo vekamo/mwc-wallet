@@ -125,6 +125,7 @@ impl SellApi {
 			posted_lock: None,
 			posted_redeem: None,
 			posted_refund: None,
+			posted_secondary_height: None,
 			journal: Vec::new(),
 			secondary_fee,
 			electrum_node_uri1,

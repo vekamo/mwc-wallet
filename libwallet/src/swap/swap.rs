@@ -133,6 +133,9 @@ pub struct Swap {
 	pub posted_redeem: Option<i64>,
 	/// timestamp when refund transaction was posted
 	pub posted_refund: Option<i64>,
+	/// At what height the secondary redeem transaction was posted. Secondary refund doesn't use
+	/// that because timing is not critical.
+	pub posted_secondary_height: Option<u64>,
 	/// Last error message if --check was failed. Note, error will be very generic
 	pub last_check_error: Option<String>,
 	/// Last error message if --process was failed. Note, error will be very generic

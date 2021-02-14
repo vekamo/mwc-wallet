@@ -127,14 +127,24 @@ impl TestBtcNodeClient {
 
 	/// Mine a new block. All oending transacitons will be included
 	pub fn mine_block(&self) {
+		self.mine_block_impl(true);
+	}
+
+	pub fn mine_block_no_pending(&self) {
+		self.mine_block_impl(false);
+	}
+
+	fn mine_block_impl(&self, include_pending: bool) {
 		let mut state = self.state.lock();
 		state.height += 1;
 		let height = state.height;
 
-		let pending = mem::replace(&mut state.pending, HashMap::new());
-		for (txid, tx) in pending {
-			state.tx_heights.insert(txid.clone(), height);
-			state.txs.insert(txid, tx);
+		if include_pending {
+			let pending = mem::replace(&mut state.pending, HashMap::new());
+			for (txid, tx) in pending {
+				state.tx_heights.insert(txid.clone(), height);
+				state.txs.insert(txid, tx);
+			}
 		}
 	}
 
@@ -142,6 +152,17 @@ impl TestBtcNodeClient {
 	pub fn mine_blocks(&self, count: u64) {
 		if count > 0 {
 			self.mine_block();
+			if count > 1 {
+				let mut state = self.state.lock();
+				state.height += count - 1;
+			}
+		}
+	}
+
+	/// Mine several blocks but not include any pending transactions.
+	pub fn mine_blocks_no_pending(&self, count: u64) {
+		if count > 0 {
+			self.mine_block_no_pending();
 			if count > 1 {
 				let mut state = self.state.lock();
 				state.height += count - 1;
@@ -229,9 +250,10 @@ impl BtcNodeClient for TestBtcNodeClient {
 		})?;
 
 		let txid = tx.txid();
+		/* It is expected, transaction repost does work, especially if fees are different...
 		if state.pending.contains_key(&txid) {
 			return Err(ErrorKind::ElectrumNodeClient("Already in mempool".into()));
-		}
+		}*/
 		if state.txs.contains_key(&txid) {
 			return Err(ErrorKind::ElectrumNodeClient("Already in chain".into()));
 		}

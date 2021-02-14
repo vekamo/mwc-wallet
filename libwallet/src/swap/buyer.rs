@@ -263,6 +263,7 @@ impl BuyApi {
 			posted_lock: None,
 			posted_redeem: None,
 			posted_refund: None,
+			posted_secondary_height: None,
 			journal: Vec::new(),
 			secondary_fee,
 			electrum_node_uri1: None, // User need to review the offer first. Then to electrumX uri can be updated

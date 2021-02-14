@@ -262,6 +262,7 @@
   "posted_lock": null,
   "posted_redeem": null,
   "posted_refund": null,
+  "posted_secondary_height": null,
   "last_check_error": null,
   "last_process_error": null,
   "journal": [

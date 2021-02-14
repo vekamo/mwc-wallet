@@ -119,6 +119,7 @@ mod tests {
 	use super::types::*;
 	use super::*;
 	use crate::swap::fsm::machine::StateMachine;
+	use crate::swap::fsm::state;
 	use crate::swap::fsm::state::{Input, StateId, StateProcessRespond};
 	use crate::swap::message::{SecondaryUpdate, Update};
 	use grin_core::global;
@@ -3386,6 +3387,16 @@ mod tests {
 				res.next_state_id,
 				StateId::BuyerWaitingForRefundConfirmations
 			);
+			// Check that fees will not be rised
+			let fee = buyer.swap.secondary_fee;
+			btc_nc.mine_blocks_no_pending(9);
+			swap::set_testing_cur_time(swap::get_cur_time() + 60 * 6);
+			let res = buyer.process(Input::Check).unwrap();
+			assert_eq!(
+				res.next_state_id,
+				StateId::BuyerWaitingForRefundConfirmations
+			);
+			assert_eq!(fee, buyer.swap.secondary_fee);
 
 			btc_nc.mine_blocks(1);
 			test_responds(
@@ -3923,7 +3934,7 @@ mod tests {
 		}
 
 		{
-			// BRANCH - what happens if chan will loose it's data
+			// BRANCH - what happens if chain will loose it's data
 			// Loss any of them should switch to cancellation
 			buyer.pushs();
 			seller.pushs();
@@ -4862,7 +4873,7 @@ mod tests {
 				StateId::SellerWaitingForRedeemConfirmations
 			);
 
-			swap::set_testing_cur_time(cur_time * 61 * 5);
+			swap::set_testing_cur_time(cur_time + 61 * 5);
 			let res = seller.process(Input::Check).unwrap();
 			assert_eq!(
 				res.next_state_id,
@@ -4872,6 +4883,92 @@ mod tests {
 			seller.swap.secondary_fee = 12.0;
 			let res = seller.process(Input::Check).unwrap();
 			assert_eq!(res.next_state_id, StateId::SellerRedeemSecondaryCurrency);
+
+			swap::set_testing_cur_time(cur_time);
+			seller.pops();
+		}
+
+		{
+			// BRANCH - check if seller's fee will be updated if Tx in mem pool for 5+ blocks
+			// Checking if resubmit works
+			seller.pushs();
+
+			let cur_time = swap::get_cur_time();
+
+			for _i in 0..3 {
+				let cur_time = swap::get_cur_time();
+				let start_fee = seller.swap.secondary_fee;
+
+				let res = seller.process(Input::Check).unwrap();
+				assert_eq!(
+					res.next_state_id,
+					StateId::SellerWaitingForRedeemConfirmations
+				);
+
+				btc_nc.mine_blocks_no_pending(3);
+				swap::set_testing_cur_time(cur_time + 60 * 3);
+				let res = seller.process(Input::Check).unwrap();
+				assert_eq!(
+					res.next_state_id,
+					StateId::SellerWaitingForRedeemConfirmations
+				);
+				assert_eq!(
+					start_fee,
+					seller
+						.swap
+						.secondary_data
+						.unwrap_btc()
+						.unwrap()
+						.tx_fee
+						.unwrap()
+				);
+
+				// Exactly 5 - still ok
+				btc_nc.mine_blocks_no_pending(2);
+				swap::set_testing_cur_time(cur_time + 60 * 1);
+				assert_eq!(
+					res.next_state_id,
+					StateId::SellerWaitingForRedeemConfirmations
+				);
+				assert_eq!(
+					start_fee,
+					seller
+						.swap
+						.secondary_data
+						.unwrap_btc()
+						.unwrap()
+						.tx_fee
+						.unwrap()
+				);
+
+				// 6 blocks - should trigger fees changes...
+				btc_nc.mine_block_no_pending();
+
+				let res = seller.process(Input::Check).unwrap();
+				assert_eq!(res.next_state_id, StateId::SellerRedeemSecondaryCurrency);
+				assert!(state::SECONDARY_INCREASE_FEE_K > 1.0);
+				assert!(start_fee < seller.swap.secondary_fee);
+				assert_eq!(
+					start_fee * state::SECONDARY_INCREASE_FEE_K,
+					seller.swap.secondary_fee
+				);
+
+				let res = seller.process(Input::Execute).unwrap();
+				assert_eq!(
+					res.next_state_id,
+					StateId::SellerWaitingForRedeemConfirmations
+				);
+				assert_eq!(
+					seller.swap.secondary_fee,
+					seller
+						.swap
+						.secondary_data
+						.unwrap_btc()
+						.unwrap()
+						.tx_fee
+						.unwrap()
+				);
+			}
 
 			swap::set_testing_cur_time(cur_time);
 			seller.pops();
