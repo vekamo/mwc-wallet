@@ -130,6 +130,7 @@ impl TestBtcNodeClient {
 		self.mine_block_impl(true);
 	}
 
+	/// Mine block and not include any pending transactions
 	pub fn mine_block_no_pending(&self) {
 		self.mine_block_impl(false);
 	}

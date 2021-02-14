@@ -37,7 +37,7 @@ pub const JOURNAL_NOT_LOCKED: &str = "Funds are not locking any more, switching 
 /// Height limit to bump the fees for BTC. If BTC Tx still in memory pool for so many blocks,
 /// we can increase the fees
 pub const SECONDARY_HEIGHT_TO_INCREASE_FEE: u64 = 5;
-// Multiplier to increase the fees. 20% per every 5 blocks if it still stale.
+/// Multiplier to increase the fees. 20% per every 5 blocks if it still stale.
 pub const SECONDARY_INCREASE_FEE_K: f32 = 1.2; // In case the Tx is not mined during 5 blocks, fee will be increased by 20%.
 
 /// StateId of the swap finite state machine.
