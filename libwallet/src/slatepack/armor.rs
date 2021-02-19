@@ -61,6 +61,9 @@ impl SlatepackArmor {
 		let henc = check_header(&header_bytes)?;
 		// Get the length of the header
 		let header_len = header_bytes.len() + 1;
+		if armor_bytes.len() <= header_len {
+			return Err(ErrorKind::SlatepackDecodeError("Bad armor header".to_string()).into());
+		}
 		// Skip the length of the header to read for the payload until the next period
 		let payload_bytes = armor_bytes[header_len as usize..]
 			.iter()
@@ -71,6 +74,9 @@ impl SlatepackArmor {
 		let payload_len = payload_bytes.len();
 		// Get footer bytes and verify them
 		let consumed_bytes = header_len + payload_len + 1;
+		if armor_bytes.len() <= consumed_bytes {
+			return Err(ErrorKind::SlatepackDecodeError("Bad armor content".to_string()).into());
+		}
 		let footer_bytes = armor_bytes[consumed_bytes as usize..]
 			.iter()
 			.take_while(|byte| **byte != b'.')
