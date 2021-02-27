@@ -973,7 +973,7 @@ where
 		let out_slate = Foreign::receive_tx(
 			self,
 			&slate_from,
-			None, // We don't want to change RPC. New fields required new version
+			sender.map(|p| ProvableAddress::from_tor_pub_key(&p).public_key), // We don't want to change RPC. New fields required new version
 			dest_acct_name.as_ref().map(String::as_str),
 			message,
 		)
@@ -1365,7 +1365,7 @@ macro_rules! doctest_helper_json_rpc_foreign_assert_response {
 			$init_tx,
 			$init_invoice_tx,
 			$compact_slate,
-			)
+		)
 		.unwrap()
 		.unwrap();
 
@@ -1374,8 +1374,8 @@ macro_rules! doctest_helper_json_rpc_foreign_assert_response {
 				"(left != right) \nleft: {}\nright: {}",
 				serde_json::to_string_pretty(&response).unwrap(),
 				serde_json::to_string_pretty(&expected_response).unwrap()
-				);
-			}
+			);
+		}
 	};
 }
 
