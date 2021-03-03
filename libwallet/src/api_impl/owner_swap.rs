@@ -141,6 +141,7 @@ where
 	let (outputs, total, amount, fee) = crate::internal::selection::select_coins_and_fee(
 		&mut **w,
 		params.mwc_amount,
+		&None,
 		height,
 		params.minimum_confirmations.unwrap_or(10),
 		500,

@@ -38,6 +38,7 @@ use crate::util::{self, secp};
 
 use rand::rngs::mock::StepRng;
 use rand::thread_rng;
+use grin_wallet_libwallet::IntegrityContext;
 
 pub const DB_DIR: &str = "db";
 pub const TX_SAVE_DIR: &str = "saved_txs";
@@ -50,6 +51,7 @@ const TX_LOG_ENTRY_PREFIX: u8 = b't';
 const TX_LOG_ID_PREFIX: u8 = b'i';
 const ACCOUNT_PATH_MAPPING_PREFIX: u8 = b'a';
 const LAST_SCANNED_BLOCK: u8 = b'm'; // pre v3.0 was l
+const INTEGRITY_CONTEXT_PREFIX: u8 = b'n';
 
 /// test to see if database files exist in the current directory. If so,
 /// use a DB backend for all operations
@@ -806,4 +808,58 @@ where
 		db.unwrap().commit()?;
 		Ok(())
 	}
+
+	fn save_integrity_context(
+		&mut self,
+		slate_id: &[u8],
+		ctx: &IntegrityContext,
+	) -> Result<(), Error> {
+		let ctx_key = to_key(
+			INTEGRITY_CONTEXT_PREFIX,
+			&mut slate_id.to_vec()
+		);
+		let (blind_xor_key, nonce_xor_key) = private_ctx_xor_keys(self.keychain(), slate_id)?;
+
+		let mut s_ctx = ctx.clone();
+		for i in 0..SECRET_KEY_SIZE {
+			s_ctx.sec_key0.0[i] ^= blind_xor_key[i];
+			s_ctx.sec_key1.0[i] ^= blind_xor_key[i];
+			s_ctx.sec_nonce0.0[i] ^= nonce_xor_key[i];
+			s_ctx.sec_nonce1.0[i] ^= nonce_xor_key[i];
+		}
+
+		self.db
+			.borrow()
+			.as_ref()
+			.unwrap()
+			.put_ser(&ctx_key, &s_ctx)?;
+		Ok(())
+	}
+
+	fn load_integrity_context(
+		&mut self,
+		slate_id: &[u8],
+	) -> Result< IntegrityContext, Error> {
+		let ctx_key = to_key(
+			INTEGRITY_CONTEXT_PREFIX,
+			&mut slate_id.to_vec()
+		);
+		let (blind_xor_key, nonce_xor_key) =
+			private_ctx_xor_keys(self.keychain(), slate_id)?;
+
+		let mut ctx: IntegrityContext = option_to_not_found(self.db.borrow().as_ref().unwrap().get_ser(&ctx_key), || {
+			format!("Slate id: {:x?}", slate_id.to_vec())
+		})?;
+
+		for i in 0..SECRET_KEY_SIZE {
+			ctx.sec_key0.0[i] ^= blind_xor_key[i];
+			ctx.sec_key1.0[i] ^= blind_xor_key[i];
+			ctx.sec_nonce0.0[i] ^= nonce_xor_key[i];
+			ctx.sec_nonce1.0[i] ^= nonce_xor_key[i];
+		}
+
+		Ok(ctx)
+	}
+
+
 }

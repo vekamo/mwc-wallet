@@ -30,6 +30,26 @@ use crate::slate::Slate;
 use crate::types::*;
 use grin_wallet_util::grin_util as util;
 use std::collections::HashMap;
+use std::sync::RwLock;
+
+lazy_static! {
+	/// Base fee units for all transaction. We want to be able to regulate them if in future
+	/// MWC price will go up, the base fee better to be adjustedable. Normally miners are
+	/// dictating the fees.
+	static ref BASE_FEE: RwLock<Option<u64>> = RwLock::new(None);
+}
+
+/// Set from config base fee units for all transaction.
+pub fn set_base_fee(base_fee: u64) {
+	let mut fee = BASE_FEE.write().unwrap();
+	(*fee).replace(base_fee);
+}
+
+/// Read base fee units
+pub fn get_base_fee() -> u64 {
+	BASE_FEE.read().unwrap().unwrap_or( grin_core::libtx::DEFAULT_BASE_FEE )
+}
+
 
 /// Initialize a transaction on the sender side, returns a corresponding
 /// libwallet transaction slate with the appropriate inputs selected,
@@ -41,6 +61,7 @@ pub fn build_send_tx<'a, T: ?Sized, C, K>(
 	keychain: &K,
 	keychain_mask: Option<&SecretKey>,
 	slate: &mut Slate,
+	min_fee: &Option<u64>,
 	minimum_confirmations: u64,
 	max_outputs: usize,
 	change_outputs: usize,
@@ -64,6 +85,7 @@ where
 		wallet,
 		keychain_mask,
 		slate.amount,
+		min_fee,
 		slate.height,
 		minimum_confirmations,
 		max_outputs,
@@ -478,6 +500,7 @@ pub fn select_send_tx<'a, T: ?Sized, C, K, B>(
 	wallet: &mut T,
 	keychain_mask: Option<&SecretKey>,
 	amount: u64,
+	min_fee: &Option<u64>,
 	current_height: u64,
 	minimum_confirmations: u64,
 	max_outputs: usize,
@@ -507,6 +530,7 @@ where
 	let (coins, _total, amount, fee) = select_coins_and_fee(
 		wallet,
 		amount,
+		min_fee,
 		current_height,
 		minimum_confirmations,
 		max_outputs,
@@ -534,9 +558,11 @@ where
 }
 
 /// Select outputs and calculating fee.
+/// fee - can be larger that standard fee, but never smaller.
 pub fn select_coins_and_fee<'a, T: ?Sized, C, K>(
 	wallet: &mut T,
 	amount: u64,
+	min_fee: &Option<u64>,
 	current_height: u64,
 	minimum_confirmations: u64,
 	max_outputs: usize,
@@ -589,7 +615,11 @@ where
 	// First attempt to spend without change
 	assert!(routputs >= 1); // Normally it is 1
 
-	let mut fee = tx_fee(coins.len(), routputs, 1, None);
+	let mut fee = tx_fee(coins.len(), routputs, 1, Some(get_base_fee()) );
+	if let Some(min_fee) = min_fee {
+		fee = std::cmp::max(*min_fee, fee);
+	}
+
 	let mut total: u64 = coins.iter().map(|c| c.value).sum();
 	let mut amount_with_fee = amount + fee;
 
@@ -599,7 +629,10 @@ where
 
 	// We need to add a change address or amount with fee is more than total
 	if total != amount_with_fee {
-		fee = tx_fee(coins.len(), num_outputs, 1, None);
+		fee = tx_fee(coins.len(), num_outputs, 1, Some(get_base_fee()));
+		if let Some(min_fee) = min_fee {
+			fee = std::cmp::max(*min_fee, fee);
+		}
 		amount_with_fee = amount + fee;
 
 		// Here check if we have enough outputs for the amount including fee otherwise
@@ -623,12 +656,15 @@ where
 				change_output_minimum_confirmations,
 			)
 			.1;
-			fee = tx_fee(coins.len(), num_outputs, 1, None);
+			fee = tx_fee(coins.len(), num_outputs, 1, Some(get_base_fee()));
+			if let Some(min_fee) = min_fee {
+				fee = std::cmp::max(*min_fee, fee);
+			}
 			total = coins.iter().map(|c| c.value).sum();
 			amount_with_fee = amount + fee;
 
 			// Checking if new solution is better (has more outputs)
-			// Don't cheking outputs limit because light overcounting is fine
+			// Don't checking outputs limit because light overcounting is fine
 			if coins.len() <= coins_len {
 				break;
 			}
@@ -778,7 +814,7 @@ where
 		.collect::<Vec<OutputData>>();
 
 	match outputs {
-		// User specify outputs to use. It is caller responsibility to make sure  that anount is enough.
+		// User specify outputs to use. It is caller responsibility to make sure that amount is enough.
 		// we are not adding more outputs to satisfy amount.
 		Some(outputs) => {
 			eligible = eligible

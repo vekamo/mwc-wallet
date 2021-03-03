@@ -410,7 +410,7 @@ where
 			)?;
 		}
 
-		foreign::receive_tx(
+		let (slate, _context) = foreign::receive_tx(
 			&mut **w,
 			(&self.keychain_mask).as_ref(),
 			slate,
@@ -421,7 +421,8 @@ where
 			message,
 			self.doctest_mode,
 			true,
-		)
+		)?;
+		Ok(slate)
 	}
 
 	/// Finalizes an invoice transaction initiated by this wallet's Owner api.

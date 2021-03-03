@@ -98,6 +98,8 @@ pub use types::{
 
 pub use api_impl::foreign::{get_receive_account, set_receive_account};
 
+pub use api_impl::owner_libp2p::IntegrityContext;
+
 /// Helper for taking a lock on the wallet instance
 #[macro_export]
 macro_rules! wallet_lock {

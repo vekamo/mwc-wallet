@@ -3383,7 +3383,7 @@ pub fn run_doctest_owner(
 				true,
 				false,
 			)
-			.unwrap();
+			.unwrap().0;
 			w2.close().unwrap();
 		}
 		// Spit out slate for input to finalize_tx

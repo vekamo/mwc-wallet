@@ -20,12 +20,12 @@ failure = "0.1"
 failure_derive = "0.1"
 
 # For Release
-grin_core = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
-grin_keychain = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
-grin_chain = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
-grin_util = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
-grin_api = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
-grin_store = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
+#grin_core = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
+#grin_keychain = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
+#grin_chain = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
+#grin_util = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
+#grin_api = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
+#grin_store = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
 
 # For bleeding edge
 #grin_core = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
@@ -36,12 +36,12 @@ grin_store = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
 #grin_store = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
 
 # For local testing
-#grin_core = { path = "../../mwc-node/core"}
-#grin_keychain = { path = "../../mwc-node/keychain"}
-#grin_chain = { path = "../../mwc-node/chain"}
-#grin_util = { path = "../../mwc-node/util"}
-#grin_api = { path = "../../mwc-node/api"}
-#grin_store = { path = "../../mwc-node/store"}
+grin_core = { path = "../../mwc-node/core"}
+grin_keychain = { path = "../../mwc-node/keychain"}
+grin_chain = { path = "../../mwc-node/chain"}
+grin_util = { path = "../../mwc-node/util"}
+grin_api = { path = "../../mwc-node/api"}
+grin_store = { path = "../../mwc-node/store"}
 
 [dev-dependencies]
 pretty_assertions = "0.5.1"

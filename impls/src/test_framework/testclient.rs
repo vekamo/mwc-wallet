@@ -240,7 +240,7 @@ where
 						body: serde_json::to_string(&format!("Error: {}", e)).unwrap(),
 					})
 				}
-				Ok(s) => s,
+				Ok((s,_context)) => s,
 			}
 		};
 

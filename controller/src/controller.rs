@@ -394,6 +394,7 @@ impl<L, C, K> Controller<L, C, K>
 					late_lock: Some(false),
 					// other waller recipient for encrypted slatepack.
 					slatepack_recipient: None,
+					min_fee: None,
 				};
 
 				*slate = owner_api.process_invoice_tx((&mask).as_ref(), slate, &params)?;

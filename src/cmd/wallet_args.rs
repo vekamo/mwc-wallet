@@ -1145,6 +1145,40 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 	})
 }
 
+pub fn parse_integrity_args(args: &ArgMatches) -> Result<command::IntegrityArgs, ParseError> {
+	let mut fee = vec![];
+	let subcommand = if args.is_present("check") {
+		command::IntegritySubcommand::Check
+	} else if args.is_present("fee") {
+		let fee_str = parse_required(args, "fee")?.split(",");
+		for fs in fee_str {
+			let fee_amount = core::core::amount_from_hr_string(fs)
+				.map_err(|e| ParseError::ArgumentError(format!("Unable to parse create fee amount, {}",e)))?;
+			fee.push(fee_amount);
+		}
+		command::IntegritySubcommand::Create
+	} else if args.is_present("withdraw") {
+		command::IntegritySubcommand::Withdraw
+	} else {
+		return Err( ParseError::ArgumentError("Expected check, create or withdraw parameter".to_string()));
+	};
+
+	let reserve = match args.value_of("reserve") {
+		Some(str) => Some(core::core::amount_from_hr_string(str)
+			.map_err(|e| ParseError::ArgumentError(format!("Unable to parse reserve MWC value, {}", e)))?),
+		None => None
+	};
+	let account = args.value_of("account").map(|s| String::from(s));
+
+	Ok(command::IntegrityArgs {
+		subcommand,
+		account,
+		reserve,
+		fee,
+	})
+}
+
+
 pub fn wallet_command<C, F>(
 	wallet_args: &ArgMatches,
 	mut wallet_config: WalletConfig,
@@ -1535,7 +1569,15 @@ where
 				a,
 				cli_mode,
 			)
-		}
+		},
+		("integrity", Some(args)) => {
+			let a = arg_parse!(parse_integrity_args(&args));
+			command::integrity(
+				owner_api.wallet_inst.clone(),
+				km,
+				a
+			)
+		},
 		(cmd, _) => {
 			return Err(ErrorKind::ArgumentError(format!(
 				"Unknown wallet command '{}', use 'mwc help wallet' for details",

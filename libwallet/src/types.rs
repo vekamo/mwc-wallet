@@ -29,7 +29,7 @@ use crate::grin_util::secp::{self, pedersen, Secp256k1};
 use crate::grin_util::ZeroingString;
 use crate::proof::proofaddress::ProvableAddress;
 use crate::slate::ParticipantMessages;
-use crate::InitTxArgs;
+use crate::{InitTxArgs, IntegrityContext};
 use crate::Slate;
 use chrono::prelude::*;
 use grin_util::ToHex;
@@ -276,7 +276,7 @@ where
 	fn get(&self, id: &Identifier, mmr_index: &Option<u64>) -> Result<OutputData, Error>;
 
 	/// Iterate over all output data stored by the backend
-	fn iter(&self) -> Box<dyn Iterator<Item = OutputData>>;
+	fn iter(&self) -> Box<dyn Iterator<Item=OutputData>>;
 
 	/// Delete data about an output from the backend
 	fn delete(&mut self, id: &Identifier, mmr_index: &Option<u64>) -> Result<(), Error>;
@@ -302,7 +302,7 @@ where
 	fn next_tx_log_id(&mut self, parent_key_id: &Identifier) -> Result<u32, Error>;
 
 	/// Iterate over tx log data stored by the backend
-	fn tx_log_iter(&self) -> Box<dyn Iterator<Item = TxLogEntry>>;
+	fn tx_log_iter(&self) -> Box<dyn Iterator<Item=TxLogEntry>>;
 
 	/// save a tx log entry
 	fn save_tx_log_entry(&mut self, t: TxLogEntry, parent_id: &Identifier) -> Result<(), Error>;
@@ -319,7 +319,7 @@ where
 	fn save_acct_path(&mut self, mapping: AcctPathMapping) -> Result<(), Error>;
 
 	/// Iterate over account names stored in backend
-	fn acct_path_iter(&self) -> Box<dyn Iterator<Item = AcctPathMapping>>;
+	fn acct_path_iter(&self) -> Box<dyn Iterator<Item=AcctPathMapping>>;
 
 	/// Save an output as locked in the backend
 	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), Error>;
@@ -341,6 +341,19 @@ where
 
 	/// Write the wallet data to backend file
 	fn commit(&self) -> Result<(), Error>;
+
+	/// Save integrity transaction private context.
+	fn save_integrity_context(
+		&mut self,
+		slate_id: &[u8],
+		ctx: &IntegrityContext,
+	) -> Result<(), Error>;
+
+	/// Read integrity transaction private context.
+	fn load_integrity_context(
+		&mut self,
+		slate_id: &[u8],
+	) -> Result<IntegrityContext, Error>;
 }
 
 /// Encapsulate all wallet-node communication functions. No functions within libwallet

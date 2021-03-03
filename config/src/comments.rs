@@ -122,6 +122,15 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
+		"base_fee".to_string(),
+		"
+# Base fee for the transactions. Please note that fee can't be lower than fee at miner nodes, otherwise your transactions will be rejected.
+# If you are running fresh wallet, there is no needs to adjust this value.
+"
+			.to_string(),
+	);
+
+	retval.insert(
 		"[wallet.swap_electrumx_addr]".to_string(),
 		"
 # Electrum X servers that are used for Atomic Swap operations. Each Secondary Currency need

@@ -33,6 +33,7 @@ use std::path::PathBuf;
 
 use grin_wallet_libwallet::proof::proofaddress;
 use mwc_wallet::cmd;
+use grin_wallet_libwallet::internal::selection;
 
 // include build information
 pub mod built_info {
@@ -158,6 +159,10 @@ fn real_main() -> i32 {
 	);
 
 	let wallet_config = config.clone().members.unwrap().wallet;
+
+	if let Some(base_fee) = &wallet_config.base_fee {
+		selection::set_base_fee(base_fee.clone());
+	}
 
 	// Default derive index is 1 to match what mwc713 has by default...
 	proofaddress::set_address_index(wallet_config.grinbox_address_index.unwrap_or(0));

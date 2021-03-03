@@ -134,6 +134,10 @@ subcommands:
             long: change_outputs
             default_value: "1"
             takes_value: true
+        - min_fee:
+            help: Minimal fee value. By default wallet selecting the minimal fee accepted by the network. This value can make larger if needed.
+            long: min_fee
+            takes_value: true
         - method:
             help: Method for sending this transaction
             short: m
@@ -762,5 +766,34 @@ subcommands:
             help: secondary private ElectrumX node URI. If never setup, community node will be used
             long: electrum_uri2
             takes_value: true
+  - integrity:
+      about: Manage integrity fees and funds for this wallet.
+      args:
+        - check:
+            help: Check how much paid integrity fees are left, how much coins are at integrity account.
+            short: c
+            long: check
+            takes_value: false
+        - reserve:
+            help: If there is not enough coins, how much coins we want to reserve for the integrioty fees. Default is 1 MWC
+            short: r
+            long: reserve
+            takes_value: true
+        - account:
+            help: Account name from where to get the reserve funds or widthraw funds to
+            short: a
+            long: account
+            takes_value: true
+        - fee:
+            help: Create integrity transaction and pay fees. Parameter - comma separated fees (MWC). The minimal fee for network is 10X of basic fees. Currently it is 0.01 MWC
+            short: t
+            long: create
+            takes_value: true
+        - withdraw:
+            help: Widthraw the ingetrity funds back to regular wallet account
+            short: w
+            long: withdraw
+            takes_value: false
+
 
 

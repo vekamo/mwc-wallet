@@ -1952,6 +1952,7 @@ where
 		num_change_outputs: 1,
 		selection_strategy_is_use_all: true,
 		outputs: Some(output_vec),
+		ttl_blocks: Some(2),
 		..Default::default()
 	};
 
@@ -1978,7 +1979,7 @@ where
 			None,
 			false,
 			false,
-		)?;
+		)?.0;
 		owner::tx_lock_outputs(&mut **w, keychain_mask, &slate, address, 0, false)?;
 		slate = owner::finalize_tx(&mut **w, keychain_mask, &slate, false, false)
 			.unwrap()

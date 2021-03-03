@@ -62,6 +62,9 @@ pub struct WalletConfig {
 	pub dark_background_color_scheme: Option<bool>,
 	/// Wallet data directory. Default none is 'wallet_data'
 	pub wallet_data_dir: Option<String>,
+	/// Base fee for all transactions. Please note, that fee can't be lower then Base fee
+	/// at the miner nodes. Otherwise your transaction will never be mined.
+	pub base_fee: Option<u64>,
 	/// Electrum nodes for secondary coins
 	/// Key: <coin>_[main|test]_[1|2]
 	/// Value: url
@@ -87,6 +90,7 @@ impl Default for WalletConfig {
 			tls_certificate_key: None,
 			dark_background_color_scheme: Some(true),
 			wallet_data_dir: None,
+			base_fee: None,
 			swap_electrumx_addr: Some(
 				[
 					("btc_main_1", "btc.main1.swap.mwc.mw:18337"),

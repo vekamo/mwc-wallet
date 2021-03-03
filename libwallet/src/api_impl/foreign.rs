@@ -35,6 +35,7 @@ use grin_wallet_util::OnionV3Address;
 use std::sync::Arc;
 use std::sync::RwLock;
 use strum::IntoEnumIterator;
+use crate::Context;
 
 const FOREIGN_API_VERSION: u16 = 2;
 const USER_MESSAGE_MAX_LEN: usize = 256;
@@ -117,7 +118,7 @@ pub fn receive_tx<'a, T: ?Sized, C, K>(
 	message: Option<String>,
 	use_test_rng: bool,
 	refresh_from_node: bool,
-) -> Result<Slate, Error>
+) -> Result<(Slate,Context), Error>
 where
 	T: WalletBackend<'a, C, K>,
 	C: NodeClient + 'a,
@@ -271,7 +272,7 @@ where
 		p.receiver_signature = Some(sig);
 	}
 
-	Ok(ret_slate)
+	Ok((ret_slate,context))
 }
 
 /// Receive an tx that this wallet has issued
