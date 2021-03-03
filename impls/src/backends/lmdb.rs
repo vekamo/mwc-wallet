@@ -36,9 +36,9 @@ use crate::util::secp::constants::SECRET_KEY_SIZE;
 use crate::util::secp::key::SecretKey;
 use crate::util::{self, secp};
 
+use grin_wallet_libwallet::IntegrityContext;
 use rand::rngs::mock::StepRng;
 use rand::thread_rng;
-use grin_wallet_libwallet::IntegrityContext;
 
 pub const DB_DIR: &str = "db";
 pub const TX_SAVE_DIR: &str = "saved_txs";
@@ -814,10 +814,7 @@ where
 		slate_id: &[u8],
 		ctx: &IntegrityContext,
 	) -> Result<(), Error> {
-		let ctx_key = to_key(
-			INTEGRITY_CONTEXT_PREFIX,
-			&mut slate_id.to_vec()
-		);
+		let ctx_key = to_key(INTEGRITY_CONTEXT_PREFIX, &mut slate_id.to_vec());
 		let (blind_xor_key, nonce_xor_key) = private_ctx_xor_keys(self.keychain(), slate_id)?;
 
 		let mut s_ctx = ctx.clone();
@@ -836,20 +833,14 @@ where
 		Ok(())
 	}
 
-	fn load_integrity_context(
-		&mut self,
-		slate_id: &[u8],
-	) -> Result< IntegrityContext, Error> {
-		let ctx_key = to_key(
-			INTEGRITY_CONTEXT_PREFIX,
-			&mut slate_id.to_vec()
-		);
-		let (blind_xor_key, nonce_xor_key) =
-			private_ctx_xor_keys(self.keychain(), slate_id)?;
+	fn load_integrity_context(&mut self, slate_id: &[u8]) -> Result<IntegrityContext, Error> {
+		let ctx_key = to_key(INTEGRITY_CONTEXT_PREFIX, &mut slate_id.to_vec());
+		let (blind_xor_key, nonce_xor_key) = private_ctx_xor_keys(self.keychain(), slate_id)?;
 
-		let mut ctx: IntegrityContext = option_to_not_found(self.db.borrow().as_ref().unwrap().get_ser(&ctx_key), || {
-			format!("Slate id: {:x?}", slate_id.to_vec())
-		})?;
+		let mut ctx: IntegrityContext =
+			option_to_not_found(self.db.borrow().as_ref().unwrap().get_ser(&ctx_key), || {
+				format!("Slate id: {:x?}", slate_id.to_vec())
+			})?;
 
 		for i in 0..SECRET_KEY_SIZE {
 			ctx.sec_key0.0[i] ^= blind_xor_key[i];
@@ -860,6 +851,4 @@ where
 
 		Ok(ctx)
 	}
-
-
 }

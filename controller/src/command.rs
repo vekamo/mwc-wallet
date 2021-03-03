@@ -30,7 +30,8 @@ use chrono::Utc;
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
 use grin_wallet_impls::adapters::{create_swap_message_sender, validate_tor_address};
 use grin_wallet_impls::{Address, MWCMQSAddress, Publisher};
-use grin_wallet_libwallet::api_impl::{owner_swap, owner, owner_libp2p};
+use grin_wallet_libwallet::api_impl::{owner, owner_libp2p, owner_swap};
+use grin_wallet_libwallet::internal::selection;
 use grin_wallet_libwallet::proof::proofaddress::{self, ProvableAddress};
 use grin_wallet_libwallet::proof::tx_proof::TxProof;
 use grin_wallet_libwallet::slatepack::SlatePurpose;
@@ -38,6 +39,8 @@ use grin_wallet_libwallet::swap::message;
 use grin_wallet_libwallet::swap::trades;
 use grin_wallet_libwallet::swap::types::Action;
 use grin_wallet_libwallet::{Slate, TxLogEntry, WalletInst};
+use grin_wallet_util::grin_core::consensus::GRIN_BASE;
+use grin_wallet_util::grin_core::core::amount_to_hr_string;
 use serde_json as json;
 use std::fs::File;
 use std::io;
@@ -48,9 +51,6 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
-use grin_wallet_util::grin_core::core::amount_to_hr_string;
-use grin_wallet_util::grin_core::consensus::GRIN_BASE;
-use grin_wallet_libwallet::internal::selection;
 
 lazy_static! {
 	/// Recieve account can be specified separately and must be allpy to ALL receive operations
@@ -1746,7 +1746,6 @@ pub enum IntegritySubcommand {
 	Withdraw,
 }
 
-
 /// Arguments for the integrity command
 pub struct IntegrityArgs {
 	/// What we want to do with integrity kernels
@@ -2757,39 +2756,42 @@ pub fn integrity<L, C, K>(
 	keychain_mask: Option<&SecretKey>,
 	args: IntegrityArgs,
 ) -> Result<(), Error>
-	where
-		L: WalletLCProvider<'static, C, K> + 'static,
-		C: NodeClient + 'static,
-		K: keychain::Keychain + 'static,
+where
+	L: WalletLCProvider<'static, C, K> + 'static,
+	C: NodeClient + 'static,
+	K: keychain::Keychain + 'static,
 {
 	// Let's do refresh first
 	let _ = owner::perform_refresh_from_node(wallet_inst.clone(), keychain_mask, &None)?;
 
 	match args.subcommand {
 		IntegritySubcommand::Check => {
-			let ( _account, outputs, _tip_height, fee_transaction ) = owner_libp2p::get_integral_balance(
-				wallet_inst.clone(),
-				keychain_mask,
-			)?;
+			let (_account, outputs, _tip_height, fee_transaction) =
+				owner_libp2p::get_integral_balance(wallet_inst.clone(), keychain_mask)?;
 
 			let balance_str = if !outputs.is_empty() {
-				let integrity_balance : u64 = outputs.iter().map(|o| o.output.value ).sum();
-				format!("Integrity balance is {} MWC.", amount_to_hr_string(integrity_balance, true) )
-			}
-			else {
+				let integrity_balance: u64 = outputs.iter().map(|o| o.output.value).sum();
+				format!(
+					"Integrity balance is {} MWC.",
+					amount_to_hr_string(integrity_balance, true)
+				)
+			} else {
 				"Integrity balance is empty.".to_string()
 			};
 
 			let fee_str = if fee_transaction.is_empty() {
 				"Fee is not paid.".to_string()
-			}
-			else {
+			} else {
 				let mut res_str = String::new();
 				for (ic, conf, height_until) in fee_transaction {
 					if !res_str.is_empty() {
 						res_str += ", ";
 					}
-					res_str += &format!("Fee {} MWC is active until block {}", amount_to_hr_string(ic.fee, true), height_until);
+					res_str += &format!(
+						"Fee {} MWC is active until block {}",
+						amount_to_hr_string(ic.fee, true),
+						height_until
+					);
 					if !conf {
 						res_str += " (not confirmed)"
 					}
@@ -2797,21 +2799,31 @@ pub fn integrity<L, C, K>(
 				res_str
 			};
 
-			println!( "{} {}", balance_str, fee_str );
+			println!("{} {}", balance_str, fee_str);
 		}
 		IntegritySubcommand::Create => {
 			if args.fee.is_empty() {
-				return Err(ErrorKind::ArgumentError("Please specify comma separated integrity fee that you need to activate".to_string()).into());
+				return Err(ErrorKind::ArgumentError(
+					"Please specify comma separated integrity fee that you need to activate"
+						.to_string(),
+				)
+				.into());
 			}
 
 			let min_fee = args.fee.iter().min().unwrap_or(&0);
 			let min_integrity_fee = selection::get_base_fee() * owner_libp2p::INTEGRITY_FEE_MIN_X;
 			if *min_fee < min_integrity_fee {
-				return Err(ErrorKind::ArgumentError(format!("The minimal accepted integrity fee is {} MWC", amount_to_hr_string(min_integrity_fee, true) )).into());
+				return Err(ErrorKind::ArgumentError(format!(
+					"The minimal accepted integrity fee is {} MWC",
+					amount_to_hr_string(min_integrity_fee, true)
+				))
+				.into());
 			}
 
 			let max_fee = args.fee.iter().max().unwrap_or(&0);
-			let reservation_amount = args.reserve.unwrap_or( std::cmp::max(GRIN_BASE, max_fee*2) );
+			let reservation_amount = args
+				.reserve
+				.unwrap_or(std::cmp::max(GRIN_BASE, max_fee * 2));
 
 			let res = owner_libp2p::create_integral_balance(
 				wallet_inst.clone(),
@@ -2821,7 +2833,7 @@ pub fn integrity<L, C, K>(
 				&args.account,
 			)?;
 
-			debug_assert!( args.fee.len() == res.len() );
+			debug_assert!(args.fee.len() == res.len());
 
 			let mut report_str = String::new();
 			for i in 0..args.fee.len() {
@@ -2829,21 +2841,28 @@ pub fn integrity<L, C, K>(
 					report_str += ", ";
 				}
 
-				let (ic, conf, height_until ) = &res[i];
+				let (ic, conf, height_until) = &res[i];
 				match ic {
 					Some(ic) => {
-						report_str += &format!("Fee {} MWC is active until block {}", amount_to_hr_string(ic.fee, true), height_until);
+						report_str += &format!(
+							"Fee {} MWC is active until block {}",
+							amount_to_hr_string(ic.fee, true),
+							height_until
+						);
 						if !conf {
 							report_str += " (not confirmed)"
 						}
-					},
+					}
 					None => {
-						report_str += &format!("Fee {} MWC is pending", amount_to_hr_string(args.fee[i], true));
+						report_str += &format!(
+							"Fee {} MWC is pending",
+							amount_to_hr_string(args.fee[i], true)
+						);
 					}
 				}
 			}
 
-			println!("{}",report_str);
+			println!("{}", report_str);
 		}
 		IntegritySubcommand::Withdraw => {
 			let account = args.account.unwrap_or("default".to_string());
@@ -2854,9 +2873,12 @@ pub fn integrity<L, C, K>(
 			)?;
 
 			if withdraw_coins > 0 {
-				println!("{} MWC was transferred to account {}", amount_to_hr_string(withdraw_coins, true), account );
-			}
-			else {
+				println!(
+					"{} MWC was transferred to account {}",
+					amount_to_hr_string(withdraw_coins, true),
+					account
+				);
+			} else {
 				println!("There are no integrity funds to withdraw");
 			}
 		}
@@ -2864,4 +2886,3 @@ pub fn integrity<L, C, K>(
 
 	Ok(())
 }
-

@@ -565,7 +565,7 @@ macro_rules! doctest_helper_setup_doc_env_foreign {
 
 		grin_wallet_util::grin_core::global::set_local_chain_type(
 			grin_wallet_util::grin_core::global::ChainTypes::AutomatedTesting,
-			);
+		);
 
 		let dir = tempdir().map_err(|e| format!("{:#?}", e)).unwrap();
 		let dir = dir
@@ -581,7 +581,7 @@ macro_rules! doctest_helper_setup_doc_env_foreign {
 			HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None).unwrap();
 		let mut wallet = Box::new(
 			DefaultWalletImpl::<'static, HTTPNodeClient>::new(node_client.clone()).unwrap(),
-			)
+		)
 			as Box<
 				WalletInst<
 					'static,
@@ -589,7 +589,7 @@ macro_rules! doctest_helper_setup_doc_env_foreign {
 					HTTPNodeClient,
 					ExtKeychain,
 				>,
-				>;
+			>;
 		let lc = wallet.lc_provider().unwrap();
 		let _ = lc.set_top_level_directory(&wallet_config.data_file_dir);
 		lc.open_wallet(None, pw, false, false, None);

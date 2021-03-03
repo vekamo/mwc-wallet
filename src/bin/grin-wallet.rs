@@ -31,9 +31,9 @@ use grin_wallet_util::grin_util as util;
 use std::env;
 use std::path::PathBuf;
 
+use grin_wallet_libwallet::internal::selection;
 use grin_wallet_libwallet::proof::proofaddress;
 use mwc_wallet::cmd;
-use grin_wallet_libwallet::internal::selection;
 
 // include build information
 pub mod built_info {

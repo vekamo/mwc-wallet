@@ -47,9 +47,11 @@ pub fn set_base_fee(base_fee: u64) {
 
 /// Read base fee units
 pub fn get_base_fee() -> u64 {
-	BASE_FEE.read().unwrap().unwrap_or( grin_core::libtx::DEFAULT_BASE_FEE )
+	BASE_FEE
+		.read()
+		.unwrap()
+		.unwrap_or(grin_core::libtx::DEFAULT_BASE_FEE)
 }
-
 
 /// Initialize a transaction on the sender side, returns a corresponding
 /// libwallet transaction slate with the appropriate inputs selected,
@@ -615,7 +617,7 @@ where
 	// First attempt to spend without change
 	assert!(routputs >= 1); // Normally it is 1
 
-	let mut fee = tx_fee(coins.len(), routputs, 1, Some(get_base_fee()) );
+	let mut fee = tx_fee(coins.len(), routputs, 1, Some(get_base_fee()));
 	if let Some(min_fee) = min_fee {
 		fee = std::cmp::max(*min_fee, fee);
 	}

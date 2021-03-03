@@ -1979,7 +1979,8 @@ where
 			None,
 			false,
 			false,
-		)?.0;
+		)?
+		.0;
 		owner::tx_lock_outputs(&mut **w, keychain_mask, &slate, address, 0, false)?;
 		slate = owner::finalize_tx(&mut **w, keychain_mask, &slate, false, false)
 			.unwrap()

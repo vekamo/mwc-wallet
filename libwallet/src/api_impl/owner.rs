@@ -816,7 +816,7 @@ where
 	check_ttl(w, &sl, refresh_from_node)?;
 	let mut context = w.get_private_context(keychain_mask, sl.id.as_bytes(), 0)?;
 	let keychain = w.keychain(keychain_mask)?;
-	let parent_key_id =  context.parent_key_id.clone();
+	let parent_key_id = context.parent_key_id.clone();
 
 	if let Some(args) = context.late_lock_args.take() {
 		// Transaction was late locked, select inputs+change now
