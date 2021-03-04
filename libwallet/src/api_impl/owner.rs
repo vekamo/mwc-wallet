@@ -1453,7 +1453,7 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	scan::self_spend_particular_putput(
+	scan::self_spend_particular_output(
 		wallet_inst,
 		keychain_mask,
 		output,

@@ -17,7 +17,8 @@ use grin_wallet_libwallet::Context;
 use grin_wallet_util::grin_core::core::transaction;
 use grin_wallet_util::grin_core::libtx::{aggsig, proof};
 use grin_wallet_util::grin_keychain::{
-	BlindSum, BlindingFactor, ExtKeychain, ExtKeychainPath, Keychain, SwitchCommitmentType,
+	BlindSum, BlindingFactor, ChildNumber, ExtKeychain, ExtKeychainPath, Keychain,
+	SwitchCommitmentType,
 };
 use grin_wallet_util::grin_util::secp;
 use grin_wallet_util::grin_util::secp::key::{PublicKey, SecretKey};
@@ -504,6 +505,28 @@ fn test_rewind_range_proof() {
 	)
 	.unwrap();
 	assert!(proof_info.is_none());
+
+	let key_id4 = ExtKeychain::derive_key_id(1, 2, 0, 0, 5); //simulate a height of 5.
+	let commit4 = keychain.commit(5, &key_id4, switch).unwrap();
+	let _key_id5 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0); //simulate a height of 5.
+	let _commit5 = keychain.commit(5, &key_id4, switch).unwrap();
+	let proof4 = proof::create(&keychain, &builder, 5, &key_id4, switch, commit4, None).unwrap();
+
+	let proof_info4 = proof::rewind(keychain.secp(), &builder, commit4, None, proof4).unwrap();
+
+	assert!(proof_info4.is_some());
+	let (r_amount, r_key_id, r_switch) = proof_info4.unwrap();
+	assert_eq!(r_amount, 5);
+	assert_eq!(r_key_id, key_id4);
+	assert_eq!(r_switch, switch);
+	let path = key_id4.to_path();
+	let last_child_number = path.path[3];
+
+	let mut built_height = 0;
+	if let ChildNumber::Normal { index: ind } = last_child_number {
+		built_height = ind;
+	}
+	assert_eq!(built_height, 5);
 }
 
 #[test]

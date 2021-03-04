@@ -528,6 +528,7 @@ where
 		fee,
 		change_outputs,
 		include_inputs_in_sum,
+		current_height,
 	)?;
 
 	Ok((parts, coins, change_amounts_derivations, fee))
@@ -655,6 +656,7 @@ pub fn inputs_and_change<'a, T: ?Sized, C, K, B>(
 	fee: u64,
 	num_change_outputs: usize,
 	include_inputs_in_sum: bool,
+	current_height: u64,
 ) -> Result<
 	(
 		Vec<Box<build::Append<K, B>>>,
@@ -710,7 +712,7 @@ where
 				part_change
 			};
 
-			let change_key = wallet.next_child(keychain_mask, None)?;
+			let change_key = wallet.next_child(keychain_mask, None, Some(current_height))?;
 
 			change_amounts_derivations.push((change_amount, change_key.clone(), None));
 			parts.push(build::output(change_amount, change_key));

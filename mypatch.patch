@@ -1,0 +1,154 @@
+diff --git a/impls/src/backends/lmdb.rs b/impls/src/backends/lmdb.rs
+index ea11512..5dafcf6 100644
+--- a/impls/src/backends/lmdb.rs
++++ b/impls/src/backends/lmdb.rs
+@@ -452,6 +452,7 @@ where
+ 		&mut self,
+ 		keychain_mask: Option<&SecretKey>,
+ 		parent_key_id: Option<Identifier>,
++		height: Option<u64>,
+ 	) -> Result<Identifier, Error> {
+ 		let parent_key_id = parent_key_id.unwrap_or(self.parent_key_id.clone());
+ 		let mut deriv_idx = {
+@@ -465,6 +466,12 @@ where
+ 		let mut return_path = self.parent_key_id.to_path();
+ 		return_path.depth += 1;
+ 		return_path.path[return_path.depth as usize - 1] = ChildNumber::from(deriv_idx);
++		if let Some(hei) = height  {
++			//u32::max is 4294967295 based on the block generating speed(1 min/block)
++			//it will take about 837 years for the height to go over the u32 range.
++			return_path.path[3] = ChildNumber::from(hei as u32); //put the height in the last index.
++
++		}
+ 		deriv_idx += 1;
+ 		let mut batch = self.batch(keychain_mask)?;
+ 		batch.save_child_index(&parent_key_id, deriv_idx)?;
+diff --git a/libwallet/src/api_impl/owner_swap.rs b/libwallet/src/api_impl/owner_swap.rs
+index 9eb2926..5316519 100644
+--- a/libwallet/src/api_impl/owner_swap.rs
++++ b/libwallet/src/api_impl/owner_swap.rs
+@@ -1376,7 +1376,7 @@ where
+ 	};
+ 
+ 	for _ in 0..secondary_key_size {
+-		keys.push(wallet.next_child(keychain_mask, Some(parent_key_id.clone()))?);
++		keys.push(wallet.next_child(keychain_mask, Some(parent_key_id.clone()), None)?);
+ 	}
+ 
+ 	let context = (**swap_api).create_context(
+diff --git a/libwallet/src/internal/keys.rs b/libwallet/src/internal/keys.rs
+index 6ec7072..9883b2c 100644
+--- a/libwallet/src/internal/keys.rs
++++ b/libwallet/src/internal/keys.rs
+@@ -28,7 +28,7 @@ where
+ 	C: NodeClient + 'a,
+ 	K: Keychain + 'a,
+ {
+-	let child = wallet.next_child(keychain_mask, None)?;
++	let child = wallet.next_child(keychain_mask, None, None)?;
+ 	Ok(child)
+ }
+ 
+diff --git a/libwallet/src/internal/scan.rs b/libwallet/src/internal/scan.rs
+index 9369fcd..daff473 100644
+--- a/libwallet/src/internal/scan.rs
++++ b/libwallet/src/internal/scan.rs
+@@ -21,7 +21,7 @@ use crate::grin_core::consensus::{valid_header_version, WEEK_HEIGHT};
+ use crate::grin_core::core::HeaderVersion;
+ use crate::grin_core::global;
+ use crate::grin_core::libtx::{proof, tx_fee};
+-use crate::grin_keychain::{Identifier, Keychain, SwitchCommitmentType};
++use crate::grin_keychain::{Identifier, Keychain, SwitchCommitmentType, ChildNumber};
+ use crate::grin_util::secp::key::SecretKey;
+ use crate::grin_util::secp::pedersen;
+ use crate::grin_util::static_secp_instance;
+@@ -115,6 +115,7 @@ pub struct RestoredTxStats {
+ fn identify_utxo_outputs<'a, K>(
+ 	keychain: &K,
+ 	outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64, u64)>,
++	_end_height: Option<u64>,
+ ) -> Result<Vec<OutputResult>, Error>
+ where
+ 	K: Keychain + 'a,
+@@ -158,6 +159,22 @@ where
+ 		} else {
+ 			*height
+ 		};
++		//adding an extra check of the height.
++		//get the height used while building the key_id
++		let path = key_id.to_path();
++		let last_child_number = path.path[3];
++
++		let mut built_height = 0;
++		if let ChildNumber::Normal {index:ind} = last_child_number {
++			built_height = ind;
++		}
++		//todo compare the built_height with the height.
++		if built_height != 0 && *height <= u32::MAX as u64 {
++
++		}
++		//if the built height if too far from the height, should be reject it?
++		//if the build height or height is out of the horizon range, should we trigger the self-spend(based on the configuration)
++
+ 
+ 		debug!(
+ 			"Output found: {:?}, amount: {:?}, key_id: {:?}, mmr_index: {},",
+@@ -217,7 +234,7 @@ where
+ 			let _ = s.send(StatusMessage::Scanning(show_progress, msg, perc_complete));
+ 		}
+ 
+-		result_vec.append(&mut identify_utxo_outputs(keychain, outputs)?);
++		result_vec.append(&mut identify_utxo_outputs(keychain, outputs, None)?);
+ 
+ 		if highest_index <= last_retrieved_index {
+ 			break;
+@@ -673,7 +690,7 @@ where
+ 		}
+ 
+ 		// Parse all node_outputs from the blocks and check ours the new ones...
+-		chain_outs = identify_utxo_outputs(&keychain, node_outputs)?;
++		chain_outs = identify_utxo_outputs(&keychain, node_outputs, Some(end_height))?;
+ 
+ 		// Reporting user what outputs we found
+ 		if let Some(ref s) = status_send_channel {
+diff --git a/libwallet/src/internal/selection.rs b/libwallet/src/internal/selection.rs
+index 265e395..896d10b 100644
+--- a/libwallet/src/internal/selection.rs
++++ b/libwallet/src/internal/selection.rs
+@@ -528,6 +528,7 @@ where
+ 		fee,
+ 		change_outputs,
+ 		include_inputs_in_sum,
++		current_height,
+ 	)?;
+ 
+ 	Ok((parts, coins, change_amounts_derivations, fee))
+@@ -655,6 +656,7 @@ pub fn inputs_and_change<'a, T: ?Sized, C, K, B>(
+ 	fee: u64,
+ 	num_change_outputs: usize,
+ 	include_inputs_in_sum: bool,
++	current_height: u64,
+ ) -> Result<
+ 	(
+ 		Vec<Box<build::Append<K, B>>>,
+@@ -710,7 +712,7 @@ where
+ 				part_change
+ 			};
+ 
+-			let change_key = wallet.next_child(keychain_mask, None)?;
++			let change_key = wallet.next_child(keychain_mask, None, Some(current_height))?;
+ 
+ 			change_amounts_derivations.push((change_amount, change_key.clone(), None));
+ 			parts.push(build::output(change_amount, change_key));
+diff --git a/libwallet/src/types.rs b/libwallet/src/types.rs
+index 20c77ae..e9bc46b 100644
+--- a/libwallet/src/types.rs
++++ b/libwallet/src/types.rs
+@@ -248,6 +248,7 @@ where
+ 		&mut self,
+ 		keychain_mask: Option<&SecretKey>,
+ 		parent_key_id: Option<Identifier>,
++		height: Option<u64>,
+ 	) -> Result<Identifier, Error>;
+ 
+ 	/// last verified height of outputs directly descending from the given parent key

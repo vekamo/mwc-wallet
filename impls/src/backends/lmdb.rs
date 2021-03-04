@@ -452,6 +452,7 @@ where
 		&mut self,
 		keychain_mask: Option<&SecretKey>,
 		parent_key_id: Option<Identifier>,
+		height: Option<u64>,
 	) -> Result<Identifier, Error> {
 		let parent_key_id = parent_key_id.unwrap_or(self.parent_key_id.clone());
 		let mut deriv_idx = {
@@ -465,6 +466,11 @@ where
 		let mut return_path = self.parent_key_id.to_path();
 		return_path.depth += 1;
 		return_path.path[return_path.depth as usize - 1] = ChildNumber::from(deriv_idx);
+		if let Some(hei) = height {
+			//u32::max is 4294967295 based on the block generating speed(1 min/block)
+			//it will take about 837 years for the height to go over the u32 range.
+			return_path.path[3] = ChildNumber::from(hei as u32); //put the height in the last index.
+		}
 		deriv_idx += 1;
 		let mut batch = self.batch(keychain_mask)?;
 		batch.save_child_index(&parent_key_id, deriv_idx)?;

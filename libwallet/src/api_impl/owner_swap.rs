@@ -1376,7 +1376,7 @@ where
 	};
 
 	for _ in 0..secondary_key_size {
-		keys.push(wallet.next_child(keychain_mask, Some(parent_key_id.clone()))?);
+		keys.push(wallet.next_child(keychain_mask, Some(parent_key_id.clone()), None)?);
 	}
 
 	let context = (**swap_api).create_context(

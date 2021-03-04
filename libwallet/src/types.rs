@@ -248,6 +248,7 @@ where
 		&mut self,
 		keychain_mask: Option<&SecretKey>,
 		parent_key_id: Option<Identifier>,
+		height: Option<u64>,
 	) -> Result<Identifier, Error>;
 
 	/// last verified height of outputs directly descending from the given parent key

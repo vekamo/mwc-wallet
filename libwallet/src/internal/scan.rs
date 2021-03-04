@@ -21,7 +21,7 @@ use crate::grin_core::consensus::{valid_header_version, WEEK_HEIGHT};
 use crate::grin_core::core::HeaderVersion;
 use crate::grin_core::global;
 use crate::grin_core::libtx::{proof, tx_fee};
-use crate::grin_keychain::{Identifier, Keychain, SwitchCommitmentType};
+use crate::grin_keychain::{ChildNumber, Identifier, Keychain, SwitchCommitmentType};
 use crate::grin_util::secp::key::SecretKey;
 use crate::grin_util::secp::pedersen;
 use crate::grin_util::static_secp_instance;
@@ -115,11 +115,13 @@ pub struct RestoredTxStats {
 fn identify_utxo_outputs<'a, K>(
 	keychain: &K,
 	outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64, u64)>,
-) -> Result<Vec<OutputResult>, Error>
+	end_height: Option<u64>,
+) -> Result<(Vec<OutputResult>, Vec<OutputResult>), Error>
 where
 	K: Keychain + 'a,
 {
 	let mut wallet_outputs: Vec<OutputResult> = Vec::new();
+	let mut self_spend_outputs: Vec<OutputResult> = Vec::new();
 
 	let legacy_builder = proof::LegacyProofBuilder::new(keychain);
 	let builder = proof::ProofBuilder::new(keychain);
@@ -168,6 +170,53 @@ where
 			warn!("Unexpected switch commitment type {:?}", switch);
 		}
 
+		//adding an extra check of the height.
+		//get the height used while building the key_id
+		let path = key_id.to_path();
+		let last_child_number = path.path[3];
+
+		let mut built_height = 0;
+		if let ChildNumber::Normal { index: ind } = last_child_number {
+			built_height = ind;
+		}
+		let on_the_chain_height = *height;
+		if built_height != 0 && on_the_chain_height <= u32::MAX as u64 {
+			//if the built height if too far from the height, should be reject it?
+			//if the build height or height is out of the horizon range, should we trigger the self-spend(based on the configuration)
+			let built_height_64 = built_height as u64;
+
+			println!(
+				"the build_height and chain height is {}, {}",
+				built_height_64, on_the_chain_height
+			);
+			let height_diff;
+			if built_height_64 < on_the_chain_height {
+				height_diff = on_the_chain_height - built_height_64; //is there a abs_diff method available?
+			} else {
+				height_diff = built_height_64 - on_the_chain_height
+			}
+			if height_diff > 1440 {
+				//this mean the height to built the commit and the block height differs bigger than a day.
+				//should we alarm the user?
+			}
+			//compare the built_height_64 with the current tip height.
+			if let Some(e_height) = end_height {
+				if e_height > built_height_64 && e_height - built_height_64 > 1440 * 7 {
+					self_spend_outputs.push(OutputResult {
+						commit: *commit,
+						key_id: key_id.clone(),
+						n_child: key_id.to_path().last_path_index(),
+						value: amount,
+						height: *height,
+						lock_height: lock_height,
+						is_coinbase: *is_coinbase,
+						mmr_index: *mmr_index,
+					});
+				}
+			}
+		}
+
+		//todo the outputs added to self_spend_outputs should be skipped in the following.
 		wallet_outputs.push(OutputResult {
 			commit: *commit,
 			key_id: key_id.clone(),
@@ -179,7 +228,7 @@ where
 			mmr_index: *mmr_index,
 		});
 	}
-	Ok(wallet_outputs)
+	Ok((wallet_outputs, self_spend_outputs))
 }
 
 /// Scanning chain for the outputs. Shared with mwc713
@@ -216,8 +265,8 @@ where
 		if let Some(ref s) = status_send_channel {
 			let _ = s.send(StatusMessage::Scanning(show_progress, msg, perc_complete));
 		}
-
-		result_vec.append(&mut identify_utxo_outputs(keychain, outputs)?);
+		let (mut chain_outs, _) = identify_utxo_outputs(keychain, outputs, None)?;
+		result_vec.append(&mut chain_outs);
 
 		if highest_index <= last_retrieved_index {
 			break;
@@ -673,7 +722,9 @@ where
 		}
 
 		// Parse all node_outputs from the blocks and check ours the new ones...
-		chain_outs = identify_utxo_outputs(&keychain, node_outputs)?;
+		let output_turple = identify_utxo_outputs(&keychain, node_outputs, Some(end_height))?;
+		//todo do we send status info here?
+		chain_outs = output_turple.0;
 
 		// Reporting user what outputs we found
 		if let Some(ref s) = status_send_channel {
@@ -1924,7 +1975,7 @@ where
 ///Which is tracked in this discussion  https://forum.grin.mw/t/replay-attacks-and-possible-mitigations/7415
 /// and this github ticket: https://github.com/mwcproject/mwc-qt-wallet/issues/508
 
-pub fn self_spend_particular_putput<'a, L, C, K>(
+pub fn self_spend_particular_output<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	output: OutputData,
