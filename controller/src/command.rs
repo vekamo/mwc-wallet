@@ -41,6 +41,7 @@ use grin_wallet_libwallet::swap::types::Action;
 use grin_wallet_libwallet::{Slate, TxLogEntry, WalletInst};
 use grin_wallet_util::grin_core::consensus::GRIN_BASE;
 use grin_wallet_util::grin_core::core::amount_to_hr_string;
+use grin_wallet_util::grin_p2p::libp2p_connection;
 use serde_json as json;
 use std::fs::File;
 use std::io;
@@ -2811,7 +2812,8 @@ where
 			}
 
 			let min_fee = args.fee.iter().min().unwrap_or(&0);
-			let min_integrity_fee = selection::get_base_fee() * owner_libp2p::INTEGRITY_FEE_MIN_X;
+			let min_integrity_fee =
+				selection::get_base_fee() * libp2p_connection::INTEGRITY_FEE_MIN_X;
 			if *min_fee < min_integrity_fee {
 				return Err(ErrorKind::ArgumentError(format!(
 					"The minimal accepted integrity fee is {} MWC",

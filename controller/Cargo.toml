@@ -32,6 +32,7 @@ lazy_static = "1"
 colored = "1.6"
 x25519-dalek = "0.6"
 ed25519-dalek = "1.0.0-pre.4"
+libp2p = { git = "https://github.com/mwcproject/rust-libp2p", branch = "master", default-features = false, features = [ "noise", "yamux", "mplex", "dns", "tcp-tokio", "ping", "gossipsub"] }
 
 grin_wallet_util = { path = "../util", version = "4.1.0" }
 grin_wallet_api = { path = "../api", version = "4.1.0" }

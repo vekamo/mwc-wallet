@@ -25,26 +25,24 @@ use crate::types::NodeClient;
 use crate::Context;
 use crate::{wallet_lock, WalletInst, WalletLCProvider};
 use crate::{AcctPathMapping, Error, InitTxArgs, OutputCommitMapping, OutputStatus};
-use grin_core::core::hash::Hash;
 use grin_core::libtx::{aggsig, tx_fee};
 use grin_core::ser;
 use grin_keychain::{ExtKeychainPath, Identifier};
+use grin_p2p::libp2p_connection;
 use grin_util::secp;
 use grin_util::secp::pedersen::Commitment;
 use grin_util::secp::{Message, PublicKey};
+use grin_wallet_util::grin_core::core::hash::Hash;
 use grin_wallet_util::grin_util::secp::Signature;
+use libp2p::PeerId;
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
 /// Identity Index for integrity account. Let's put it at the end, so we can be sure that it exist
-pub const INTEGRITY_ACCOUNT_ID: u32 = 65534;
+pub const INTEGRITY_ACCOUNT_ID: u32 = 65536;
 /// account name for integrity outputs
 pub const INTEGRITY_ACCOUNT_NAME: &str = "integrity";
-/// Number of top block when integrity fee is valid
-pub const INTEGRITY_FEE_VALID_BLOCKS: u64 = 1440;
-/// Minimum integrity fee value in term of Base fees
-pub const INTEGRITY_FEE_MIN_X: u64 = 10;
 
 /// Integral fee proof data. It build form the both contexts and a transaction.
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -56,34 +54,29 @@ pub struct IntegrityContext {
 	/// Fee that was paid to miners
 	pub fee: u64,
 
-	/// Secret key (of which public is shared)
-	pub sec_key0: SecretKey,
-	/// Secret nonce (of which public is shared)
-	/// (basically a SecretKey)
-	pub sec_nonce0: SecretKey,
-	/// Secret key (of which public is shared)
-	pub sec_key1: SecretKey,
-	/// Secret nonce (of which public is shared)
-	/// (basically a SecretKey)
-	pub sec_nonce1: SecretKey,
+	/// Secret key to sign the tx kernel. It is sum of partial secrets from the single transaction
+	pub sec_key: SecretKey,
 }
 
 impl IntegrityContext {
 	// context0 - sender context, participant id 0
 	// context1 - receiver context, participant id 1
 	/// Build context needed to generate signature for the kernel excess (public key)
-	pub fn build(tx_uuid: &Uuid, fee: u64, context0: &Context, context1: &Context) -> Self {
-		Self {
+	pub fn build(
+		tx_uuid: &Uuid,
+		fee: u64,
+		context0: &Context,
+		context1: &Context,
+	) -> Result<Self, Error> {
+		let mut sec_key = context0.sec_key.clone();
+		sec_key.add_assign(&context1.sec_key)?;
+
+		Ok(Self {
 			sender_parent_key_id: context0.parent_key_id.clone(),
 			tx_uuid: tx_uuid.clone(),
 			fee,
-
-			sec_key0: context0.sec_key.clone(),
-			sec_nonce0: context0.sec_nonce.clone(),
-
-			sec_key1: context1.sec_key.clone(),
-			sec_nonce1: context1.sec_nonce.clone(),
-		}
+			sec_key,
+		})
 	}
 
 	// see for details: pub fn calc_excess<K>(&self, keychain: Option<&K>) -> Result<Commitment, Error>
@@ -91,59 +84,31 @@ impl IntegrityContext {
 	pub fn calc_kernel_excess(
 		&self,
 		secp: &secp::Secp256k1,
-		message: &Message,
+		peer_id: &PeerId,
 	) -> Result<(Commitment, Signature), Error> {
-		// This magic comes from the slate
-		let pub_key0 = PublicKey::from_secret_key(secp, &self.sec_key0)?;
-		let pub_key1 = PublicKey::from_secret_key(secp, &self.sec_key1)?;
+		let msg_hash = Hash::from_vec(&peer_id.to_bytes());
+		let message = Message::from_slice(msg_hash.as_bytes())?;
 
-		let pub_nonce0 = PublicKey::from_secret_key(secp, &self.sec_nonce0)?;
-		let pub_nonce1 = PublicKey::from_secret_key(secp, &self.sec_nonce1)?;
-
-		// It is kernel commit
-		let pub_blind_sum = PublicKey::from_combination(vec![&pub_key0, &pub_key1])?;
-		// It is PK to sign the message...
-		let pub_nonce_sum = PublicKey::from_combination(vec![&pub_nonce0, &pub_nonce1])?;
-
-		// Building signature...
-		//let msg_hash = Hash::from_vec(message);
-		//let msg_message = Message::from_slice(msg_hash.as_bytes())?;
-
-		let signature1 = aggsig::calculate_partial_sig(
-			secp,
-			&self.sec_key1,
-			&self.sec_nonce1,
-			&pub_nonce_sum,
-			Some(&pub_blind_sum),
-			message,
+		let pk = PublicKey::from_secret_key(&secp, &self.sec_key)?;
+		let signature = secp::aggsig::sign_single(
+			&secp,
+			&message,
+			&self.sec_key,
+			None,
+			None,
+			None,
+			Some(&pk),
+			None, //Some(&pub_nonce_sum),
 		)?;
-
-		let signature0 = aggsig::calculate_partial_sig(
-			secp,
-			&self.sec_key0,
-			&self.sec_nonce0,
-			&pub_nonce_sum,
-			Some(&pub_blind_sum),
-			message,
-		)?;
-
-		let final_sig =
-			aggsig::add_signatures(secp, vec![&signature0, &signature1], &pub_nonce_sum)?;
 
 		#[cfg(debug_assertions)]
 		{
-			// Sanity check is done for debug build only
-			aggsig::verify_completed_sig(
-				secp,
-				&final_sig,
-				&pub_blind_sum,
-				Some(&pub_blind_sum),
-				&message,
-			)?;
+			// Sanity check
+			aggsig::verify_completed_sig(secp, &signature, &pk, Some(&pk), &message)?;
 		}
 
-		let kernel_excess = Commitment::from_pubkey(&pub_blind_sum)?;
-		Ok((kernel_excess, final_sig))
+		let kernel_excess = Commitment::from_pubkey(&pk)?;
+		Ok((kernel_excess, signature))
 	}
 }
 
@@ -193,6 +158,11 @@ where
 {
 	wallet_lock!(wallet_inst, w);
 
+	let tip_height = {
+		let client = w.w2n_client();
+		client.get_chain_tip()?.0
+	};
+
 	let integrity_account = w
 		.acct_path_iter()
 		.filter(|a| {
@@ -200,7 +170,7 @@ where
 		})
 		.next();
 	if integrity_account.is_none() {
-		return Ok((None, vec![], 0, vec![]));
+		return Ok((None, vec![], tip_height, vec![]));
 	}
 
 	let integrity_account = integrity_account.unwrap();
@@ -214,7 +184,9 @@ where
 		None,
 	)?;
 
-	outputs.retain(|o| o.output.status == OutputStatus::Unspent);
+	outputs.retain(|o| {
+		o.output.status == OutputStatus::Unspent || o.output.status == OutputStatus::Unconfirmed
+	});
 
 	// Let's check if fee already paid.
 	let log_entry = updater::retrieve_txs(
@@ -227,11 +199,6 @@ where
 		None,
 		None,
 	)?;
-
-	let tip_height = {
-		let client = w.w2n_client();
-		client.get_chain_tip()?.0
-	};
 
 	let mut tx_uuid: HashMap<Uuid, (bool, u64)> = HashMap::new();
 
@@ -246,7 +213,7 @@ where
 			log_entry.kernel_lookup_min_height.unwrap_or(0)
 		};
 		if log_entry.tx_slate_id.is_none()
-			|| height < tip_height - INTEGRITY_FEE_VALID_BLOCKS
+			|| height < tip_height.saturating_sub(libp2p_connection::INTEGRITY_FEE_VALID_BLOCKS)
 			|| log_entry.is_cancelled()
 		{
 			continue;
@@ -271,9 +238,12 @@ where
 		integrity_tx.push((
 			integrity_context,
 			confirmed,
-			height + INTEGRITY_FEE_VALID_BLOCKS,
+			height + libp2p_connection::INTEGRITY_FEE_VALID_BLOCKS,
 		));
 	}
+
+	// Sorting by height
+	integrity_tx.sort_by(|i1, i2| i1.2.partial_cmp(&i2.2).unwrap());
 
 	Ok((Some(integrity_account), outputs, tip_height, integrity_tx))
 }
@@ -331,108 +301,90 @@ where
 
 		// Found that some fee we can pay now. Will process only one transaction
 
-		wallet_lock!(wallet_inst, w);
+		// We can't keep wallet locked on post. Test environment doesn't work this way
+		let tx_to_post = {
+			wallet_lock!(wallet_inst.clone(), w);
 
-		if account.is_none() {
-			// Creating integrity account
-			let path = ExtKeychainPath::new(2, INTEGRITY_ACCOUNT_ID, 0, 0, 0).to_identifier();
-			let label = INTEGRITY_ACCOUNT_NAME.to_string();
-			keys::set_acct_path(&mut **w, keychain_mask, &label, &path)?;
+			if account.is_none() {
+				// Creating integrity account
+				let path = ExtKeychainPath::new(2, INTEGRITY_ACCOUNT_ID, 0, 0, 0).to_identifier();
+				let label = INTEGRITY_ACCOUNT_NAME.to_string();
+				keys::set_acct_path(&mut **w, keychain_mask, &label, &path)?;
+			};
+
+			let total_amount: u64 = outputs.iter().map(|o| o.output.value).sum();
+			let mut amount = amount;
+			let src_account_name = if total_amount < fee {
+				// Need move some coins here
+				account_from.clone().unwrap_or("default".to_string())
+			} else {
+				amount = total_amount;
+				INTEGRITY_ACCOUNT_NAME.to_string()
+			};
+
+			let mut args = InitTxArgs::default();
+			args.src_acct_name = Some(src_account_name.clone());
+			args.amount = amount - fee;
+			args.minimum_confirmations = 1;
+			args.target_slate_version = Some(4); // Need Compact slate
+			args.address = Some("Integrity fee".to_string());
+			args.min_fee = Some(fee);
+			args.ttl_blocks = Some(3);
+			args.late_lock = Some(true);
+
+			let slate = owner::init_send_tx(&mut **w, keychain_mask, &args, false, 1)?;
+
+			owner::tx_lock_outputs(
+				&mut **w,
+				keychain_mask,
+				&slate,
+				args.address.clone(),
+				0,
+				false,
+			)?;
+
+			let (slate, context1) = foreign::receive_tx(
+				&mut **w,
+				keychain_mask,
+				&slate,
+				args.address.clone(),
+				None,
+				None,
+				Some(INTEGRITY_ACCOUNT_NAME),
+				None,
+				false,
+				false,
+			)?;
+
+			let (slate, context0) =
+				owner::finalize_tx(&mut **w, keychain_mask, &slate, false, false)?;
+
+			// Build and store integral fee data...
+			let integrity_context =
+				IntegrityContext::build(&slate.id, slate.fee, &context0, &context1)?;
+			{
+				let mut batch = w.batch(keychain_mask)?;
+				batch.save_integrity_context(slate.id.as_bytes(), &integrity_context)?;
+				batch.commit()?;
+			}
+
+			results[i] = (
+				Some(integrity_context),
+				false,
+				tip_height + libp2p_connection::INTEGRITY_FEE_VALID_BLOCKS,
+			);
+
+			slate.tx
 		};
-
-		let total_amount: u64 = outputs.iter().map(|o| o.output.value).sum();
-		let mut amount = amount;
-		let src_account_name = if total_amount < fee {
-			// Need move some coins here
-			account_from.clone().unwrap_or("default".to_string())
-		} else {
-			amount = total_amount;
-			INTEGRITY_ACCOUNT_NAME.to_string()
-		};
-
-		let mut args = InitTxArgs::default();
-		args.src_acct_name = Some(src_account_name.clone());
-		args.amount = amount - fee;
-		args.minimum_confirmations = 1;
-		args.target_slate_version = Some(4); // Need Compact slate
-		args.address = Some("Integrity fee".to_string());
-		args.min_fee = Some(fee);
-		args.ttl_blocks = Some(3);
-		args.late_lock = Some(true);
-
-		let slate = owner::init_send_tx(&mut **w, keychain_mask, &args, false, 1)?;
-
-		owner::tx_lock_outputs(
-			&mut **w,
-			keychain_mask,
-			&slate,
-			args.address.clone(),
-			0,
-			false,
-		)?;
-
-		let (slate, context1) = foreign::receive_tx(
-			&mut **w,
-			keychain_mask,
-			&slate,
-			args.address.clone(),
-			None,
-			None,
-			Some(INTEGRITY_ACCOUNT_NAME),
-			None,
-			false,
-			false,
-		)?;
-
-		let (slate, context0) = owner::finalize_tx(&mut **w, keychain_mask, &slate, false, false)?;
 
 		// Posting transaction...
-		owner::post_tx(w.w2n_client(), &slate.tx, false)?;
+		let client = {
+			wallet_lock!(wallet_inst, w);
+			w.w2n_client().clone()
+		};
 
-		// Build and store integral fee data...
-		let integrity_context = IntegrityContext::build(&slate.id, slate.fee, &context0, &context1);
-		{
-			let mut batch = w.batch(keychain_mask)?;
-			batch.save_integrity_context(slate.id.as_bytes(), &integrity_context)?;
-			batch.commit()?;
-		}
+		owner::post_tx(&client, &tx_to_post, false)?;
 
-		#[cfg(debug_assertions)]
-		{
-			// Let's run some test while we are in debug mode. Building full test is hard. We don't have self transactions tests
-			// Let's check if the context is valid
-			let keychain = w.keychain(keychain_mask)?;
-			let kernel = &slate.tx.body.kernels[0];
-			let (excess, signature) =
-				integrity_context.calc_kernel_excess(keychain.secp(), &kernel.msg_to_sign()?)?;
-
-			debug_assert_eq!(excess, kernel.excess);
-			debug_assert_eq!(signature, kernel.excess_sig);
-
-			// Checking if we can generate another signature and them validate it.
-			let test_msg_hash = Hash::from_vec(&vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
-			let test_message = Message::from_slice(test_msg_hash.as_bytes())?;
-
-			// Generation (on wallet side) and verity (mwc-node) side
-			let secp = secp::Secp256k1::new();
-			let (excess, signature) = integrity_context.calc_kernel_excess(&secp, &test_message)?;
-			debug_assert_eq!(excess, kernel.excess);
-			let pk_to_check = excess.to_pubkey()?;
-
-			aggsig::verify_completed_sig(
-				&secp,
-				&signature,
-				&pk_to_check,
-				Some(&pk_to_check),
-				&test_message,
-			)?;
-		}
-
-		results[i] = (
-			Some(integrity_context),
-			false,
-			tip_height + INTEGRITY_FEE_VALID_BLOCKS,
-		);
 		break; // Processing only one iteration at a time
 	}
 

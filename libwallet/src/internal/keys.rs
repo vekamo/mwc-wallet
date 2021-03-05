@@ -17,6 +17,7 @@ use crate::error::{Error, ErrorKind};
 use crate::grin_keychain::{ChildNumber, ExtKeychain, Identifier, Keychain};
 use crate::grin_util::secp::key::SecretKey;
 use crate::types::{AcctPathMapping, NodeClient, WalletBackend};
+use std::collections::HashSet;
 
 /// Get next available key in the wallet for a given parent
 pub fn next_available_key<'a, T: ?Sized, C, K>(
@@ -115,17 +116,24 @@ where
 	}
 
 	// We're always using paths at m/k/0 for parent keys for output derivations
-	// so find the highest of those, then increment (to conform with external/internal
-	// derivation chains in BIP32 spec)
+	// We try to find the first available index. Maximum will not work because there we can use reserved accounts
+	let acc_ids: HashSet<u32> = wallet
+		.acct_path_iter()
+		.map(|acc| u32::from(acc.path.to_path().path[0]))
+		.collect();
+	let id = (1..65536)
+		.filter(|v| !acc_ids.contains(v))
+		.next()
+		.ok_or(ErrorKind::GenericError(
+			"Unable create a new account. Too many already exist".to_string(),
+		))?;
 
-	let highest_entry = wallet.acct_path_iter().max_by(|a, b| {
-		<u32>::from(a.path.to_path().path[0]).cmp(&<u32>::from(b.path.to_path().path[0]))
-	});
+	let template_account = wallet.acct_path_iter().next();
 
 	let return_id = {
-		if let Some(e) = highest_entry {
+		if let Some(e) = template_account {
 			let mut p = e.path.to_path();
-			p.path[0] = ChildNumber::from(<u32>::from(p.path[0]) + 1);
+			p.path[0] = ChildNumber::from(id);
 			p.to_identifier()
 		} else {
 			ExtKeychain::derive_key_id(2, 0, 0, 0, 0)
