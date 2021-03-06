@@ -129,29 +129,29 @@ where
 
 	// that means it's not mqs so need to print it
 	if slate_message.is_some() {
-        println!(
-            "{}",
-            format!(
-                "slate [{}] received from [{}] for [{}] MWCs. Message: [\"{}\"]",
-                slate.id.to_string(),
-                display_from,
-                amount_to_hr_string(slate.amount, false),
-                slate_message.clone().unwrap()
-            )
-                .to_string()
-        );
-    } else {
-        println!(
-            "{}",
-            format!(
-                "slate [{}] received from [{}] for [{}] MWCs.",
-                slate.id.to_string(),
-                display_from,
-                amount_to_hr_string(slate.amount, false)
-            )
-                .to_string()
-        );
-    }
+		println!(
+			"{}",
+			format!(
+				"slate [{}] received from [{}] for [{}] MWCs. Message: [\"{}\"]",
+				slate.id.to_string(),
+				display_from,
+				amount_to_hr_string(slate.amount, false),
+				slate_message.clone().unwrap()
+			)
+			.to_string()
+		);
+	} else {
+		println!(
+			"{}",
+			format!(
+				"slate [{}] received from [{}] for [{}] MWCs.",
+				slate.id.to_string(),
+				display_from,
+				amount_to_hr_string(slate.amount, false)
+			)
+			.to_string()
+		);
+	}
 
 	debug!("foreign just received_tx just got slate = {:?}", slate);
 	let mut ret_slate = slate.clone();
