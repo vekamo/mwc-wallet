@@ -501,23 +501,7 @@ impl<L, C, K> SubscriptionHandler for Controller<L, C, K>
 		let display_from = from.get_stripped();
 
 		if slate.num_participants > slate.participant_data.len() {
-			let message = &slate.participant_data[0].message;
-			if message.is_some() {
-				self.do_log_info(format!(
-					"slate [{}] received from [{}] for [{}] MWCs. Message: [\"{}\"]",
-					slate.id.to_string(),
-					display_from,
-					core::amount_to_hr_string(slate.amount, false),
-					message.clone().unwrap()
-				));
-			} else {
-				self.do_log_info(format!(
-					"slate [{}] received from [{}] for [{}] MWCs.",
-					slate.id.to_string(),
-					display_from,
-					core::amount_to_hr_string(slate.amount, false)
-				));
-			}
+			// Don't print anything, the receive foreign API will do that.
 		} else {
 			self.do_log_info(format!(
 				"slate [{}] received back from [{}] for [{}] MWCs",
