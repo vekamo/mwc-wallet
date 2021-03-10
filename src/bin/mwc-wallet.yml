@@ -62,8 +62,13 @@ subcommands:
             short: l
             long: port
             takes_value: true
+        - libp2p_port:
+            help: Port on which to run the libp2p listener
+            short: p
+            long: libp2p_port
+            takes_value: true
         - method:
-            help: Which method to use for communication
+            help: Which method to use for communication. Please note, http can trigger tor and libp2p listeners if they are configured
             short: m
             long: method
             possible_values:
@@ -794,6 +799,62 @@ subcommands:
             short: w
             long: withdraw
             takes_value: false
-
-
-
+  - messaging:
+      about: Manage libp2p messaging routine.
+      args:
+        - status:
+            help: Show startus of messaging. What topic we are listening, minimal fee, how many messages are advertising, how many are in buffer.
+            short: s
+            long: status
+            takes_value: false
+        - add_topic:
+            help: Add topic to listen. Expected that messages will be in json format.
+            short: a
+            long: add_topic
+            takes_value: true
+        - fee:
+            help: Integrity fee. For topic and receive_message it is a mimimal accepted fee. For publishing it is integrity fee to pay.
+            short: f
+            long: fee
+            takes_value: true
+        - remove_topic:
+            help: Stop listening on the topic.
+            short: r
+            long: remove_topic
+            takes_value: true
+        - publish_message:
+            help: Start broadcasting the message.
+            short: p
+            long: publish_message
+            takes_value: true
+        - publish_topic:
+            help: Topic for the broadcasted message.
+            short: t
+            long: publish_topic
+            takes_value: true
+        - publish_interval:
+            help: Time interval for broadcasting (seconds). The minimal interval is 1 minute.
+            short: i
+            long: publish_interval
+            takes_value: true
+        - message_uuid:
+            help: Stop publishing the message.
+            short: w
+            long: withdraw_message
+            takes_value: true
+        - delete_messages:
+            help: Print the messages that was received. Optionaly they can be deleted from the buffer. Note, last 1000 messages will be stored.
+            short: v
+            long: receive_messages
+            possible_values:
+              - yes
+              - no
+            takes_value: true
+        - check_integrity:
+            help: Check Integrity context expiration. Need to be done at least every hour.
+            long: check_integrity
+            takes_value: false
+        - chech_integrity_retain:
+            help: Delete messages with expired Integrity context.
+            long: chech_integrity_retain
+            takes_value: false

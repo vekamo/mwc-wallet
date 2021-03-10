@@ -388,6 +388,10 @@ pub fn parse_listen_args(
 	if let Some(port) = args.value_of("port") {
 		config.api_listen_port = port.parse().unwrap();
 	}
+	if let Some(port) = args.value_of("libp2p_port") {
+		config.libp2p_listen_port = Some(port.parse().unwrap());
+	}
+
 	let method = parse_required(args, "method")?;
 	if args.is_present("no_tor") {
 		tor_config.use_tor_listener = false;
@@ -1182,6 +1186,36 @@ pub fn parse_integrity_args(args: &ArgMatches) -> Result<command::IntegrityArgs,
 	})
 }
 
+pub fn parse_messaging_args(args: &ArgMatches) -> Result<command::MessagingArgs, ParseError> {
+	let fee = match args.value_of("fee") {
+		Some(s) => Some(core::core::amount_from_hr_string(s).map_err(|e| {
+			ParseError::ArgumentError(format!("Unable to parse create fee amount, {}", e))
+		})?),
+		None => None,
+	};
+
+	let publish_interval = match args.value_of("publish_interval") {
+		Some(s) => Some(s.parse::<u32>().map_err(|e| {
+			ParseError::ArgumentError(format!("Unable to parse interval value, {}", e))
+		})?),
+		None => None,
+	};
+
+	Ok(command::MessagingArgs {
+		show_status: args.is_present("status"),
+		add_topic: args.value_of("add_topic").map(|s| String::from(s)),
+		fee,
+		remove_topic: args.value_of("remove_topic").map(|s| String::from(s)),
+		publish_message: args.value_of("publish_message").map(|s| String::from(s)),
+		publish_topic: args.value_of("publish_topic").map(|s| String::from(s)),
+		publish_interval,
+		withdraw_message_id: args.value_of("message_uuid").map(|s| String::from(s)),
+		receive_messages: args.value_of("delete_messages").map(|s| s == "yes"),
+		check_integrity_expiration: args.is_present("check_integrity"),
+		check_integrity_retain: args.is_present("check_integrity_retain"),
+	})
+}
+
 pub fn wallet_command<C, F>(
 	wallet_args: &ArgMatches,
 	mut wallet_config: WalletConfig,
@@ -1576,6 +1610,10 @@ where
 		("integrity", Some(args)) => {
 			let a = arg_parse!(parse_integrity_args(&args));
 			command::integrity(owner_api.wallet_inst.clone(), km, a)
+		}
+		("messaging", Some(args)) => {
+			let a = arg_parse!(parse_messaging_args(&args));
+			command::messaging(owner_api.wallet_inst.clone(), km, a)
 		}
 		(cmd, _) => {
 			return Err(ErrorKind::ArgumentError(format!(

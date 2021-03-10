@@ -53,6 +53,8 @@ pub struct IntegrityContext {
 	pub tx_uuid: Uuid,
 	/// Fee that was paid to miners
 	pub fee: u64,
+	/// Expiration height (until what height the context is valid)
+	pub expiration_height: u64,
 
 	/// Secret key to sign the tx kernel. It is sum of partial secrets from the single transaction
 	pub sec_key: SecretKey,
@@ -67,6 +69,7 @@ impl IntegrityContext {
 		fee: u64,
 		context0: &Context,
 		context1: &Context,
+		tip_height: u64,
 	) -> Result<Self, Error> {
 		let mut sec_key = context0.sec_key.clone();
 		sec_key.add_assign(&context1.sec_key)?;
@@ -76,6 +79,7 @@ impl IntegrityContext {
 			tx_uuid: tx_uuid.clone(),
 			fee,
 			sec_key,
+			expiration_height: tip_height + libp2p_connection::INTEGRITY_FEE_VALID_BLOCKS,
 		})
 	}
 
@@ -138,7 +142,7 @@ impl ser::Readable for IntegrityContext {
 }
 
 /// Start swap trade process. Return SwapID that can be used to check the status or perform further action.
-/// Return <integrity account>, <unspent outputs>, <tip height>, <(best valid fee context, confirmed, height until fee is valid)>
+/// Return <integrity account>, <unspent outputs>, <tip height>, <(best valid fee context, confirmed)>
 pub fn get_integral_balance<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
@@ -147,7 +151,7 @@ pub fn get_integral_balance<'a, L, C, K>(
 		Option<AcctPathMapping>,
 		Vec<OutputCommitMapping>,
 		u64,
-		Vec<(IntegrityContext, bool, u64)>,
+		Vec<(IntegrityContext, bool)>,
 	),
 	Error,
 >
@@ -225,39 +229,43 @@ where
 		);
 	}
 
-	let mut integrity_tx: Vec<(IntegrityContext, bool, u64)> = Vec::new();
+	let mut integrity_tx: Vec<(IntegrityContext, bool)> = Vec::new();
 	for (uuid, (confirmed, height)) in tx_uuid {
 		// Requesting both contexts...
 		let integrity_context = {
 			let mut batch = w.batch(keychain_mask)?;
 			match batch.load_integrity_context(uuid.as_bytes()) {
-				Ok(ctx) => ctx,
+				Ok(ctx) => {
+					let mut ctx = ctx;
+					ctx.expiration_height = height + libp2p_connection::INTEGRITY_FEE_VALID_BLOCKS;
+					ctx
+				}
 				Err(_) => continue,
 			}
 		};
-		integrity_tx.push((
-			integrity_context,
-			confirmed,
-			height + libp2p_connection::INTEGRITY_FEE_VALID_BLOCKS,
-		));
+		integrity_tx.push((integrity_context, confirmed));
 	}
 
 	// Sorting by height
-	integrity_tx.sort_by(|i1, i2| i1.2.partial_cmp(&i2.2).unwrap());
+	integrity_tx.sort_by(|i1, i2| {
+		i1.0.expiration_height
+			.partial_cmp(&i2.0.expiration_height)
+			.unwrap()
+	});
 
 	Ok((Some(integrity_account), outputs, tip_height, integrity_tx))
 }
 
 /// Create integral kernel if needed. Return back the fee and height.
 /// Height will be none if transaction note mined yet.
-/// Return: Integrity context, confirmed flag, height until fee is valid
+/// Return: Integrity context, confirmed flag
 pub fn create_integral_balance<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	amount: u64,
 	fee: &Vec<u64>, // We might have several message threads that runs in parallel. The fee need to be paid for each of them
 	account_from: &Option<String>,
-) -> Result<Vec<(Option<IntegrityContext>, bool, u64)>, Error>
+) -> Result<Vec<(Option<IntegrityContext>, bool)>, Error>
 where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
@@ -269,17 +277,17 @@ where
 		get_integral_balance(wallet_inst.clone(), keychain_mask)?;
 
 	// Let's try to satisfy the requirements..
-	let mut results: Vec<(Option<IntegrityContext>, bool, u64)> = Vec::new();
+	let mut results: Vec<(Option<IntegrityContext>, bool)> = Vec::new();
 	// Sorting because we want to apply the best choice (minimal fee that is needed) first
 	transactions.sort_by(|t1, t2| t1.0.fee.partial_cmp(&t2.0.fee).unwrap());
 
 	for f in fee {
 		match transactions.iter().position(|tx| tx.0.fee >= *f) {
 			Some(idx) => {
-				let (c, conf, height_until) = transactions.remove(idx);
-				results.push((Some(c), conf, height_until));
+				let (c, conf) = transactions.remove(idx);
+				results.push((Some(c), conf));
 			}
-			None => results.push((None, false, 0)),
+			None => results.push((None, false)),
 		}
 	}
 
@@ -361,18 +369,14 @@ where
 
 			// Build and store integral fee data...
 			let integrity_context =
-				IntegrityContext::build(&slate.id, slate.fee, &context0, &context1)?;
+				IntegrityContext::build(&slate.id, slate.fee, &context0, &context1, tip_height)?;
 			{
 				let mut batch = w.batch(keychain_mask)?;
 				batch.save_integrity_context(slate.id.as_bytes(), &integrity_context)?;
 				batch.commit()?;
 			}
 
-			results[i] = (
-				Some(integrity_context),
-				false,
-				tip_height + libp2p_connection::INTEGRITY_FEE_VALID_BLOCKS,
-			);
+			results[i] = (Some(integrity_context), false);
 
 			slate.tx
 		};

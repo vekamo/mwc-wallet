@@ -112,7 +112,10 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance[0].0.is_some(), true);
 	assert_eq!(integral_balance[0].0.clone().unwrap().fee, 30_000_000);
 	assert_eq!(integral_balance[0].1, false);
-	assert_eq!(integral_balance[0].2, 1445);
+	assert_eq!(
+		integral_balance[0].0.clone().unwrap().expiration_height,
+		1445
+	);
 
 	let (account, outputs, _height, integral_balance) =
 		libwallet::owner_libp2p::get_integral_balance(wallet1.clone(), mask1)?;
@@ -121,7 +124,7 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance.len(), 1);
 	assert_eq!(integral_balance[0].0.fee, 30_000_000);
 	assert_eq!(integral_balance[0].1, false);
-	assert_eq!(integral_balance[0].2, 1445);
+	assert_eq!(integral_balance[0].0.expiration_height, 1445);
 
 	// Retry should do nothing because first transaction is not mined yet
 	let integral_balance = libwallet::owner_libp2p::create_integral_balance(
@@ -135,10 +138,12 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance[0].0.is_some(), true);
 	assert_eq!(integral_balance[0].0.clone().unwrap().fee, 30_000_000);
 	assert_eq!(integral_balance[0].1, false);
-	assert_eq!(integral_balance[0].2, 1445);
+	assert_eq!(
+		integral_balance[0].0.clone().unwrap().expiration_height,
+		1445
+	);
 	assert_eq!(integral_balance[1].0.is_some(), false);
 	assert_eq!(integral_balance[1].1, false);
-	assert_eq!(integral_balance[1].2, 0);
 
 	// Mine a block, the transaction should be confirmed
 	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), mask1, 1, false);
@@ -151,7 +156,7 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance.len(), 1);
 	assert_eq!(integral_balance[0].0.fee, 30_000_000);
 	assert_eq!(integral_balance[0].1, true); // Now should be confirmed...
-	assert_eq!(integral_balance[0].2, 1446);
+	assert_eq!(integral_balance[0].0.expiration_height, 1446);
 
 	// Now create second one should succeed
 	let integral_balance = libwallet::owner_libp2p::create_integral_balance(
@@ -164,10 +169,16 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance.len(), 2);
 	assert_eq!(integral_balance[0].0.clone().unwrap().fee, 30_000_000);
 	assert_eq!(integral_balance[0].1, true);
-	assert_eq!(integral_balance[0].2, 1446);
+	assert_eq!(
+		integral_balance[0].0.clone().unwrap().expiration_height,
+		1446
+	);
 	assert_eq!(integral_balance[1].0.clone().unwrap().fee, 35_000_000);
 	assert_eq!(integral_balance[1].1, false);
-	assert_eq!(integral_balance[1].2, 1447);
+	assert_eq!(
+		integral_balance[1].0.clone().unwrap().expiration_height,
+		1447
+	);
 
 	// Mine a block, the second transaction should be confirmed
 	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), mask1, 1, false);
@@ -180,10 +191,10 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance.len(), 2);
 	assert_eq!(integral_balance[0].0.fee, 30_000_000);
 	assert_eq!(integral_balance[0].1, true);
-	assert_eq!(integral_balance[0].2, 1446);
+	assert_eq!(integral_balance[0].0.expiration_height, 1446);
 	assert_eq!(integral_balance[1].0.fee, 35_000_000);
 	assert_eq!(integral_balance[1].1, true);
-	assert_eq!(integral_balance[1].2, 1448); // +1 because post in test environment mining another block.
+	assert_eq!(integral_balance[1].0.expiration_height, 1448); // +1 because post in test environment mining another block.
 
 	// Let's verify if Integrity context match the Tx Kernels.
 	let txs = {
@@ -258,9 +269,9 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 		libp2p_connection::build_integrity_message(&kernel_excess, &signature, &message).unwrap();
 
 	let output_validation_fn = |_kernel: &Commitment| {
-		Some(TxKernel::with_features(KernelFeatures::Plain {
+		Ok(Some(TxKernel::with_features(KernelFeatures::Plain {
 			fee: 100_000_000,
-		}))
+		})))
 	};
 
 	let validate_ok = libp2p_connection::validate_integrity_message(
@@ -277,8 +288,10 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 		&mut HashMap::new(),
 		1_000_000,
 	);
-	assert_eq!(validate_ok, true);
-	assert_eq!(validate_fail, false);
+	assert!(validate_ok.is_ok());
+	assert_eq!(validate_ok.unwrap(), 100_000_000);
+	assert!(validate_fail.is_ok());
+	assert_eq!(validate_fail.unwrap(), 0);
 
 	// add some accounts to check if lowest indexes will be used.
 	wallet::controller::owner_single_use(Some(wallet1.clone()), mask1, None, |api, m| {

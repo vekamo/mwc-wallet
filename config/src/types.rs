@@ -33,6 +33,9 @@ pub struct WalletConfig {
 	pub api_listen_interface: String,
 	/// The port this wallet will run on
 	pub api_listen_port: u16,
+	/// The port for libp2p socks listener to run. If None, libp2p will not be enabled.
+	/// libp2p works only with TOR. If tor is not activated, libp2p will not work
+	pub libp2p_listen_port: Option<u16>,
 	/// The port this wallet's owner API will run on
 	pub owner_api_listen_port: Option<u16>,
 	/// Location of the secret for basic auth on the Owner API
@@ -77,6 +80,7 @@ impl Default for WalletConfig {
 			chain_type: Some(ChainTypes::Mainnet),
 			api_listen_interface: "127.0.0.1".to_string(),
 			api_listen_port: 3415,
+			libp2p_listen_port: Some(3418),
 			owner_api_listen_port: Some(WalletConfig::default_owner_api_listen_port()),
 			api_secret_path: Some(".owner_api_secret".to_string()),
 			node_api_secret_path: Some(".api_secret".to_string()),

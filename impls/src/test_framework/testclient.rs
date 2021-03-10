@@ -775,6 +775,10 @@ impl NodeClient for LocalWalletClient {
 		let o: Vec<api::BlockPrintable> = serde_json::from_str(&m.body).unwrap();
 		Ok(o)
 	}
+
+	fn get_tor_address(&self) -> Result<Option<String>, libwallet::Error> {
+		Ok(None)
+	}
 }
 unsafe impl<'a, L, C, K> Send for WalletProxy<'a, L, C, K>
 where

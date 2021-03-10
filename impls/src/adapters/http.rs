@@ -24,6 +24,7 @@ use serde_json::{json, Value};
 use std::net::SocketAddr;
 use std::path::MAIN_SEPARATOR;
 
+use crate::tor;
 use crate::tor::config as tor_config;
 use crate::tor::process as tor_process;
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
@@ -307,47 +308,6 @@ impl HttpDataSender {
 		Ok(res)
 	}
 
-	pub fn start_socks(&mut self, proxy_addr: &str) -> Result<tor_process::TorProcess, Error> {
-		self.socks_running = true;
-
-		let addr = proxy_addr.parse().map_err(|e| {
-			ErrorKind::GenericError(format!("Unable to parse address {}, {}", proxy_addr, e))
-		})?;
-		self.socks_proxy_addr = Some(SocketAddr::V4(addr));
-
-		let mut tor = tor_process::TorProcess::new();
-		let tor_dir = format!(
-			"{}{}{}",
-			&self.tor_config_dir, MAIN_SEPARATOR, TOR_CONFIG_PATH
-		);
-		warn!(
-			"Starting Tor Process for send at {:?}",
-			self.socks_proxy_addr
-		);
-		tor_config::output_tor_sender_config(
-			&tor_dir,
-			&self
-				.socks_proxy_addr
-				.ok_or(ErrorKind::GenericError(
-					"Not found socks_proxy_addr value".to_string(),
-				))?
-				.to_string(),
-		)
-		.map_err(|e| ErrorKind::TorConfig(format!("Failed to config Tor, {}", e)))?;
-		// Start TOR process
-		let tor_cmd = format!("{}/torrc", &tor_dir);
-		tor.torrc_path(&tor_cmd)
-			.working_dir(&tor_dir)
-			.timeout(200)
-			.completion_percent(100)
-			.launch()
-			.map_err(|e| {
-				ErrorKind::TorProcess(format!("Unable to start Tor process {}, {:?}", tor_cmd, e))
-			})?;
-
-		Ok(tor)
-	}
-
 	fn set_up_tor_send_process(&self) -> Result<(String, tor_process::TorProcess), Error> {
 		let trailing = match self.base_url.ends_with('/') {
 			true => "",
@@ -357,7 +317,13 @@ impl HttpDataSender {
 
 		// set up tor send process if needed
 		let mut tor = tor_process::TorProcess::new();
-		if self.use_socks && !self.socks_running {
+		// We are checking the tor address because we are using the same Socks port. If listener is running,
+		// we don't need the sender.
+		if self.use_socks
+			&& !self.socks_running
+			&& tor::status::get_tor_address().is_none()
+			&& !tor::status::get_tor_sender_running()
+		{
 			let tor_dir = format!(
 				"{}{}{}",
 				&self.tor_config_dir, MAIN_SEPARATOR, TOR_CONFIG_PATH
@@ -389,6 +355,7 @@ impl HttpDataSender {
 						tor_cmd, e
 					))
 				})?;
+			tor::status::set_tor_sender_running(true);
 		}
 		Ok((url_str, tor))
 	}

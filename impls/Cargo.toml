@@ -44,6 +44,8 @@ data-encoding = "2"
 regex = "1.3"
 timer = "0.2"
 sysinfo = "0.9"
+libp2p = { git = "https://github.com/mwcproject/rust-libp2p", branch = "master", default-features = false, features = [ "noise", "yamux", "mplex", "dns", "tcp-tokio", "ping", "gossipsub"] }
+#libp2p = { path = "../../rust-libp2p", default-features = false, features = [ "noise", "yamux", "mplex", "dns", "tcp-tokio", "ping", "gossipsub"] }
 
 grin_wallet_util = { path = "../util", version = "4.1.0" }
 grin_wallet_config = { path = "../config", version = "4.1.0" }

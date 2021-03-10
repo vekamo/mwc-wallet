@@ -416,6 +416,11 @@ mod tests {
 				.map(|(kernel, height)| (kernel.clone(), *height, 0));
 			Ok(res)
 		}
+
+		/// Get Node Tor address
+		fn get_tor_address(&self) -> Result<Option<String>, crate::Error> {
+			Ok(None)
+		}
 	}
 
 	#[test]

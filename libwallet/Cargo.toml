@@ -54,6 +54,7 @@ curve25519-dalek = "2.1"
 crypto_box = "0.5"
 crc = "1.8"
 libp2p = { git = "https://github.com/mwcproject/rust-libp2p", branch = "master", default-features = false, features = [ "noise", "yamux", "mplex", "dns", "tcp-tokio", "ping", "gossipsub"] }
+#libp2p = { path = "../../rust-libp2p", default-features = false, features = [ "noise", "yamux", "mplex", "dns", "tcp-tokio", "ping", "gossipsub"] }
 
 grin_wallet_util = { path = "../util", version = "4.1.0" }
 grin_wallet_config = { path = "../config", version = "4.1.0" }

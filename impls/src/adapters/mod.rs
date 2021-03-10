@@ -14,6 +14,7 @@
 
 mod file;
 pub mod http;
+pub mod libp2p_messaging;
 mod mwcmq;
 mod types;
 

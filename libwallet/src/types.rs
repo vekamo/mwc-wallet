@@ -443,6 +443,9 @@ pub trait NodeClient: Send + Sync + Clone {
 		end_height: u64,
 		threads_number: usize,
 	) -> Result<Vec<grin_api::BlockPrintable>, Error>;
+
+	/// Get Node Tor address
+	fn get_tor_address(&self) -> Result<Option<String>, Error>;
 }
 
 /// Node version info

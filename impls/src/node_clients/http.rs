@@ -628,6 +628,14 @@ impl NodeClient for HTTPNodeClient {
 
 		Ok(result_blocks)
 	}
+
+	/// Get Node Tor address
+	fn get_tor_address(&self) -> Result<Option<String>, libwallet::Error> {
+		debug!("Requesting tor address from mwc-node");
+		let params = json!([]);
+		let res = self.send_json_request::<Option<String>>("get_tor_address", &params, NODE_CALL_RETRY)?;
+		Ok(res)
+	}
 }
 
 #[cfg(test)]

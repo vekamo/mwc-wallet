@@ -2305,6 +2305,7 @@ pub trait OwnerRpcV3 {
 				"chain_type": null,
 				"api_listen_interface": "127.0.0.1",
 				"api_listen_port": 3415,
+				"api_listen_port": 3418,
 				"owner_api_listen_port": 3420,
 				"api_secret_path": null,
 				"node_api_secret_path": null,

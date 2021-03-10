@@ -29,6 +29,8 @@ use crate::{controller, display};
 use chrono::Utc;
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
 use grin_wallet_impls::adapters::{create_swap_message_sender, validate_tor_address};
+use grin_wallet_impls::libp2p_messaging;
+use grin_wallet_impls::tor;
 use grin_wallet_impls::{Address, MWCMQSAddress, Publisher};
 use grin_wallet_libwallet::api_impl::{owner, owner_libp2p, owner_swap};
 use grin_wallet_libwallet::internal::selection;
@@ -41,8 +43,9 @@ use grin_wallet_libwallet::swap::types::Action;
 use grin_wallet_libwallet::{Slate, TxLogEntry, WalletInst};
 use grin_wallet_util::grin_core::consensus::GRIN_BASE;
 use grin_wallet_util::grin_core::core::amount_to_hr_string;
-use grin_wallet_util::grin_p2p::libp2p_connection;
+use grin_wallet_util::grin_p2p::{libp2p_connection, PeerAddr};
 use serde_json as json;
+use std::collections::HashSet;
 use std::fs::File;
 use std::io;
 use std::io::{Read, Write};
@@ -172,6 +175,8 @@ where
 						&config.api_listen_addr(),
 						g_args.tls_conf.clone(),
 						tor_config.use_tor_listener,
+						&tor_config.socks_proxy_addr,
+						&config.libp2p_listen_port,
 					);
 					if let Err(e) = res {
 						error!("Error starting http listener: {}", e);
@@ -326,8 +331,8 @@ pub fn send<L, C, K>(
 	owner_api: &mut Owner<L, C, K>,
 	_config: &WalletConfig,
 	keychain_mask: Option<&SecretKey>,
-	api_listen_addr: String,
-	tls_conf: Option<TLSConfig>,
+	_api_listen_addr: String,
+	_tls_conf: Option<TLSConfig>,
 	tor_config: Option<TorConfig>,
 	mqs_config: Option<MQSConfig>,
 	args: SendArgs,
@@ -407,31 +412,6 @@ where
 							false,
 							//None,
 						)?;
-						thread::sleep(Duration::from_millis(2000));
-					}
-				}
-				"http" => {
-					if !controller::is_foreign_api_running() {
-						let tor_config = tor_config.clone().ok_or(ErrorKind::GenericError(
-							"Tor configuration is not defined".to_string(),
-						))?;
-						let wallet_inst2 = wallet_inst.clone();
-						let km = keychain_mask.map(|k| k.clone());
-
-						let _api_thread = thread::Builder::new()
-							.name("wallet-http-listener".to_string())
-							.spawn(move || {
-								let res = controller::foreign_listener(
-									wallet_inst2,
-									Arc::new(Mutex::new(km)),
-									&api_listen_addr,
-									tls_conf,
-									tor_config.use_tor_listener,
-								);
-								if let Err(e) = res {
-									error!("Error starting http listener: {}", e);
-								}
-							});
 						thread::sleep(Duration::from_millis(2000));
 					}
 				}
@@ -1759,6 +1739,32 @@ pub struct IntegrityArgs {
 	pub fee: Vec<u64>,
 }
 
+/// Arguments for the messaging command
+pub struct MessagingArgs {
+	/// Show status of the messaging pool
+	pub show_status: bool,
+	/// Topic to add
+	pub add_topic: Option<String>,
+	/// The integrity fee to pay or filter
+	pub fee: Option<u64>,
+	/// Topic to remove from listening
+	pub remove_topic: Option<String>,
+	/// Message to start publishing
+	pub publish_message: Option<String>,
+	/// Topic to start publishing the message
+	pub publish_topic: Option<String>,
+	/// Message publishing interval in second
+	pub publish_interval: Option<u32>,
+	/// Withdraw publishing of the message
+	pub withdraw_message_id: Option<String>,
+	/// Print new messages. If parameter is true - messages will be deleted form the buffer
+	pub receive_messages: Option<bool>,
+	/// Check if integrity message contexts are expired
+	pub check_integrity_expiration: bool,
+	/// Retain expired messages
+	pub check_integrity_retain: bool,
+}
+
 // For Json we can't use int 64, we have to convert all of them to Strings
 #[derive(Serialize, Deserialize)]
 pub struct StateEtaInfoString {
@@ -2161,6 +2167,8 @@ where
 										&api_listen_addr,
 										tls_conf,
 										tor_config.use_tor_listener,
+										&tor_config.socks_proxy_addr,
+										&None,
 									);
 									if let Err(e) = res {
 										error!("Error starting http listener: {}", e);
@@ -2168,7 +2176,7 @@ where
 								});
 							thread::sleep(Duration::from_millis(2000));
 						}
-						from_address = controller::get_current_tor_address().ok_or(
+						from_address = tor::status::get_tor_address().ok_or(
 							crate::libwallet::ErrorKind::GenericError(
 								"Tor is not running".to_string(),
 							),
@@ -2320,6 +2328,8 @@ where
 									&api_listen_addr,
 									tls_conf,
 									tor_config.use_tor_listener,
+									&tor_config.socks_proxy_addr,
+									&None,
 								);
 								if let Err(e) = res {
 									error!("Error starting http listener: {}", e);
@@ -2376,7 +2386,7 @@ where
 						)
 						.into());
 					}
-					from_address = controller::get_current_tor_address()
+					from_address = tor::status::get_tor_address()
 						.ok_or(ErrorKind::GenericError("Tor is not running".to_string()))?;
 				}
 				_ => {
@@ -2784,14 +2794,14 @@ where
 				"Fee is not paid.".to_string()
 			} else {
 				let mut res_str = String::new();
-				for (ic, conf, height_until) in fee_transaction {
+				for (ic, conf) in fee_transaction {
 					if !res_str.is_empty() {
 						res_str += ", ";
 					}
 					res_str += &format!(
 						"Fee {} MWC is active until block {}",
 						amount_to_hr_string(ic.fee, true),
-						height_until
+						ic.expiration_height,
 					);
 					if !conf {
 						res_str += " (not confirmed)"
@@ -2843,13 +2853,13 @@ where
 					report_str += ", ";
 				}
 
-				let (ic, conf, height_until) = &res[i];
+				let (ic, conf) = &res[i];
 				match ic {
 					Some(ic) => {
 						report_str += &format!(
 							"Fee {} MWC is active until block {}",
 							amount_to_hr_string(ic.fee, true),
-							height_until
+							ic.expiration_height,
 						);
 						if !conf {
 							report_str += " (not confirmed)"
@@ -2883,6 +2893,233 @@ where
 			} else {
 				println!("There are no integrity funds to withdraw");
 			}
+		}
+	}
+
+	Ok(())
+}
+
+/// integrity fee related operations
+pub fn messaging<L, C, K>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
+	args: MessagingArgs,
+) -> Result<(), Error>
+where
+	L: WalletLCProvider<'static, C, K> + 'static,
+	C: NodeClient + 'static,
+	K: keychain::Keychain + 'static,
+{
+	if args.show_status {
+		// Printing the status...
+		if !libp2p_connection::get_libp2p_running() {
+			println!("gossippub is not running");
+		} else {
+			let peers = libp2p_connection::get_libp2p_connections();
+			println!("gossippub is running, has {} peers", peers);
+			if peers == 0 {
+				// let's add peer is possible
+				let mut w_lock = wallet_inst.lock();
+				let w = w_lock.lc_provider()?.wallet_inst()?;
+				match w.w2n_client().get_tor_address() {
+					Ok(tor_addr) => match tor_addr {
+						Some(addr) => {
+							libp2p_connection::add_new_peer(&PeerAddr::Onion(addr.clone()))
+								.map_err(|e| {
+									ErrorKind::GenericError(format!(
+										"Failed to add libp2p peer, {}",
+										e
+									))
+								})?;
+							println!("Joining the first peer at {}", addr);
+						}
+						None => println!(
+							"Your mwc-node run without TOR, gossippub network can't be discovered"
+						),
+					},
+					Err(e) => {
+						println!(
+							"Unable to contact the mwc node to get address to join, {}",
+							e
+						);
+					}
+				}
+			}
+			let mut topics_str = libp2p_messaging::get_topics()
+				.iter()
+				.map(|t| t.0.clone())
+				.collect::<Vec<String>>()
+				.join(", ");
+			if topics_str.is_empty() {
+				topics_str = "None".to_string();
+			}
+			println!("Topics: {}", topics_str);
+
+			let active_messages = libp2p_messaging::get_broadcasting_messages();
+			println!("Broadcasting messages: {}", active_messages.len());
+			let cur_time = Utc::now().timestamp();
+			for msg in &active_messages {
+				println!(
+					"  UUID: {}, Fee: {} MWC, Interval {} sec, Published {}, Message: {}",
+					msg.uuid,
+					amount_to_hr_string(msg.integrity_ctx.fee, true),
+					msg.broadcasting_interval,
+					cur_time - msg.last_time_published,
+					msg.message
+				);
+			}
+
+			println!(
+				"Received messages: {}",
+				libp2p_messaging::get_received_messages_num()
+			)
+		}
+	}
+
+	// Adding topics
+	if args.add_topic.is_some() {
+		let new_topic = args.add_topic.clone().unwrap();
+		if libp2p_messaging::add_topic(&new_topic, args.fee.clone().unwrap_or(0)) {
+			println!("You are subscribed to a new topic {}", new_topic);
+		} else {
+			println!("Wallet is already subscribed to a new topic {}", new_topic);
+		}
+	}
+
+	if args.remove_topic.is_some() {
+		let remove_topic = args.remove_topic.clone().unwrap();
+		if libp2p_messaging::remove_topic(&remove_topic) {
+			println!("You are unsubscribed from the topic {}", remove_topic);
+		} else {
+			println!("Wallet is not subscribed to the topic {}", remove_topic);
+		}
+	}
+
+	if args.publish_message.is_some() {
+		let publish_message = args.publish_message.unwrap();
+		let publish_topic = args.publish_topic.ok_or(ErrorKind::ArgumentError(
+			"Please specify publish topic".to_string(),
+		))?;
+		let publish_interval = args.publish_interval.ok_or(ErrorKind::ArgumentError(
+			"Please specify message publishing interval value".to_string(),
+		))?;
+		if publish_interval < 60 {
+			return Err(ErrorKind::ArgumentError(
+				"Message publishing interval minimal value is 60 seconds".to_string(),
+			)
+			.into());
+		}
+		let min_fee = selection::get_base_fee() * libp2p_connection::INTEGRITY_FEE_MIN_X;
+		let fee = args.fee.unwrap_or(min_fee);
+		if fee < min_fee {
+			return Err(ErrorKind::ArgumentError(format!(
+				"Please specify fee higher than minimal integrity fee {}",
+				amount_to_hr_string(min_fee, true)
+			))
+			.into());
+		}
+
+		// Let's check if message already running, so we can reuse integrity context
+		let running_messages = libp2p_messaging::get_broadcasting_messages();
+		let mut context = match running_messages
+			.iter()
+			.filter(|m| m.message == publish_message)
+			.next()
+		{
+			Some(msg) => Some(msg.integrity_ctx.clone()),
+			None => None,
+		};
+
+		if context.is_some() {
+			if context.as_ref().unwrap().fee < fee {
+				// We need higher fee, we can't reuse it...
+				context = None;
+			}
+		}
+
+		if context.is_none() {
+			let used_ctx_uuid: HashSet<Uuid> = running_messages
+				.iter()
+				.map(|msg| msg.integrity_ctx.tx_uuid.clone())
+				.collect();
+			// Let's try to find the Context with fees.
+			let (_account, _outputs, _tip_height, fee_transaction) =
+				owner_libp2p::get_integral_balance(wallet_inst.clone(), keychain_mask)?;
+
+			context = fee_transaction
+				.iter()
+				.filter(|(ctx, conf)| {
+					*conf && !used_ctx_uuid.contains(&ctx.tx_uuid) && ctx.fee >= fee
+				})
+				.map(|(ctx, _conf)| ctx.clone())
+				.next();
+		}
+
+		if context.is_none() {
+			return Err(ErrorKind::GenericError(
+				"Not found integrity context with paid fee".to_string(),
+			)
+			.into());
+		}
+
+		let uuid = libp2p_messaging::add_broadcasting_messages(
+			&publish_topic,
+			&publish_message,
+			publish_interval,
+			context.unwrap(),
+		)?;
+
+		println!("The messages is published. ID {}", uuid);
+	}
+
+	if let Some(withdraw_message_id) = args.withdraw_message_id {
+		let uuid = match Uuid::parse_str(&withdraw_message_id) {
+			Ok(uuid) => uuid,
+			Err(e) => {
+				return Err(ErrorKind::ArgumentError(format!(
+					"Unable to parse withdraw_message_id UUID value, {}",
+					e
+				))
+				.into())
+			}
+		};
+		if libp2p_messaging::remove_broadcasting_message(&uuid) {
+			println!("Message {} is removed", uuid);
+		} else {
+			println!("Not found message {}", uuid);
+		}
+	}
+
+	if let Some(remove) = args.receive_messages {
+		let messages = libp2p_messaging::get_received_messages(remove);
+		println!("There are {} messages in receive buffer.", messages.len());
+		for m in &messages {
+			println!(
+				"  topic: {}, fee: {}, message: {}",
+				m.topic,
+				amount_to_hr_string(m.fee, true),
+				m.message
+			);
+		}
+	}
+
+	if args.check_integrity_expiration {
+		let tip_height = {
+			let mut w_lock = wallet_inst.lock();
+			let w = w_lock.lc_provider()?.wallet_inst()?;
+			w.w2n_client().get_chain_tip()?.0
+		};
+
+		let expired_msgs = libp2p_messaging::check_integrity_context_expiration(
+			tip_height,
+			args.check_integrity_retain,
+		);
+		println!("You have {} expired messages", expired_msgs.len());
+		for m in &expired_msgs {
+			println!(
+				"  UUID: {}, Topic: {}, Message: {}",
+				m.uuid, m.topic, m.message
+			);
 		}
 	}
 

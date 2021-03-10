@@ -51,6 +51,14 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
+		"libp2p_listen_port".to_string(),
+		"
+#socks port for wallet libp2p listener. libp2p activated with TOR
+"
+		.to_string(),
+	);
+
+	retval.insert(
 		"owner_api_listen_port".to_string(),
 		"
 #port for wallet owner api
