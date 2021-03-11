@@ -1183,6 +1183,7 @@ pub fn parse_integrity_args(args: &ArgMatches) -> Result<command::IntegrityArgs,
 		account,
 		reserve,
 		fee,
+		json: args.is_present("json"),
 	})
 }
 
@@ -1213,6 +1214,7 @@ pub fn parse_messaging_args(args: &ArgMatches) -> Result<command::MessagingArgs,
 		receive_messages: args.value_of("delete_messages").map(|s| s == "yes"),
 		check_integrity_expiration: args.is_present("check_integrity"),
 		check_integrity_retain: args.is_present("check_integrity_retain"),
+		json: args.is_present("json"),
 	})
 }
 

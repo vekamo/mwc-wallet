@@ -45,6 +45,8 @@ use grin_wallet_util::grin_core::consensus::GRIN_BASE;
 use grin_wallet_util::grin_core::core::amount_to_hr_string;
 use grin_wallet_util::grin_p2p::{libp2p_connection, PeerAddr};
 use serde_json as json;
+use serde_json::json;
+use serde_json::{Map as JsonMap, Value as JsonValue};
 use std::collections::HashSet;
 use std::fs::File;
 use std::io;
@@ -1737,6 +1739,8 @@ pub struct IntegrityArgs {
 	pub reserve: Option<u64>,
 	/// How much fees to pay
 	pub fee: Vec<u64>,
+	/// Print output in Json format
+	pub json: bool,
 }
 
 /// Arguments for the messaging command
@@ -1763,6 +1767,8 @@ pub struct MessagingArgs {
 	pub check_integrity_expiration: bool,
 	/// Retain expired messages
 	pub check_integrity_retain: bool,
+	/// Print output in Json format
+	pub json: bool,
 }
 
 // For Json we can't use int 64, we have to convert all of them to Strings
@@ -2775,26 +2781,32 @@ where
 	// Let's do refresh first
 	let _ = owner::perform_refresh_from_node(wallet_inst.clone(), keychain_mask, &None)?;
 
+	let mut json_res = JsonMap::new();
+
 	match args.subcommand {
 		IntegritySubcommand::Check => {
 			let (_account, outputs, _tip_height, fee_transaction) =
 				owner_libp2p::get_integral_balance(wallet_inst.clone(), keychain_mask)?;
 
-			let balance_str = if !outputs.is_empty() {
+			let (balance_str, integrity_balance) = if !outputs.is_empty() {
 				let integrity_balance: u64 = outputs.iter().map(|o| o.output.value).sum();
-				format!(
-					"Integrity balance is {} MWC.",
-					amount_to_hr_string(integrity_balance, true)
+				(
+					format!(
+						"Integrity balance is {} MWC.",
+						amount_to_hr_string(integrity_balance, true)
+					),
+					integrity_balance,
 				)
 			} else {
-				"Integrity balance is empty.".to_string()
+				("Integrity balance is empty.".to_string(), 0)
 			};
+			json_res.insert("balance".to_string(), JsonValue::from(integrity_balance));
 
 			let fee_str = if fee_transaction.is_empty() {
 				"Fee is not paid.".to_string()
 			} else {
 				let mut res_str = String::new();
-				for (ic, conf) in fee_transaction {
+				for (ic, conf) in &fee_transaction {
 					if !res_str.is_empty() {
 						res_str += ", ";
 					}
@@ -2810,7 +2822,25 @@ where
 				res_str
 			};
 
-			println!("{} {}", balance_str, fee_str);
+			if args.json {
+				let fee_tx: Vec<JsonValue> = fee_transaction
+					.iter()
+					.map(|(ic, conf)| {
+						let mut res = JsonMap::new();
+						res.insert("uuid".to_string(), JsonValue::from(ic.tx_uuid.to_string()));
+						res.insert("fee".to_string(), JsonValue::from(ic.fee));
+						res.insert(
+							"expiration_height".to_string(),
+							JsonValue::from(ic.expiration_height),
+						);
+						res.insert("conf".to_string(), JsonValue::from(*conf));
+						JsonValue::from(res)
+					})
+					.collect();
+				json_res.insert("tx_fee".to_string(), JsonValue::from(fee_tx));
+			} else {
+				println!("{} {}", balance_str, fee_str);
+			}
 		}
 		IntegritySubcommand::Create => {
 			if args.fee.is_empty() {
@@ -2848,14 +2878,25 @@ where
 			debug_assert!(args.fee.len() == res.len());
 
 			let mut report_str = String::new();
+			let mut fee_tx: Vec<JsonValue> = vec![];
 			for i in 0..args.fee.len() {
 				if !report_str.is_empty() {
 					report_str += ", ";
 				}
 
+				let mut tx_info = JsonMap::new();
 				let (ic, conf) = &res[i];
+				tx_info.insert("ask_fee".to_string(), JsonValue::from(args.fee[i]));
 				match ic {
 					Some(ic) => {
+						tx_info.insert("uuid".to_string(), JsonValue::from(ic.tx_uuid.to_string()));
+						tx_info.insert("fee".to_string(), JsonValue::from(ic.fee));
+						tx_info.insert(
+							"expiration_height".to_string(),
+							JsonValue::from(ic.expiration_height),
+						);
+						tx_info.insert("conf".to_string(), JsonValue::from(*conf));
+
 						report_str += &format!(
 							"Fee {} MWC is active until block {}",
 							amount_to_hr_string(ic.fee, true),
@@ -2872,9 +2913,14 @@ where
 						);
 					}
 				}
+				fee_tx.push(JsonValue::from(tx_info));
 			}
 
-			println!("{}", report_str);
+			if args.json {
+				json_res.insert("create_res".to_string(), JsonValue::from(fee_tx));
+			} else {
+				println!("{}", report_str);
+			}
 		}
 		IntegritySubcommand::Withdraw => {
 			let account = args.account.unwrap_or("default".to_string());
@@ -2884,16 +2930,27 @@ where
 				&account,
 			)?;
 
-			if withdraw_coins > 0 {
-				println!(
-					"{} MWC was transferred to account {}",
-					amount_to_hr_string(withdraw_coins, true),
-					account
+			if args.json {
+				json_res.insert(
+					"withdraw_coins".to_string(),
+					JsonValue::from(withdraw_coins),
 				);
 			} else {
-				println!("There are no integrity funds to withdraw");
+				if withdraw_coins > 0 {
+					println!(
+						"{} MWC was transferred to account {}",
+						amount_to_hr_string(withdraw_coins, true),
+						account
+					);
+				} else {
+					println!("There are no integrity funds to withdraw");
+				}
 			}
 		}
+	}
+
+	if args.json {
+		println!("JSON: {}", JsonValue::from(json_res));
 	}
 
 	Ok(())
@@ -2910,13 +2967,23 @@ where
 	C: NodeClient + 'static,
 	K: keychain::Keychain + 'static,
 {
+	let mut json_res = JsonMap::new();
+
 	if args.show_status {
 		// Printing the status...
 		if !libp2p_connection::get_libp2p_running() {
-			println!("gossippub is not running");
+			if args.json {
+				json_res.insert("gossippub_peers".to_string(), JsonValue::from(-1));
+			} else {
+				println!("gossippub is not running");
+			}
 		} else {
 			let peers = libp2p_connection::get_libp2p_connections();
-			println!("gossippub is running, has {} peers", peers);
+			if args.json {
+				json_res.insert("gossippub_peers".to_string(), JsonValue::from(peers));
+			} else {
+				println!("gossippub is running, has {} peers", peers);
+			}
 			if peers == 0 {
 				// let's add peer is possible
 				let mut w_lock = wallet_inst.lock();
@@ -2931,11 +2998,15 @@ where
 										e
 									))
 								})?;
-							println!("Joining the first peer at {}", addr);
+							if !args.json {
+								println!("Joining the node peer at {}", addr);
+							}
 						}
-						None => println!(
-							"Your mwc-node run without TOR, gossippub network can't be discovered"
-						),
+						None => {
+							if args.json {
+								println!("Your mwc-node run without TOR, only seed nodes will be used to bootstrap")
+							}
+						}
 					},
 					Err(e) => {
 						println!(
@@ -2944,8 +3015,77 @@ where
 						);
 					}
 				}
+				// Adding seed nodes. Those onion addresses must match what we have for seeds.
+				// Please note, it is a secondary source, the primary source is the wallet's node
+				if global::is_mainnet() {
+					libp2p_connection::add_new_peer(&PeerAddr::Onion(
+						"bsvrlu2vab3frt24bqwkfo5kqm35v2pmlv3dvqg5bgc72a3cwyizuyqd.onion"
+							.to_string(),
+					))
+					.map_err(|e| {
+						ErrorKind::GenericError(format!("Failed to add libp2p peer, {}", e))
+					})?;
+					libp2p_connection::add_new_peer(&PeerAddr::Onion(
+						"r6dkxkiyg5grfhyftj3cusxvxm34e63lg5ed2zy4zbrwh4pwrcmvmpid.onion"
+							.to_string(),
+					))
+					.map_err(|e| {
+						ErrorKind::GenericError(format!("Failed to add libp2p peer, {}", e))
+					})?;
+				} else {
+					libp2p_connection::add_new_peer(&PeerAddr::Onion(
+						"nvo4xrfnn46vhaocnswea564bnmbgfjib7fqpa2my3e3ren4iujnzeyd.onion"
+							.to_string(),
+					))
+					.map_err(|e| {
+						ErrorKind::GenericError(format!("Failed to add libp2p peer, {}", e))
+					})?;
+					libp2p_connection::add_new_peer(&PeerAddr::Onion(
+						"627qgblkpc4ayr5fe6tfg6ryhev7kmjhge2ualab7ajxk5gbs3v7bmqd.onion"
+							.to_string(),
+					))
+					.map_err(|e| {
+						ErrorKind::GenericError(format!("Failed to add libp2p peer, {}", e))
+					})?;
+				}
 			}
-			let mut topics_str = libp2p_messaging::get_topics()
+		}
+
+		let cur_time = Utc::now().timestamp();
+		if args.json {
+			json_res.insert(
+				"topics".to_string(),
+				JsonValue::from(
+					libp2p_messaging::get_topics()
+						.iter()
+						.map(|t| JsonValue::from(t.0.clone()))
+						.collect::<Vec<JsonValue>>(),
+				),
+			);
+			json_res.insert(
+				"broadcasting".to_string(),
+				JsonValue::from(
+					libp2p_messaging::get_broadcasting_messages()
+						.iter()
+						.map(|msg| {
+							json!( {
+							"uuid" : msg.uuid.to_string(),
+							"fee" : msg.integrity_ctx.fee,
+							"broadcasting_interval" : msg.broadcasting_interval,
+							"published_time" : cur_time-msg.last_time_published,
+							"message" : msg.message,
+							})
+						})
+						.collect::<Vec<JsonValue>>(),
+				),
+			);
+			json_res.insert(
+				"received_messages".to_string(),
+				JsonValue::from(libp2p_messaging::get_received_messages_num()),
+			);
+		} else {
+			let listening_topics = libp2p_messaging::get_topics();
+			let mut topics_str = listening_topics
 				.iter()
 				.map(|t| t.0.clone())
 				.collect::<Vec<String>>()
@@ -2957,7 +3097,6 @@ where
 
 			let active_messages = libp2p_messaging::get_broadcasting_messages();
 			println!("Broadcasting messages: {}", active_messages.len());
-			let cur_time = Utc::now().timestamp();
 			for msg in &active_messages {
 				println!(
 					"  UUID: {}, Fee: {} MWC, Interval {} sec, Published {}, Message: {}",
@@ -2980,18 +3119,34 @@ where
 	if args.add_topic.is_some() {
 		let new_topic = args.add_topic.clone().unwrap();
 		if libp2p_messaging::add_topic(&new_topic, args.fee.clone().unwrap_or(0)) {
-			println!("You are subscribed to a new topic {}", new_topic);
+			if args.json {
+				json_res.insert("add_topic".to_string(), JsonValue::from(new_topic));
+			} else {
+				println!("You are subscribed to a new topic {}", new_topic);
+			}
 		} else {
-			println!("Wallet is already subscribed to a new topic {}", new_topic);
+			if args.json {
+				json_res.insert("new_topic".to_string(), json!(null));
+			} else {
+				println!("Wallet is already subscribed to a new topic {}", new_topic);
+			}
 		}
 	}
 
 	if args.remove_topic.is_some() {
 		let remove_topic = args.remove_topic.clone().unwrap();
 		if libp2p_messaging::remove_topic(&remove_topic) {
-			println!("You are unsubscribed from the topic {}", remove_topic);
+			if args.json {
+				json_res.insert("remove_topic".to_string(), JsonValue::from(remove_topic));
+			} else {
+				println!("You are unsubscribed from the topic {}", remove_topic);
+			}
 		} else {
-			println!("Wallet is not subscribed to the topic {}", remove_topic);
+			if args.json {
+				json_res.insert("remove_topic".to_string(), json!(null));
+			} else {
+				println!("Wallet is not subscribed to the topic {}", remove_topic);
+			}
 		}
 	}
 
@@ -3069,7 +3224,14 @@ where
 			context.unwrap(),
 		)?;
 
-		println!("The messages is published. ID {}", uuid);
+		if args.json {
+			json_res.insert(
+				"published_message".to_string(),
+				JsonValue::from(uuid.to_string()),
+			);
+		} else {
+			println!("The messages is published. ID {}", uuid);
+		}
 	}
 
 	if let Some(withdraw_message_id) = args.withdraw_message_id {
@@ -3084,22 +3246,50 @@ where
 			}
 		};
 		if libp2p_messaging::remove_broadcasting_message(&uuid) {
-			println!("Message {} is removed", uuid);
+			if args.json {
+				json_res.insert(
+					"remove_message".to_string(),
+					JsonValue::from(uuid.to_string()),
+				);
+			} else {
+				println!("Message {} is removed", uuid);
+			}
 		} else {
-			println!("Not found message {}", uuid);
+			if args.json {
+				json_res.insert("remove_message".to_string(), json!(null));
+			} else {
+				println!("Not found message {}", uuid);
+			}
 		}
 	}
 
 	if let Some(remove) = args.receive_messages {
 		let messages = libp2p_messaging::get_received_messages(remove);
-		println!("There are {} messages in receive buffer.", messages.len());
-		for m in &messages {
-			println!(
-				"  topic: {}, fee: {}, message: {}",
-				m.topic,
-				amount_to_hr_string(m.fee, true),
-				m.message
+		if args.json {
+			json_res.insert(
+				"receive_messages".to_string(),
+				JsonValue::from(
+					messages
+						.iter()
+						.map(|msg| {
+							json!({ "topic": msg.topic.to_string(),
+								"fee": msg.fee,
+								"message": msg.message
+							})
+						})
+						.collect::<Vec<JsonValue>>(),
+				),
 			);
+		} else {
+			println!("There are {} messages in receive buffer.", messages.len());
+			for m in &messages {
+				println!(
+					"  topic: {}, fee: {}, message: {}",
+					m.topic,
+					amount_to_hr_string(m.fee, true),
+					m.message
+				);
+			}
 		}
 	}
 
@@ -3114,13 +3304,35 @@ where
 			tip_height,
 			args.check_integrity_retain,
 		);
-		println!("You have {} expired messages", expired_msgs.len());
-		for m in &expired_msgs {
-			println!(
-				"  UUID: {}, Topic: {}, Message: {}",
-				m.uuid, m.topic, m.message
+
+		if args.json {
+			json_res.insert(
+				"expired_msgs".to_string(),
+				JsonValue::from(
+					expired_msgs
+						.iter()
+						.map(|msg| {
+							json!({ "uuid": msg.uuid.to_string(),
+								"topic": msg.topic.to_string(),
+								"message": msg.message
+							})
+						})
+						.collect::<Vec<JsonValue>>(),
+				),
 			);
+		} else {
+			println!("You have {} expired messages", expired_msgs.len());
+			for m in &expired_msgs {
+				println!(
+					"  UUID: {}, Topic: {}, Message: {}",
+					m.uuid, m.topic, m.message
+				);
+			}
 		}
+	}
+
+	if args.json {
+		println!("JSON: {}", JsonValue::from(json_res));
 	}
 
 	Ok(())

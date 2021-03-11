@@ -799,6 +799,11 @@ subcommands:
             short: w
             long: withdraw
             takes_value: false
+        - json:
+            help: Print response in Json format for machine parsing
+            short: j
+            long: json
+            takes_value: false
   - messaging:
       about: Manage libp2p messaging routine.
       args:
@@ -857,4 +862,9 @@ subcommands:
         - chech_integrity_retain:
             help: Delete messages with expired Integrity context.
             long: chech_integrity_retain
+            takes_value: false
+        - json:
+            help: Print response in Json format for machine parsing
+            short: j
+            long: json
             takes_value: false
