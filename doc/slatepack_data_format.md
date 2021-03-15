@@ -33,7 +33,7 @@ Example SlatepackAddress: f4ujdq2hzidsrwljst4mfxoaogolqzhwzbu4uxjke6w4ibclqgxaow
 
 Sending a mobile MWC transaction should be as easy as scanning a simple QR code encoded from a bech32 SlatepackAddress
 Or as easy as pasting the SlatepackAddress of your counterparty into your wallet for any other device.
-Or if Tor is not accessible, or the receiving party is not online, as easy as copying and pasting a couple of SlatepackMessage strings with a counterparty in an alternative communication channel (email, forum, social media, instant messenger, generic web text box, carrier pigeon etc.)
+Then the SlatepackMessage can be exchanged easily via copy and paste with a counterparty in an alternative communication channel (email, forum, social media, instant messenger, generic web text box, carrier pigeon etc.)
 
 
 # Reference-level explanation
