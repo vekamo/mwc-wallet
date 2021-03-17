@@ -1,40 +1,65 @@
 # MWC Slatepacks
 
-## About
+## Contents : #
+  * [About](./slatepack_data_format.md/#About)
+  * [Community-level explanation](./slatepack_data_format.md/#Community-level-explanation)
+  * [Reference-level explanation](./slatepack_data_format.md/#Reference-level-explanation)
+    * [Slatepack Address](./slatepack_data_format.md/#Slatepack-Address )
+    * [Message Armor](./slatepack_data_format.md/#Message-Armor)
+    * [Encryption/Decryption](./slatepack_data_format.md/#EncryptionDecryption)
+    * [Binary Data Format](./slatepack_data_format.md/#Binary-Data-Format)
 
-The slatepacks are intented to simplify Slates exchange process secure way. Current file based method cons:
+# About
+
+Slatepacks are intented to simplify the exchange process for Slates in a secure and userfriendly way. Current file based methods have the following cons:
 * Files content is well readable, because of that it is not secure.
 * Files are susceptible to man in the middle attack because files are not addressed to specific wallet.
 * Users don't like files for exchanges. Sting with content is more friendly.
 
-To address those issues MWC adopt grin Slatepacks:  https://docs.grin.mw/wiki/transactions/slatepack/
-Even MWS slatepack looks very similar, the implementation is very different.
+To address those issues MWC adopts grin's Slatepacks:  https://docs.grin.mw/wiki/transactions/slatepack/ <br>
+Altho MWC slatepacks look very similar, the implementation is very different.
+This document desribes the Slatepack format and our deviation from grins Implementation.
 
-This document desribe the Slatepack format.
+# Community-level explanation
+Slatepacks Simplify the existing transaction process so that a transaction can be built using a copy and pastable SlatepackMessage string asynchronously.
+So in easier words this simplyfies transactions alot as it's usable by a simple copy paste without the requirement to be online or to exchange files.
 
+An Example to elaborate;
+
+```mwc-wallet send -d SlatepackAddress 1.337``` will generate an armored encrypted SlatepackMessage string that only you and the recipient can decipher if a TOR address was used as SlatepackAddress. In the case of MQS it will generate a non encrypted SlatepackMessage. <br>
+If a counterparty is unwilling or unable to provide a SlatepackAddress, an unencrypted plain text SlatepackMessage can still be exchanged
+This SlatepackMessage can then be exchanged manually by copy and paste.
+Example SlatepackAddress: f4ujdq2hzidsrwljst4mfxoaogolqzhwzbu4uxjke6w4ibclqgxaowid
+
+Sending a mobile MWC transaction should be as easy as scanning a simple QR code encoded from a bech32 SlatepackAddress
+Or as easy as pasting the SlatepackAddress of your counterparty into your wallet for any other device.
+Then the SlatepackMessage can be exchanged easily via copy and paste with a counterparty in an alternative communication channel (email, forum, social media, instant messenger, generic web text box, carrier pigeon etc.)
+
+
+# Reference-level explanation
 ## Slatepack Address
 
-MWC has 'ProvableAddress' that include TOR or MQS address. For Slatepacks we will continue to use them. Only TOR 
-address can be used because of encryption/decryption internals.  ProvableAddress with MQS value can't be used for slatepacks.
+MWC has a 'ProvableAddress' that includes a TOR or MQS address. For Slatepacks we will continue to use them. For encrypted Slatepacks only TOR 
+addresses can be used because of encryption/decryption internals.  If the ProvableAddress is a MQS Address it can't be used for encrypted slatepacks, but will generate an unencrypted SlatepackMessage instead.
 
-Please note, Address is applicable to encrypted slatepack only.
+Please note, ProvableAddress is applicable to encrypted slatepack only.
 
 ## Message Armor
 
-Grin Armor does binary to Base58 conversion and it works great for us. This part works as it is, the only change is header and footer.
+Grin Armor does binary to Base58 conversion and it works great for us. This part works as it is, the only change is the header and footer.
 https://docs.grin.mw/wiki/transactions/slatepack/#armor
 
-For normal encrypted slatepack header/footer are: BEGINSLATEPACK / ENDSLATEPACK
+For normal encrypted slatepacks the header/footer are: BEGINSLATEPACK / ENDSLATEPACK
 
-For not encrypted binary format slatepack header/footer are: BEGINSLATE_BIN / ENDSLATE_BIN
+For non encrypted slatepacks in binary format the header/footer are: BEGINSLATE_BIN / ENDSLATE_BIN
 
 ## Encryption/Decryption
 
-Grin original design using 'age' rust library for encryption/decryption. Age library had a huge data overhead on data size.
-The header is about 350 bytes. For example, initial send message size less then 150 bytes. Such oevrhead is not acceptable.
-Also it is not clear is age will allow to read the message that was archived. 
+Grin's original design is using the 'age' rust library for encryption/decryption. The Age library had a huge data overhead on data size.
+The header is about 350 bytes. For example, initial send message size less then 150 bytes. Such overhead is not acceptable.
+Also it is not clear if age will allow to read the message that was archived. 
 
-In MWC implementation we don't use age, encryption/decryption is done with the same primitives.
+In MWC's implementation we don't use age, encryption/decryption is done with the same primitives as described below;
 
 ### Encryption (sender side)
 
@@ -52,14 +77,14 @@ In MWC implementation we don't use age, encryption/decryption is done with the s
 * Decrypt the data with this Shared Secret using symmetrical AEAD CHACHA20_POLY1305 algorithm. 
 * Resulting data is 16 bytes smaller then original one.
 
-# Slatepack Binary Data Format
+## Slatepack Binary Data Format
 
-Users working with armored message, but underneath it is a pure binary format. Here we descrube the format, so it will be easier to understand it. 
+Users working with armored message, but underneath it is a pure binary format. Here we describe the format, so it will be easier to understand it. 
 
-MWC slate data using bit streaming format for data serialization. The serialization/deserialization functions are symmetrical and
-not using serde because we want full control to maintain compatibility. Backward compatibility will be maintained. The forward compatibility is nice to have, but it is not guarantee.
+MWC slate data is using bit streaming as a format for data serialization. The serialization/deserialization functions are symmetrical and
+aren't using serde because we want full control to maintain compatibility. Backward compatibility will be maintained. The forward compatibility is nice to have, but it is not guaranteed.
 
-## Slate package binary (not encrypted) header
+### Slate package binary (not encrypted) header
 
 Data | Size | Descryption 
 ---- | ---- | ----------- |
@@ -69,7 +94,7 @@ Receiver Public Key | 30 bytes  | Receiver Public key. Needed to decode encryptr
 Nonce               | 12 bytes  | AEAD message nonce 
 Encrypted Data Size | 2 bytes   | Length of the encrypted data in bytes
 
-## Slate package encrypted data.
+### Slate package encrypted data.
 
 Data | Size | Descryption 
 ---- | ---- | ----------- |
