@@ -137,7 +137,7 @@ pub fn init_tor_listener<L, C, K>(
 	socks_listener_addr: &str,
 	libp2p_listener_port: &Option<u16>,
 	tor_base: Option<&str>,
-) -> Result<tor_process::TorProcess, Error>
+) -> Result<(tor_process::TorProcess, SecretKey), Error>
 	where
 		L: WalletLCProvider<'static, C, K> + 'static,
 		C: NodeClient + 'static,
@@ -167,7 +167,7 @@ pub fn init_tor_listener<L, C, K>(
 	);
 
 	tor_config::output_tor_listener_config(&tor_dir, socks_listener_addr, addr, libp2p_listener_port,
-										   &vec![sec_key])
+										   &vec![sec_key.clone()])
 		.map_err(|e| ErrorKind::TorConfig(format!("Failed to configure tor, {}", e).into()))?;
 	// Start TOR process
 	let tor_path = format!("{}/torrc", tor_dir);
@@ -183,7 +183,7 @@ pub fn init_tor_listener<L, C, K>(
 
 	tor::status::set_tor_address(Some(format!("{}", onion_address)));
 
-	Ok(process)
+	Ok((process, sec_key))
 }
 
 /// Instantiate wallet Owner API for a single-use (command line) call
@@ -794,6 +794,103 @@ pub fn owner_listener<L, C, K>(
 	res
 }
 
+/// Start libp2p listener thread.
+/// stop_mutex allows to stop the thread when value will be 0
+pub fn start_libp2p_listener<L, C, K>(
+	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
+	tor_secret: [u8; 32],
+	socks_proxy_addr: &str,
+	libp2p_listen_port: u16,
+	stop_mutex: std::sync::Arc<std::sync::Mutex<u32>>,
+) -> Result<(), Error>
+	where
+		L: WalletLCProvider<'static, C, K> + 'static,
+		C: NodeClient + 'static,
+		K: Keychain + 'static,
+{
+	let node_client = {
+		wallet_lock!(wallet, w);
+		w.w2n_client().clone()
+	};
+
+	let tor_addr: SocketAddrV4 = socks_proxy_addr.parse().map_err(|e| {
+		ErrorKind::GenericError(format!("Unable to parse tor socks address {}, {}", socks_proxy_addr, e))
+	})?;
+
+	warn!("Starting libp2p listener with port {}", libp2p_listen_port);
+
+	thread::Builder::new()
+		.name("libp2p_node".to_string())
+		.spawn(move || {
+			let requested_kernel_cache: RwLock<HashMap<Commitment, (TxKernel, u64)>> =
+				RwLock::new(HashMap::new());
+			let last_time_cache_cleanup: RwLock<i64> = RwLock::new(0);
+
+			let output_validation_fn = move |excess: &Commitment| -> Result<Option<TxKernel>, grin_p2p::Error> {
+				// Tip is needed in order to request from last 24 hours (1440 blocks)
+				let tip_height = node_client.get_chain_tip()
+					.map_err(|e| grin_p2p::Error::Libp2pError(format!("Unable contact the node to get chain tip, {}", e)))?.0;
+
+				let cur_time = Utc::now().timestamp();
+				// let's clean cache every 10 minutes. Removing all expired items
+				{
+					let mut last_time_cache_cleanup = last_time_cache_cleanup.write().unwrap();
+					if cur_time - 600 > *last_time_cache_cleanup {
+						let min_height = tip_height - libp2p_connection::INTEGRITY_FEE_VALID_BLOCKS - libp2p_connection::INTEGRITY_FEE_VALID_BLOCKS / 12;
+						requested_kernel_cache.write().unwrap().retain(|_k, v| v.1 > min_height);
+						*last_time_cache_cleanup = cur_time;
+					}
+				}
+
+				// Checking if we hit the cache
+				if let Some(tx) = requested_kernel_cache.read().unwrap().get(excess) {
+					return Ok(Some(tx.clone().0));
+				}
+
+				// !!! Note, get_kernel_height does iteration through the MMR. That will work until we
+				// Ban nodes that sent us incorrect excess. For now it should work fine. Normally
+				// peers reusing the integrity kernels so cache hit should happen most of the time.
+				match node_client.get_kernel(
+					excess,
+					Some(tip_height - libp2p_connection::INTEGRITY_FEE_VALID_BLOCKS),
+					None,
+				)
+					.map_err(|e| grin_p2p::Error::Libp2pError(format!("Unable contact the node to get kernel data, {}", e)))? {
+					Some((tx_kernel, height, _)) => {
+						requested_kernel_cache
+							.write()
+							.unwrap()
+							.insert(excess.clone(), (tx_kernel.clone(), height));
+						Ok(Some(tx_kernel))
+					},
+					None => Ok(None),
+				}
+			};
+
+			let libp2p_node_runner = libp2p_connection::run_libp2p_node(
+				tor_addr.port(),
+				&tor_secret,
+				libp2p_listen_port as u16,
+				selection::get_base_fee(),
+				output_validation_fn,
+				stop_mutex,
+			);
+
+			info!("Starting gossipsub libp2p server");
+			let mut rt = tokio::runtime::Runtime::new().unwrap();
+
+			match rt.block_on(libp2p_node_runner) {
+				Ok(_) => info!("libp2p node is exited"),
+				Err(e) => error!("Unable to start libp2p node, {:?}", e),
+			}
+			// Swarm is not valid any more, let's update our global instance.
+			libp2p_connection::reset_libp2p_swarm();
+		})
+		.map_err(|e| ErrorKind::GenericError(format!("Unable to start libp2p_node server, {}", e)))?;
+
+	Ok(())
+}
+
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
 pub fn foreign_listener<L, C, K>(
@@ -821,11 +918,11 @@ pub fn foreign_listener<L, C, K>(
 		let _ = lc.wallet_inst()?;
 	}
 	// need to keep in scope while the main listener is running
-	let tor_process = match use_tor {
+	let tor_info = match use_tor {
 		true => match init_tor_listener(wallet.clone(), keychain_mask.clone(), addr,
 										socks_proxy_addr,
 										libp2p_listen_port, None) {
-			Ok(tp) => Some(tp),
+			Ok((tp, tor_secret)) => Some((tp, tor_secret)),
 			Err(e) => {
 				warn!("Unable to start TOR listener; Check that TOR executable is installed and on your path");
 				warn!("Tor Error: {}", e);
@@ -856,96 +953,20 @@ pub fn foreign_listener<L, C, K>(
 	*FOREIGN_API_RUNNING.write().unwrap() = true;
 
 	// Starting libp2p listener
-	if let Some(libp2p_listen_port) = libp2p_listen_port {
-		let node_client = {
-			wallet_lock!(wallet, w);
-			w.w2n_client().clone()
-		};
-
-		let tor_addr : SocketAddrV4 = socks_proxy_addr.parse().map_err(|e| {
-			ErrorKind::GenericError(format!("Unable to parse tor socks address {}, {}", socks_proxy_addr, e))
-		})?;
-
-		let libp2p_listen_port = libp2p_listen_port.clone();
-
-		warn!("Starting libp2p listener with port {}", libp2p_listen_port);
-
-		thread::Builder::new()
-			.name("libp2p_node".to_string())
-			.spawn(move || {
-				let requested_kernel_cache: RwLock<HashMap<Commitment, (TxKernel, u64)>> =
-					RwLock::new(HashMap::new());
-				let last_time_cache_cleanup: RwLock<i64> = RwLock::new(0);
-
-				let output_validation_fn = move |excess: &Commitment| -> Result<Option<TxKernel>,  grin_p2p::Error> {
-					// Tip is needed in order to request from last 24 hours (1440 blocks)
-					let tip_height = node_client.get_chain_tip()
-						.map_err(|e| grin_p2p::Error::Libp2pError(format!("Unable contact the node to get chain tip, {}", e)) )?.0;
-
-					let cur_time = Utc::now().timestamp();
-					// let's clean cache every 10 minutes. Removing all expired items
-					{
-						let mut last_time_cache_cleanup = last_time_cache_cleanup.write().unwrap();
-						if cur_time - 600 > *last_time_cache_cleanup {
-							let min_height = tip_height - libp2p_connection::INTEGRITY_FEE_VALID_BLOCKS - libp2p_connection::INTEGRITY_FEE_VALID_BLOCKS/12;
-							requested_kernel_cache.write().unwrap().retain( |_k, v| v.1 > min_height );
-							*last_time_cache_cleanup = cur_time;
-						}
-					}
-
-					// Checking if we hit the cache
-					if let Some(tx) = requested_kernel_cache.read().unwrap().get(excess) {
-						return Ok(Some(tx.clone().0));
-					}
-
-					// !!! Note, get_kernel_height does iteration through the MMR. That will work until we
-					// Ban nodes that sent us incorrect excess. For now it should work fine. Normally
-					// peers reusing the integrity kernels so cache hit should happen most of the time.
-					match node_client.get_kernel(
-						excess,
-						Some(tip_height - libp2p_connection::INTEGRITY_FEE_VALID_BLOCKS),
-						None,
-					)
-					.map_err(|e| grin_p2p::Error::Libp2pError(format!("Unable contact the node to get kernel data, {}", e)) )? {
-						Some((tx_kernel, height, _)) => {
-							requested_kernel_cache
-								.write()
-								.unwrap()
-								.insert(excess.clone(), (tx_kernel.clone(),height) );
-							Ok(Some(tx_kernel))
-						},
-						None => Ok(None),
-					}
-				};
-
-				let onion_address = match tor::status::get_tor_address() {
-					Some(address) => address,
-					None => {
-						error!("Unable to start libp2p, not found onion address");
-						return;
-					}
-				};
-
-				let libp2p_node_runner = libp2p_connection::run_libp2p_node(
-					tor_addr.port(),
-					onion_address,
-					libp2p_listen_port as u16,
-					selection::get_base_fee(),
-					output_validation_fn,
-				);
-
-				info!("Starting gossipsub libp2p server");
-				let mut rt = tokio::runtime::Runtime::new().unwrap();
-
-				match rt.block_on(libp2p_node_runner) {
-					Ok(_) => info!("libp2p node is exited"),
-					Err(e) => error!("Unable to start libp2p node, {:?}", e),
-				}
-				// Swarm is not valid any more, let's update our global instance.
-				libp2p_connection::reset_libp2p_swarm();
-			})
-			.map_err(|e| ErrorKind::GenericError(format!("Unable to start libp2p_node server, {}", e)))?;
+	let tor_process = if tor_info.is_some() && libp2p_listen_port.is_some() {
+		let tor_info = tor_info.unwrap();
+		let libp2p_listen_port = libp2p_listen_port.unwrap();
+		start_libp2p_listener(wallet.clone(),
+	  		tor_info.1.0,
+			socks_proxy_addr,
+			libp2p_listen_port,
+		   std::sync::Arc::new(std::sync::Mutex::new(1)), // passing new obj, because we never will stop the libp2p process
+		)?;
+		Some(tor_info.0)
 	}
+	else {
+		None
+	};
 
 	let res = api_thread
 		.join()

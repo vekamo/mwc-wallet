@@ -327,6 +327,7 @@ pub struct SendArgs {
 	pub outputs: Option<Vec<String>>, // Outputs to use. If None, all outputs can be used
 	pub slatepack_recipient: Option<ProvableAddress>, // Destination for slatepack. The address will be the same as for payment_proof_address. The role is different.
 	pub late_lock: bool,
+	pub min_fee: Option<u64>,
 }
 
 pub fn send<L, C, K>(
@@ -362,6 +363,7 @@ where
 					minimum_confirmations_change_outputs: args.minimum_confirmations_change_outputs,
 					address: args.address.clone(),
 					outputs: args.outputs.clone(),
+					min_fee: args.min_fee,
 					..Default::default()
 				};
 				let slate = api.init_send_tx(m, &init_args, 1)?;
@@ -386,6 +388,7 @@ where
 				minimum_confirmations_change_outputs: args.minimum_confirmations_change_outputs,
 				outputs: args.outputs.clone(),
 				late_lock: Some(args.late_lock),
+				min_fee: args.min_fee,
 				..Default::default()
 			};
 
@@ -2980,11 +2983,26 @@ where
 		} else {
 			let peers = libp2p_connection::get_libp2p_connections();
 			if args.json {
-				json_res.insert("gossippub_peers".to_string(), JsonValue::from(peers));
+				json_res.insert(
+					"gossippub_peers".to_string(),
+					JsonValue::from(
+						peers
+							.iter()
+							.map(|p| json!( { "peer": p.get_address().unwrap_or("".to_string()) }))
+							.collect::<Vec<JsonValue>>(),
+					),
+				);
 			} else {
-				println!("gossippub is running, has {} peers", peers);
+				println!(
+					"gossippub is running, peers: {}",
+					peers
+						.iter()
+						.map(|p| p.to_string())
+						.collect::<Vec<String>>()
+						.join(", ")
+				);
 			}
-			if peers == 0 {
+			if peers.len() == 0 {
 				// let's add peer is possible
 				let mut w_lock = wallet_inst.lock();
 				let w = w_lock.lc_provider()?.wallet_inst()?;
@@ -3010,7 +3028,7 @@ where
 					},
 					Err(e) => {
 						println!(
-							"Unable to contact the mwc node to get address to join, {}",
+							"ERROR: Unable to contact the mwc node to get address to join, {}",
 							e
 						);
 					}

@@ -589,6 +589,19 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 		None => None,
 	};
 
+	let min_fee = match args.value_of("min_fee") {
+		Some(min_fee) => match core::core::amount_from_hr_string(min_fee) {
+			Ok(min_fee) => Some(min_fee),
+			Err(e) => {
+				return Err(ParseError::ArgumentError(format!(
+					"Could not parse minimal fee as a number, {}",
+					e
+				)))
+			}
+		},
+		None => None,
+	};
+
 	if minimum_confirmations_change_outputs_is_present && !exclude_change_outputs {
 		Err(ArgumentError("minimum_confirmations_change_outputs may only be specified if exclude_change_outputs is set".to_string()))
 	} else {
@@ -613,6 +626,7 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 			outputs,
 			slatepack_recipient,
 			late_lock,
+			min_fee,
 		})
 	}
 }

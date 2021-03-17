@@ -140,7 +140,7 @@ subcommands:
             default_value: "1"
             takes_value: true
         - min_fee:
-            help: Minimal fee value. By default wallet selecting the minimal fee accepted by the network. This value can make larger if needed.
+            help: Minimal fee value. By default wallet selecting the minimal fee accepted by the network. This value can increase the fee if needed.
             long: min_fee
             takes_value: true
         - method:
@@ -772,35 +772,35 @@ subcommands:
             long: electrum_uri2
             takes_value: true
   - integrity:
-      about: Manage integrity fees and funds for this wallet.
+      about: Manage integrity fees and funds.
       args:
         - check:
-            help: Check how much paid integrity fees are left, how much coins are at integrity account.
+            help: View paid integrity fees, view integrity account balance.
             short: c
             long: check
             takes_value: false
         - reserve:
-            help: If there is not enough coins, how much coins we want to reserve for the integrioty fees. Default is 1 MWC
+            help: In case of low balance, how much coins reserve for integrity fees. Default is 1 MWC
             short: r
             long: reserve
             takes_value: true
         - account:
-            help: Account name from where to get the reserve funds or widthraw funds to
+            help: Account name to withdraw funds for integrity fee reservation
             short: a
             long: account
             takes_value: true
         - fee:
-            help: Create integrity transaction and pay fees. Parameter - comma separated fees (MWC). The minimal fee for network is 10X of basic fees. Currently it is 0.01 MWC
+            help: Create integrity transaction to pay fees. Argument is comma separated fees (MWC). The minimal fee for network is 10X of basic fees. Currently it is 0.01 MWC
             short: t
             long: create
             takes_value: true
         - withdraw:
-            help: Widthraw the ingetrity funds back to regular wallet account
+            help: Withdraw the integrity funds back to regular wallet account
             short: w
             long: withdraw
             takes_value: false
         - json:
-            help: Print response in Json format for machine parsing
+            help: Print response in Json format
             short: j
             long: json
             takes_value: false
@@ -808,17 +808,17 @@ subcommands:
       about: Manage libp2p messaging routine.
       args:
         - status:
-            help: Show startus of messaging. What topic we are listening, minimal fee, how many messages are advertising, how many are in buffer.
+            help: Show status of messaging - listening topics, minimal fee, broadcasting messages, number of received messages.
             short: s
             long: status
             takes_value: false
         - add_topic:
-            help: Add topic to listen. Expected that messages will be in json format.
+            help: Add topic to listen. Messages must be in json format.
             short: a
             long: add_topic
             takes_value: true
         - fee:
-            help: Integrity fee. For topic and receive_message it is a mimimal accepted fee. For publishing it is integrity fee to pay.
+            help: Integrity fee. For topic and receive_message it is a minimal accepted fee. For publishing it is integrity fee to pay.
             short: f
             long: fee
             takes_value: true
@@ -833,7 +833,7 @@ subcommands:
             long: publish_message
             takes_value: true
         - publish_topic:
-            help: Topic for the broadcasted message.
+            help: Topic for the broadcast message.
             short: t
             long: publish_topic
             takes_value: true
@@ -843,12 +843,12 @@ subcommands:
             long: publish_interval
             takes_value: true
         - message_uuid:
-            help: Stop publishing the message.
+            help: Stop broadcast message.
             short: w
             long: withdraw_message
             takes_value: true
         - delete_messages:
-            help: Print the messages that was received. Optionaly they can be deleted from the buffer. Note, last 1000 messages will be stored.
+            help: Print messages that was received. Optionally messages can be deleted from the buffer. Note, last 1000 messages will be stored.
             short: v
             long: receive_messages
             possible_values:
@@ -856,15 +856,15 @@ subcommands:
               - no
             takes_value: true
         - check_integrity:
-            help: Check Integrity context expiration. Need to be done at least every hour.
+            help: Check Integrity context expiration of broadcast messages. Need to be done at least every hour.
             long: check_integrity
             takes_value: false
-        - chech_integrity_retain:
+        - check_integrity_retain:
             help: Delete messages with expired Integrity context.
-            long: chech_integrity_retain
+            long: check_integrity_retain
             takes_value: false
         - json:
-            help: Print response in Json format for machine parsing
+            help: Print response in Json format
             short: j
             long: json
             takes_value: false

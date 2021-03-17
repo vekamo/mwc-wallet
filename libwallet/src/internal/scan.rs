@@ -26,8 +26,8 @@ use crate::grin_util::secp::key::SecretKey;
 use crate::grin_util::secp::pedersen;
 use crate::grin_util::static_secp_instance;
 use crate::grin_util::Mutex;
-use crate::internal::keys;
 use crate::internal::tx;
+use crate::internal::{keys, updater};
 use crate::types::*;
 use crate::{wallet_lock, Error, ErrorKind};
 use grin_core::core::Transaction;
@@ -1021,36 +1021,6 @@ where
 	// Here we are done with all state changes of Outputs and transactions. Now we need to save them at the DB
 	// Note, unknown new outputs are not here because we handle them in the beginning by 'restore'.
 
-	// Cancel any cancellable transactions with an expired TTL
-	for tx in transactions
-		.values()
-		.filter(|tx| !(tx.tx_log.confirmed || tx.tx_log.is_cancelled()))
-	{
-		if let Some(h) = tx.tx_log.ttl_cutoff_height {
-			if tip_height >= h {
-				wallet_lock!(wallet_inst, w);
-				match tx::cancel_tx(
-					&mut **w,
-					keychain_mask,
-					&tx.tx_log.parent_key_id,
-					Some(tx.tx_log.id),
-					None,
-				) {
-					Err(e) => {
-						if let Some(ref s) = status_send_channel {
-							let _ = s.send(StatusMessage::Warning(format!(
-								"Unable to cancel TTL expired transaction {} because of error: {}",
-								tx.tx_uuid.split('/').next().unwrap_or("????"),
-								e
-							)));
-						}
-					}
-					_ => (),
-				}
-			}
-		}
-	}
-
 	// Apply last data updates and saving the data into DB.
 	{
 		store_transactions_outputs(
@@ -1086,6 +1056,44 @@ where
 			batch.save_last_confirmed_height(par_id, tip_height)?;
 		}
 		batch.commit()?;
+	}
+
+	// Cancel any cancellable transactions with an expired TTL
+	// We need to do that at the end when all scan data is updated and written. Otherwise data can be overwritten on updates
+	{
+		wallet_lock!(wallet_inst, w);
+
+		let transactions =
+			updater::retrieve_txs(&mut **w, keychain_mask, None, None, None, false, None, None)?;
+
+		for tx_log in &transactions {
+			if tx_log.confirmed || tx_log.is_cancelled() {
+				continue;
+			}
+
+			if let Some(h) = tx_log.ttl_cutoff_height {
+				if tip_height >= h {
+					match tx::cancel_tx(
+						&mut **w,
+						keychain_mask,
+						&tx_log.parent_key_id,
+						Some(tx_log.id),
+						None,
+					) {
+						Err(e) => {
+							if let Some(ref s) = status_send_channel {
+								let _ = s.send(StatusMessage::Warning(format!(
+									"Unable to cancel TTL expired transaction {} because of error: {}",
+									tx_log.tx_slate_id.clone().unwrap_or(Uuid::nil()),
+									e
+								)));
+							}
+						}
+						_ => (),
+					}
+				}
+			}
+		}
 	}
 
 	/*	{

@@ -25,7 +25,7 @@ use crate::types::NodeClient;
 use crate::Context;
 use crate::{wallet_lock, WalletInst, WalletLCProvider};
 use crate::{AcctPathMapping, Error, InitTxArgs, OutputCommitMapping, OutputStatus};
-use grin_core::libtx::{aggsig, tx_fee};
+use grin_core::libtx::tx_fee;
 use grin_core::ser;
 use grin_keychain::{ExtKeychainPath, Identifier};
 use grin_p2p::libp2p_connection;
@@ -108,7 +108,13 @@ impl IntegrityContext {
 		#[cfg(debug_assertions)]
 		{
 			// Sanity check
-			aggsig::verify_completed_sig(secp, &signature, &pk, Some(&pk), &message)?;
+			grin_core::libtx::aggsig::verify_completed_sig(
+				secp,
+				&signature,
+				&pk,
+				Some(&pk),
+				&message,
+			)?;
 		}
 
 		let kernel_excess = Commitment::from_pubkey(&pk)?;
