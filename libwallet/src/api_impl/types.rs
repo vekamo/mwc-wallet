@@ -260,6 +260,24 @@ impl Default for IssueInvoiceTxArgs {
 	}
 }
 
+/// Reply mitigation configuration, put it here because it is used in the impl layer.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ReplayMitigationConfig {
+	/// turn it on or off
+	pub replay_mitigation_flag: bool,
+	///minimum amount to do self-spend
+	pub replay_mitigation_min_amount: u64,
+}
+
+impl Default for ReplayMitigationConfig {
+	fn default() -> ReplayMitigationConfig {
+		ReplayMitigationConfig {
+			replay_mitigation_flag: false,
+			replay_mitigation_min_amount: 50000000000,
+		}
+	}
+}
+
 /// Fees in block to use for coinbase amount calculation
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BlockFees {

@@ -601,6 +601,7 @@ where
 			&tx,
 			refresh_from_node,
 			minimum_confirmations,
+			None,
 		)
 	}
 
@@ -689,7 +690,7 @@ where
 	) -> Result<Slate, Error> {
 		let address = args.address.clone();
 
-		owner::update_wallet_state(self.wallet_inst.clone(), keychain_mask, &None)?;
+		owner::update_wallet_state(self.wallet_inst.clone(), keychain_mask, &None, None)?;
 		let send_args = args.send_args.clone();
 		//minimum_confirmations cannot be zero.
 		let minimum_confirmations = args.minimum_confirmations.clone();
@@ -942,7 +943,7 @@ where
 		slate: &Slate,
 		args: &InitTxArgs,
 	) -> Result<Slate, Error> {
-		owner::update_wallet_state(self.wallet_inst.clone(), keychain_mask, &None)?;
+		owner::update_wallet_state(self.wallet_inst.clone(), keychain_mask, &None, None)?;
 
 		//minimum_confirmations cannot be zero.
 		let minimum_confirmations = args.minimum_confirmations.clone();
@@ -2343,7 +2344,7 @@ where
 		params: &SwapStartArgs,
 	) -> Result<String, Error> {
 		// Updating wallet state first because we need to select outputs.
-		owner::update_wallet_state(self.wallet_inst.clone(), keychain_mask, &None)?;
+		owner::update_wallet_state(self.wallet_inst.clone(), keychain_mask, &None, None)?;
 		owner_swap::swap_start(self.wallet_inst.clone(), keychain_mask, params)
 	}
 

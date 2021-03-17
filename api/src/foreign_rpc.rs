@@ -1193,6 +1193,7 @@ pub fn run_doctest_foreign(
 			&None,
 			true,
 			1,
+			None,
 		)
 		.unwrap();
 		assert!(wallet_refreshed);
@@ -1235,7 +1236,8 @@ pub fn run_doctest_foreign(
 
 			api_impl::owner::issue_invoice_tx(&mut **w, (&mask2).as_ref(), &args, true, 1).unwrap()
 		};
-		api_impl::owner::update_wallet_state(wallet1.clone(), (&mask1).as_ref(), &None).unwrap();
+		api_impl::owner::update_wallet_state(wallet1.clone(), (&mask1).as_ref(), &None, None)
+			.unwrap();
 		slate = {
 			let mut w_lock = wallet1.lock();
 			let w = w_lock.lc_provider().unwrap().wallet_inst().unwrap();
@@ -1280,7 +1282,7 @@ pub fn run_doctest_foreign(
 		}
 	}
 
-	api_impl::owner::update_wallet_state(wallet1.clone(), (&mask1).as_ref(), &None).unwrap();
+	api_impl::owner::update_wallet_state(wallet1.clone(), (&mask1).as_ref(), &None, None).unwrap();
 	if init_tx {
 		let amount = 2_000_000_000;
 		let mut w_lock = wallet1.lock();
@@ -1365,7 +1367,7 @@ macro_rules! doctest_helper_json_rpc_foreign_assert_response {
 			$init_tx,
 			$init_invoice_tx,
 			$compact_slate,
-		)
+			)
 		.unwrap()
 		.unwrap();
 
@@ -1374,8 +1376,8 @@ macro_rules! doctest_helper_json_rpc_foreign_assert_response {
 				"(left != right) \nleft: {}\nright: {}",
 				serde_json::to_string_pretty(&response).unwrap(),
 				serde_json::to_string_pretty(&expected_response).unwrap()
-			);
-		}
+				);
+			}
 	};
 }
 

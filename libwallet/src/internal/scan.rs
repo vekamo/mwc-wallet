@@ -29,6 +29,7 @@ use crate::grin_util::Mutex;
 use crate::internal::keys;
 use crate::internal::tx;
 use crate::types::*;
+use crate::ReplayMitigationConfig;
 use crate::{wallet_lock, Error, ErrorKind};
 use grin_core::core::Transaction;
 use grin_util::secp::Secp256k1;
@@ -74,6 +75,17 @@ pub struct OutputResult {
 	pub is_coinbase: bool,
 }
 
+/// Utility struct for self spend
+#[derive(Debug, Clone)]
+pub struct OutputResultLight {
+	/// key_id
+	pub key_id: Identifier,
+	///value
+	pub value: u64,
+	///commit
+	pub commit: String,
+}
+
 impl OutputResult {
 	/// Compare parameters.
 	pub fn params_equal_to(&self, output: &OutputData) -> bool {
@@ -116,6 +128,8 @@ fn identify_utxo_outputs<'a, K>(
 	keychain: &K,
 	outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64, u64)>,
 	end_height: Option<u64>,
+	should_self_spend: bool,
+	self_spend_amount: u64,
 ) -> Result<(Vec<OutputResult>, Vec<OutputResult>), Error>
 where
 	K: Keychain + 'a,
@@ -180,6 +194,7 @@ where
 			built_height = ind;
 		}
 		let on_the_chain_height = *height;
+		let mut spent_candidate = false;
 		if built_height != 0 && on_the_chain_height <= u32::MAX as u64 {
 			//if the built height if too far from the height, should be reject it?
 			//if the build height or height is out of the horizon range, should we trigger the self-spend(based on the configuration)
@@ -189,19 +204,12 @@ where
 				"the build_height and chain height is {}, {}",
 				built_height_64, on_the_chain_height
 			);
-			let height_diff;
-			if built_height_64 < on_the_chain_height {
-				height_diff = on_the_chain_height - built_height_64; //is there a abs_diff method available?
-			} else {
-				height_diff = built_height_64 - on_the_chain_height
-			}
-			if height_diff > 1440 {
-				//this mean the height to built the commit and the block height differs bigger than a day.
-				//should we alarm the user?
-			}
 			//compare the built_height_64 with the current tip height.
 			if let Some(e_height) = end_height {
-				if e_height > built_height_64 && e_height - built_height_64 > 1440 * 7 {
+				if e_height > built_height_64
+					&& e_height - built_height_64 > 1440 * 7
+					&& should_self_spend && amount > self_spend_amount
+				{
 					self_spend_outputs.push(OutputResult {
 						commit: *commit,
 						key_id: key_id.clone(),
@@ -212,22 +220,25 @@ where
 						is_coinbase: *is_coinbase,
 						mmr_index: *mmr_index,
 					});
+					spent_candidate = true;
 				}
 			}
 		}
 
-		//todo the outputs added to self_spend_outputs should be skipped in the following.
-		wallet_outputs.push(OutputResult {
-			commit: *commit,
-			key_id: key_id.clone(),
-			n_child: key_id.to_path().last_path_index(),
-			value: amount,
-			height: *height,
-			lock_height: lock_height,
-			is_coinbase: *is_coinbase,
-			mmr_index: *mmr_index,
-		});
+		if !spent_candidate {
+			wallet_outputs.push(OutputResult {
+				commit: *commit,
+				key_id: key_id.clone(),
+				n_child: key_id.to_path().last_path_index(),
+				value: amount,
+				height: *height,
+				lock_height: lock_height,
+				is_coinbase: *is_coinbase,
+				mmr_index: *mmr_index,
+			});
+		}
 	}
+
 	Ok((wallet_outputs, self_spend_outputs))
 }
 
@@ -239,7 +250,8 @@ pub fn collect_chain_outputs<'a, C, K>(
 	end_index: Option<u64>,
 	status_send_channel: &Option<Sender<StatusMessage>>,
 	show_progress: bool,
-) -> Result<Vec<OutputResult>, Error>
+	replay_config: Option<ReplayMitigationConfig>,
+) -> Result<(Vec<OutputResult>, Vec<OutputResult>), Error>
 where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
@@ -248,6 +260,15 @@ where
 	let start_index_stat = start_index;
 	let mut start_index = start_index;
 	let mut result_vec: Vec<OutputResult> = vec![];
+	let mut self_spend_candidate_list: Vec<OutputResult> = vec![];
+	let mut should_self_spent = false;
+	let mut self_spent_amount = 0;
+	if let Some(conf) = replay_config {
+		if conf.replay_mitigation_flag {
+			should_self_spent = true;
+			self_spent_amount = conf.replay_mitigation_min_amount;
+		}
+	}
 	loop {
 		let (highest_index, last_retrieved_index, outputs) =
 			client.get_outputs_by_pmmr_index(start_index, end_index, batch_size)?;
@@ -265,15 +286,22 @@ where
 		if let Some(ref s) = status_send_channel {
 			let _ = s.send(StatusMessage::Scanning(show_progress, msg, perc_complete));
 		}
-		let (mut chain_outs, _) = identify_utxo_outputs(keychain, outputs, None)?;
-		result_vec.append(&mut chain_outs);
+		let mut chain_outs_pair = identify_utxo_outputs(
+			keychain,
+			outputs,
+			None,
+			should_self_spent,
+			self_spent_amount,
+		)?;
+		result_vec.append(&mut chain_outs_pair.0);
+		self_spend_candidate_list.append(&mut chain_outs_pair.1);
 
 		if highest_index <= last_retrieved_index {
 			break;
 		}
 		start_index = last_retrieved_index + 1;
 	}
-	Ok(result_vec)
+	Ok((result_vec, self_spend_candidate_list))
 }
 
 /// Respore missing outputs. Shared with mwc713
@@ -463,6 +491,7 @@ fn get_wallet_and_chain_data<'a, L, C, K>(
 	status_send_channel: &Option<Sender<StatusMessage>>,
 	show_progress: bool,
 	do_full_outputs_refresh: bool, // true expected at the first and in case of reorgs
+	replay_config: Option<ReplayMitigationConfig>,
 ) -> Result<
 	(
 		HashMap<String, WalletOutputInfo>, // Outputs. Key: Commit
@@ -478,10 +507,8 @@ where
 	K: Keychain + 'a,
 {
 	assert!(start_height <= end_height);
-
-	wallet_lock!(wallet_inst, w);
-
-	// First, reading data from the wallet
+	let self_spend_candidate_list: Vec<OutputResult>;
+	let mut self_spend_candidate_light_list: Vec<OutputResultLight> = Vec::new();
 
 	// Resulting wallet's outputs with extended info
 	// Key: commit
@@ -492,478 +519,536 @@ where
 	// Really hard to say why Output can be without commit. Probably same non complete or failed data.
 	// In any case we can't use it for recovering.
 	let mut last_output = String::new();
-	for w_out in w.iter().filter(|w| w.commit.is_some()) {
-		outputs.insert(
-			w_out.commit.clone().unwrap(),
-			WalletOutputInfo::new(w_out.clone()),
-		);
-		last_output = w_out.commit.clone().unwrap();
-
-		if w_out.is_spendable() {
-			spendable_outputs += 1;
-		}
-	}
 
 	// Wallet's transactions with extended info
 	// Key: transaction uuid
 	let mut transactions: HashMap<String, WalletTxInfo> = HashMap::new();
-	// Key: id + tx.parent_key_id
-	let mut transactions_id2uuid: HashMap<String, String> = HashMap::new();
-	let mut not_confirmed_txs = 0;
-
-	let mut non_uuid_tx_counter: u32 = 0;
-	let temp_uuid_data = [0, 0, 0, 0, 0, 0, 0, 0]; // uuid expected 8 bytes
-
-	// Collect what inputs/outputs trabsactions already has
-	let mut input_commits: HashSet<String> = HashSet::new();
-	let mut output_commits: HashSet<String> = HashSet::new();
-
-	// Collecting Transactions from the wallet. UUID need to be known, otherwise
-	// transaction is non complete and can be ignored.
-	for tx in w.tx_log_iter() {
-		if !tx.confirmed {
-			not_confirmed_txs += 1;
-		}
-
-		// For transactions without uuid generating temp uuid just for mapping
-		let tx_uuid_str = match tx.tx_slate_id {
-			Some(tx_slate_id) => tx_slate_id.to_string(),
-			None => {
-				non_uuid_tx_counter += 1;
-				Uuid::from_fields(non_uuid_tx_counter, 0, 0, &temp_uuid_data)
-					.map_err(|e| ErrorKind::GenericError(format!("Unable to create UUID, {}", e)))?
-					.to_string()
-			}
-		};
-
-		// uuid must include tx uuid, id for transaction to handle self send with same account,
-		//    parent_key_id  to handle senf send to different accounts
-		let uuid_str = format!(
-			"{}/{}/{}",
-			tx_uuid_str,
-			tx.id,
-			util::to_hex(&tx.parent_key_id.to_bytes())
-		);
-
-		let mut wtx = WalletTxInfo::new(uuid_str, tx.clone());
-
-		if let Ok(transaction) = w.get_stored_tx_by_uuid(&tx_uuid_str) {
-			wtx.add_transaction(transaction);
-		};
-		transactions_id2uuid.insert(
-			format!("{}/{}", tx.id, util::to_hex(&tx.parent_key_id.to_bytes())),
-			wtx.tx_uuid.clone(),
-		);
-
-		input_commits.extend(wtx.input_commit.iter().map(|s| s.clone()));
-		output_commits.extend(wtx.output_commit.iter().map(|s| s.clone()));
-
-		transactions.insert(wtx.tx_uuid.clone(), wtx);
-	}
-
-	// Propagate tx to output mapping to outputs
-	for tx in transactions.values() {
-		// updated output vs Transactions mapping
-		for com in &tx.input_commit {
-			if let Some(out) = outputs.get_mut(com) {
-				out.add_tx_input_uuid(&tx.tx_uuid);
-			}
-		}
-		for com in &tx.output_commit {
-			if let Some(out) = outputs.get_mut(com) {
-				out.add_tx_output_uuid(&tx.tx_uuid);
-			}
-		}
-	}
-
-	// Wallet - node sync up strategy. We can request blocks from the node and analyze them. 1 week of blocks can be requested in theory.
-	// Or we can validate tx kernels, outputs e.t.c
-
 	let chain_outs: Vec<OutputResult>;
+	{
+		wallet_lock!(wallet_inst.clone(), w);
+		// First, reading data from the wallet
+		for w_out in w.iter().filter(|w| w.commit.is_some()) {
+			outputs.insert(
+				w_out.commit.clone().unwrap(),
+				WalletOutputInfo::new(w_out.clone()),
+			);
+			last_output = w_out.commit.clone().unwrap();
 
-	let height_deep_limit =
-		SYNC_BLOCKS_DEEPNESS + not_confirmed_txs / 2 + spendable_outputs / OUTPUT_TO_BLOCK;
+			if w_out.is_spendable() {
+				spendable_outputs += 1;
+			}
+		}
 
-	// We need to choose a strategy. If there are few blocks, it is really make sense request those blocks
-	if !do_full_outputs_refresh && (end_height - start_height <= height_deep_limit as u64) {
-		debug!("get_wallet_and_chain_data using block base strategy");
+		// Key: id + tx.parent_key_id
+		let mut transactions_id2uuid: HashMap<String, String> = HashMap::new();
+		let mut not_confirmed_txs = 0;
 
-		// Validate kernels from transaction. Kernel are a source of truth
-		// Because of account transfer we might have 2 transactions with same ketmel from the both sides.
-		let mut txkernel_to_txuuid: HashMap<String, Vec<String>> = HashMap::new();
+		let mut non_uuid_tx_counter: u32 = 0;
+		let temp_uuid_data = [0, 0, 0, 0, 0, 0, 0, 0]; // uuid expected 8 bytes
 
-		for (tx_uuid, tx) in &mut transactions {
-			if tx.tx_log.kernel_excess.is_some() {
-				// check if we need to reset tx confirmation first.
-				if tx.tx_log.confirmed {
-					if let Some(lookup_min_heihgt) = tx.tx_log.kernel_lookup_min_height {
-						if lookup_min_heihgt >= start_height {
+		// Collect what inputs/outputs trabsactions already has
+		let mut input_commits: HashSet<String> = HashSet::new();
+		let mut output_commits: HashSet<String> = HashSet::new();
+
+		// Collecting Transactions from the wallet. UUID need to be known, otherwise
+		// transaction is non complete and can be ignored.
+		for tx in w.tx_log_iter() {
+			if !tx.confirmed {
+				not_confirmed_txs += 1;
+			}
+
+			// For transactions without uuid generating temp uuid just for mapping
+			let tx_uuid_str = match tx.tx_slate_id {
+				Some(tx_slate_id) => tx_slate_id.to_string(),
+				None => {
+					non_uuid_tx_counter += 1;
+					Uuid::from_fields(non_uuid_tx_counter, 0, 0, &temp_uuid_data)
+						.map_err(|e| {
+							ErrorKind::GenericError(format!("Unable to create UUID, {}", e))
+						})?
+						.to_string()
+				}
+			};
+
+			// uuid must include tx uuid, id for transaction to handle self send with same account,
+			//    parent_key_id  to handle senf send to different accounts
+			let uuid_str = format!(
+				"{}/{}/{}",
+				tx_uuid_str,
+				tx.id,
+				util::to_hex(&tx.parent_key_id.to_bytes())
+			);
+
+			let mut wtx = WalletTxInfo::new(uuid_str, tx.clone());
+
+			if let Ok(transaction) = w.get_stored_tx_by_uuid(&tx_uuid_str) {
+				wtx.add_transaction(transaction);
+			};
+			transactions_id2uuid.insert(
+				format!("{}/{}", tx.id, util::to_hex(&tx.parent_key_id.to_bytes())),
+				wtx.tx_uuid.clone(),
+			);
+
+			input_commits.extend(wtx.input_commit.iter().map(|s| s.clone()));
+			output_commits.extend(wtx.output_commit.iter().map(|s| s.clone()));
+
+			transactions.insert(wtx.tx_uuid.clone(), wtx);
+		}
+
+		// Propagate tx to output mapping to outputs
+		for tx in transactions.values() {
+			// updated output vs Transactions mapping
+			for com in &tx.input_commit {
+				if let Some(out) = outputs.get_mut(com) {
+					out.add_tx_input_uuid(&tx.tx_uuid);
+				}
+			}
+			for com in &tx.output_commit {
+				if let Some(out) = outputs.get_mut(com) {
+					out.add_tx_output_uuid(&tx.tx_uuid);
+				}
+			}
+		}
+
+		// Wallet - node sync up strategy. We can request blocks from the node and analyze them. 1 week of blocks can be requested in theory.
+		// Or we can validate tx kernels, outputs e.t.c
+
+		let height_deep_limit =
+			SYNC_BLOCKS_DEEPNESS + not_confirmed_txs / 2 + spendable_outputs / OUTPUT_TO_BLOCK;
+
+		// We need to choose a strategy. If there are few blocks, it is really make sense request those blocks
+		if !do_full_outputs_refresh && (end_height - start_height <= height_deep_limit as u64) {
+			debug!("get_wallet_and_chain_data using block base strategy");
+
+			// Validate kernels from transaction. Kernel are a source of truth
+			// Because of account transfer we might have 2 transactions with same kernel from the both sides.
+			let mut txkernel_to_txuuid: HashMap<String, Vec<String>> = HashMap::new();
+
+			for (tx_uuid, tx) in &mut transactions {
+				if tx.tx_log.kernel_excess.is_some() {
+					// check if we need to reset tx confirmation first.
+					if tx.tx_log.confirmed {
+						if let Some(lookup_min_heihgt) = tx.tx_log.kernel_lookup_min_height {
+							if lookup_min_heihgt >= start_height {
+								tx.tx_log.confirmed = false;
+								tx.updated = true;
+							}
+						}
+
+						if tx.tx_log.output_height >= start_height {
 							tx.tx_log.confirmed = false;
 							tx.updated = true;
 						}
 					}
 
-					if tx.tx_log.output_height >= start_height {
-						tx.tx_log.confirmed = false;
-						tx.updated = true;
-					}
-				}
+					if !tx.tx_log.confirmed {
+						tx.kernel_validation = Some(false);
+						let kernel = util::to_hex(&tx.tx_log.kernel_excess.clone().unwrap().0);
 
-				if !tx.tx_log.confirmed {
-					tx.kernel_validation = Some(false);
-					let kernel = util::to_hex(&tx.tx_log.kernel_excess.clone().unwrap().0);
-
-					if let Some(v) = txkernel_to_txuuid.get_mut(&kernel) {
-						v.push(tx_uuid.clone());
-					} else {
-						txkernel_to_txuuid.insert(kernel, vec![tx_uuid.clone()]);
+						if let Some(v) = txkernel_to_txuuid.get_mut(&kernel) {
+							v.push(tx_uuid.clone());
+						} else {
+							txkernel_to_txuuid.insert(kernel, vec![tx_uuid.clone()]);
+						}
 					}
 				}
 			}
-		}
 
-		let client = w.w2n_client().clone();
-		let keychain = w.keychain(keychain_mask)?.clone();
+			let client = w.w2n_client().clone();
+			let keychain = w.keychain(keychain_mask)?.clone();
 
-		let mut blocks: Vec<grin_api::BlockPrintable> = Vec::new();
+			let mut blocks: Vec<grin_api::BlockPrintable> = Vec::new();
 
-		let mut cur_height = start_height;
-		while cur_height <= end_height {
-			// next block to request the data
-			let next_h = cmp::min(
-				end_height,
-				cur_height + (SYNC_BLOCKS_THREADS * SYNC_BLOCKS_THREADS - 1) as u64,
-			);
-
-			// printing the progress
-			if let Some(ref s) = status_send_channel {
-				let msg = format!(
-					"Checking {} blocks, Height: {} - {}",
-					next_h - cur_height + 1,
-					cur_height,
-					next_h,
+			let mut cur_height = start_height;
+			while cur_height <= end_height {
+				// next block to request the data
+				let next_h = cmp::min(
+					end_height,
+					cur_height + (SYNC_BLOCKS_THREADS * SYNC_BLOCKS_THREADS - 1) as u64,
 				);
-				// 10 - 90 %
-				let perc_complete = ((next_h + cur_height) / 2 - start_height) * 80
-					/ (end_height - start_height + 1)
-					+ 10;
-				let _ = s.send(StatusMessage::Scanning(
-					show_progress,
-					msg,
-					perc_complete as u8,
-				));
-			}
 
-			blocks.extend(client.get_blocks_by_height(cur_height, next_h, SYNC_BLOCKS_THREADS)?);
-			cur_height = next_h + 1;
-		}
-		// Checking blocks...
-		// Let's check if all heights are there. Sorry, have issues, little paranoid, assuming node can be broken
-		let mut block_heights: Vec<u64> = blocks.iter().map(|b| b.header.height).collect();
-		block_heights.sort();
-		if block_heights.len() as u64 != end_height - start_height + 1 {
-			return Err(ErrorKind::Node("Unable to get all blocks data".to_string()))?;
-		}
-		if block_heights[0] != start_height || block_heights[block_heights.len() - 1] != end_height
-		{
-			return Err(ErrorKind::Node(
-				"Get not expected blocks from the node".to_string(),
-			))?;
-		}
-		if block_heights.len() > 1 {
-			for i in 1..block_heights.len() {
-				if block_heights[i - 1] != block_heights[i] - 1 {
-					return Err(ErrorKind::Node(
-						"Get duplicated blocks from the node".to_string(),
-					))?;
-				}
-			}
-		}
-
-		assert!(blocks.len() as u64 == end_height - start_height + 1);
-
-		// commit, range_proof, is_coinbase, block_height, mmr_index,
-		let mut node_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64, u64)> =
-			Vec::new();
-		// iputs - it is outputs that are gone
-		let mut inputs: HashSet<String> = HashSet::new();
-
-		for b in blocks {
-			let height = b.header.height;
-
-			inputs.extend(b.inputs);
-
-			// Update transaction confirmation state, if kernel is found
-			for tx_kernel in b.kernels {
-				if let Some(tx_uuid_vec) = txkernel_to_txuuid.get(&tx_kernel.excess) {
-					for tx_uuid in tx_uuid_vec {
-						let tx = transactions.get_mut(tx_uuid).unwrap();
-						tx.kernel_validation = Some(true);
-						tx.tx_log.output_height = height; // Height must come from kernel and will match heights of outputs
-						tx.updated = true;
-					}
-				}
-			}
-
-			for out in b.outputs {
-				if !out.spent {
-					node_outputs.push((
-						out.commit,
-						out.range_proof()?,
-						match out.output_type {
-							grin_api::OutputType::Coinbase => true,
-							grin_api::OutputType::Transaction => false,
-						},
-						height,
-						out.mmr_index,
+				// printing the progress
+				if let Some(ref s) = status_send_channel {
+					let msg = format!(
+						"Checking {} blocks, Height: {} - {}",
+						next_h - cur_height + 1,
+						cur_height,
+						next_h,
+					);
+					// 10 - 90 %
+					let perc_complete = ((next_h + cur_height) / 2 - start_height) * 80
+						/ (end_height - start_height + 1)
+						+ 10;
+					let _ = s.send(StatusMessage::Scanning(
+						show_progress,
+						msg,
+						perc_complete as u8,
 					));
 				}
+
+				blocks.extend(client.get_blocks_by_height(
+					cur_height,
+					next_h,
+					SYNC_BLOCKS_THREADS,
+				)?);
+				cur_height = next_h + 1;
 			}
-		}
-
-		// Parse all node_outputs from the blocks and check ours the new ones...
-		let output_turple = identify_utxo_outputs(&keychain, node_outputs, Some(end_height))?;
-		//todo do we send status info here?
-		chain_outs = output_turple.0;
-
-		// Reporting user what outputs we found
-		if let Some(ref s) = status_send_channel {
-			let mut msg = format!(
-				"For height: {} - {} Identified {} wallet_outputs as belonging to this wallet [",
-				start_height,
-				end_height,
-				chain_outs.len(),
-			);
-			let mut cnt = 8;
-			for ch_out in &chain_outs {
-				msg.push_str(&util::to_hex(&ch_out.commit.0));
-				msg.push_str(",");
-				cnt -= 1;
-				if cnt == 0 {
-					break;
-				}
+			// Checking blocks...
+			// Let's check if all heights are there. Sorry, have issues, little paranoid, assuming node can be broken
+			let mut block_heights: Vec<u64> = blocks.iter().map(|b| b.header.height).collect();
+			block_heights.sort();
+			if block_heights.len() as u64 != end_height - start_height + 1 {
+				return Err(ErrorKind::Node("Unable to get all blocks data".to_string()))?;
 			}
-			if !chain_outs.is_empty() {
-				msg.pop();
-			}
-			if cnt == 0 {
-				msg.push_str("...");
-			}
-			msg.push_str("]");
-
-			let _ = s.send(StatusMessage::Scanning(show_progress, msg, 99));
-		}
-
-		// Apply inputs - outputs that are spent (they are inputs now)
-		for out in outputs
-			.values_mut()
-			.filter(|out| inputs.contains(&out.commit))
-		{
-			// Commit is input now, so it is spent
-			out.output.status = OutputStatus::Spent;
-			out.updated = true;
-		}
-	} else {
-		debug!("get_wallet_and_chain_data using check whatever needed strategy");
-		// Full data update.
-		let client = w.w2n_client().clone();
-		let keychain = w.keychain(keychain_mask)?.clone();
-
-		// Retrieve the actual PMMR index range we're looking for
-		let pmmr_range = client.height_range_to_pmmr_indices(start_height, Some(end_height))?;
-
-		// Getting outputs that are published on the chain.
-		chain_outs = collect_chain_outputs(
-			&keychain,
-			client,
-			pmmr_range.0,
-			Some(pmmr_range.1),
-			status_send_channel,
-			show_progress,
-		)?;
-
-		// Reporting user what outputs we found
-		if let Some(ref s) = status_send_channel {
-			let mut msg = format!(
-				"For height: {} - {} PMMRs: {} - {} Identified {} wallet_outputs as belonging to this wallet [",
-				start_height, end_height, pmmr_range.0, pmmr_range.1,
-				chain_outs.len(),
-			);
-			for ch_out in &chain_outs {
-				msg.push_str(&util::to_hex(&ch_out.commit.0));
-				msg.push_str(",");
-			}
-			if !chain_outs.is_empty() {
-				msg.pop();
-			}
-			msg.push_str("]");
-
-			let _ = s.send(StatusMessage::Scanning(show_progress, msg, 99));
-		}
-
-		// Validate kernels from transaction. Kernel are a source of truth
-		let client = w.w2n_client().clone();
-		for tx in transactions.values_mut() {
-			if !(tx.tx_log.confirmed || tx.tx_log.is_cancelled())
-				|| tx.tx_log.output_height >= start_height
+			if block_heights[0] != start_height
+				|| block_heights[block_heights.len() - 1] != end_height
 			{
-				// Skipping old coinbase transaction that are not confirmed
-				if tx.tx_log.tx_type == TxLogEntryType::ConfirmedCoinbase
-					&& tx.tx_log.output_height < end_height.saturating_sub(500)
-				{
-					continue;
+				return Err(ErrorKind::Node(
+					"Get not expected blocks from the node".to_string(),
+				))?;
+			}
+			if block_heights.len() > 1 {
+				for i in 1..block_heights.len() {
+					if block_heights[i - 1] != block_heights[i] - 1 {
+						return Err(ErrorKind::Node(
+							"Get duplicated blocks from the node".to_string(),
+						))?;
+					}
 				}
+			}
 
-				if let Some(kernel) = &tx.tx_log.kernel_excess {
-					// Note!!!! Test framework doesn't support None for params. So assuming that value must be provided
-					let start_height = cmp::max(start_height, 1); // API to tests don't support 0 or smaller
-					let res = client.get_kernel(
-						&kernel,
-						Some(cmp::min(
-							start_height, // 1 is min supported value by API
-							cmp::max(
-								1,
-								tx.tx_log.kernel_lookup_min_height.unwrap_or(start_height),
-							),
-						)),
-						Some(end_height),
-					)?;
+			assert!(blocks.len() as u64 == end_height - start_height + 1);
 
-					match res {
-						Some((txkernel, height, _mmr_index)) => {
+			// commit, range_proof, is_coinbase, block_height, mmr_index,
+			let mut node_outputs: Vec<(
+				pedersen::Commitment,
+				pedersen::RangeProof,
+				bool,
+				u64,
+				u64,
+			)> = Vec::new();
+			// iputs - it is outputs that are gone
+			let mut inputs: HashSet<String> = HashSet::new();
+
+			for b in blocks {
+				let height = b.header.height;
+
+				inputs.extend(b.inputs);
+
+				// Update transaction confirmation state, if kernel is found
+				for tx_kernel in b.kernels {
+					if let Some(tx_uuid_vec) = txkernel_to_txuuid.get(&tx_kernel.excess) {
+						for tx_uuid in tx_uuid_vec {
+							let tx = transactions.get_mut(tx_uuid).unwrap();
 							tx.kernel_validation = Some(true);
-							assert!(txkernel.excess == *kernel);
 							tx.tx_log.output_height = height; // Height must come from kernel and will match heights of outputs
 							tx.updated = true;
 						}
-						None => tx.kernel_validation = Some(false),
+					}
+				}
+
+				for out in b.outputs {
+					if !out.spent {
+						node_outputs.push((
+							out.commit,
+							out.range_proof()?,
+							match out.output_type {
+								grin_api::OutputType::Coinbase => true,
+								grin_api::OutputType::Transaction => false,
+							},
+							height,
+							out.mmr_index,
+						));
 					}
 				}
 			}
-		}
-
-		// Validate all 'active output' - Unspend and Locked if they still on the chain
-		// Spent and Unconfirmed news should come from the updates
-		let wallet_outputs_to_check: Vec<pedersen::Commitment> = outputs
-			.values()
-			.filter(|out| out.output.is_spendable() && !out.commit.is_empty())
-			// Parsing Commtment string into the binary, how API needed
-			.map(|out| util::from_hex(&out.output.commit.as_ref().unwrap()))
-			.filter(|out| out.is_ok())
-			.map(|out| pedersen::Commitment::from_vec(out.unwrap()))
-			.collect();
-
-		// get_outputs_from_nodefor large number will take a time. Chunk size is 200 ids.
-
-		let mut commits: HashMap<pedersen::Commitment, (String, u64, u64)> = HashMap::new();
-
-		if wallet_outputs_to_check.len() > 100 {
-			if let Some(ref s) = status_send_channel {
-				let _ = s.send(StatusMessage::Warning(format!("You have {} active outputs, it is a large number, validation will take time. Please wait...", wallet_outputs_to_check.len()) ));
-			}
-
-			// processing them by groups becuase we want to shouw the progress
-			let slices: Vec<&[pedersen::Commitment]> =
-				wallet_outputs_to_check.chunks(100).collect();
-
-			let mut chunk_num = 0;
-
-			for chunk in &slices {
-				if let Some(ref s) = status_send_channel {
-					let _ = s.send(StatusMessage::Scanning(
-						show_progress,
-						"Validating outputs".to_string(),
-						(chunk_num * 100 / slices.len()) as u8,
-					));
+			let mut should_self_spent = false;
+			let mut self_spent_amount = 0;
+			if let Some(conf) = replay_config {
+				if conf.replay_mitigation_flag {
+					should_self_spent = true;
+					self_spent_amount = conf.replay_mitigation_min_amount;
 				}
-				chunk_num += 1;
-
-				commits.extend(client.get_outputs_from_node(&chunk.to_vec())?);
 			}
 
+			// Parse all node_outputs from the blocks and check ours the new ones...
+			let output_pair = identify_utxo_outputs(
+				&keychain,
+				node_outputs,
+				Some(end_height),
+				should_self_spent,
+				self_spent_amount,
+			)?;
+
+			chain_outs = output_pair.0;
+			self_spend_candidate_list = output_pair.1;
+
+			// Reporting user what outputs we found
 			if let Some(ref s) = status_send_channel {
-				let _ = s.send(StatusMessage::ScanningComplete(
-					show_progress,
-					"Finish outputs validation".to_string(),
-				));
-			}
-		} else {
-			commits = client.get_outputs_from_node(&wallet_outputs_to_check)?;
-		}
-
-		// Updating commits data with that
-		// Key: commt, Value Heihgt
-		let node_commits: HashMap<String, u64> = commits
-			.values()
-			.map(|(commit, height, _mmr)| (commit.clone(), height.clone()))
-			.collect();
-
-		for out in outputs
-			.values_mut()
-			.filter(|out| out.output.is_spendable() && out.output.commit.is_some())
-		{
-			if let Some(height) = node_commits.get(&out.commit) {
-				if out.output.height != *height {
-					out.output.height = *height;
-					out.updated = true;
-				}
-			} else {
-				// Commit is gone. Probably it is spent
-				// Initial state 'Unspent' is possible if user playing with cancellations. So just ignore it
-				// Next workflow will take case about the transaction state as well as Spent/Unconfirmed uncertainty
-				out.output.status = match &out.output.status {
-					OutputStatus::Locked => OutputStatus::Spent,
-					OutputStatus::Unspent => OutputStatus::Unconfirmed,
-					a => {
-						debug_assert!(false);
-						a.clone()
+				let mut msg = format!(
+					"For height: {} - {} Identified {} wallet_outputs as belonging to this wallet [",
+					start_height,
+					end_height,
+					chain_outs.len(),
+				);
+				let mut cnt = 8;
+				for ch_out in &chain_outs {
+					msg.push_str(&util::to_hex(&ch_out.commit.0));
+					msg.push_str(",");
+					cnt -= 1;
+					if cnt == 0 {
+						break;
 					}
-				};
+				}
+				if !chain_outs.is_empty() {
+					msg.pop();
+				}
+				if cnt == 0 {
+					msg.push_str("...");
+				}
+				msg.push_str("]");
+
+				let _ = s.send(StatusMessage::Scanning(show_progress, msg, 99));
+			}
+
+			// Apply inputs - outputs that are spent (they are inputs now)
+			for out in outputs
+				.values_mut()
+				.filter(|out| inputs.contains(&out.commit))
+			{
+				// Commit is input now, so it is spent
+				out.output.status = OutputStatus::Spent;
 				out.updated = true;
 			}
-		}
-	}
+		} else {
+			debug!("get_wallet_and_chain_data using check whatever needed strategy");
+			// Full data update.
+			let client = w.w2n_client().clone();
+			let keychain = w.keychain(keychain_mask)?.clone();
 
-	// Now let's process inputs from transaction that change it's status from confirmed to non confirmed
-	// the issue that some Spent can be exist on the chain and they must be turn to Locked for now
-	let mut commits: HashSet<String> = HashSet::new();
+			// Retrieve the actual PMMR index range we're looking for
+			let pmmr_range = client.height_range_to_pmmr_indices(start_height, Some(end_height))?;
 
-	for tx in transactions.values() {
-		if tx.kernel_validation.is_some() {
-			if tx.tx_log.confirmed && tx.kernel_validation.clone().unwrap() == false {
-				// All input commits need to reevaluate
-				commits.extend(tx.input_commit.clone());
+			// Getting outputs that are published on the chain.
+			let chain_outs_pair = collect_chain_outputs(
+				&keychain,
+				client,
+				pmmr_range.0,
+				Some(pmmr_range.1),
+				status_send_channel,
+				show_progress,
+				replay_config,
+			)?;
+			chain_outs = chain_outs_pair.0;
+			self_spend_candidate_list = chain_outs_pair.1;
+
+			// Reporting user what outputs we found
+			if let Some(ref s) = status_send_channel {
+				let mut msg = format!(
+					"For height: {} - {} PMMRs: {} - {} Identified {} wallet_outputs as belonging to this wallet [",
+					start_height, end_height, pmmr_range.0, pmmr_range.1,
+					chain_outs.len(),
+				);
+				for ch_out in &chain_outs {
+					msg.push_str(&util::to_hex(&ch_out.commit.0));
+					msg.push_str(",");
+				}
+				if !chain_outs.is_empty() {
+					msg.pop();
+				}
+				msg.push_str("]");
+
+				let _ = s.send(StatusMessage::Scanning(show_progress, msg, 99));
+			}
+
+			// Validate kernels from transaction. Kernel are a source of truth
+			let client = w.w2n_client().clone();
+			for tx in transactions.values_mut() {
+				if !(tx.tx_log.confirmed || tx.tx_log.is_cancelled())
+					|| tx.tx_log.output_height >= start_height
+				{
+					// Skipping old coinbase transaction that are not confirmed
+					if tx.tx_log.tx_type == TxLogEntryType::ConfirmedCoinbase
+						&& tx.tx_log.output_height < end_height.saturating_sub(500)
+					{
+						continue;
+					}
+
+					if let Some(kernel) = &tx.tx_log.kernel_excess {
+						// Note!!!! Test framework doesn't support None for params. So assuming that value must be provided
+						let start_height = cmp::max(start_height, 1); // API to tests don't support 0 or smaller
+						let res = client.get_kernel(
+							&kernel,
+							Some(cmp::min(
+								start_height, // 1 is min supported value by API
+								cmp::max(
+									1,
+									tx.tx_log.kernel_lookup_min_height.unwrap_or(start_height),
+								),
+							)),
+							Some(end_height),
+						)?;
+
+						match res {
+							Some((txkernel, height, _mmr_index)) => {
+								tx.kernel_validation = Some(true);
+								assert!(txkernel.excess == *kernel);
+								tx.tx_log.output_height = height; // Height must come from kernel and will match heights of outputs
+								tx.updated = true;
+							}
+							None => tx.kernel_validation = Some(false),
+						}
+					}
+				}
+			}
+
+			// Validate all 'active output' - Unspend and Locked if they still on the chain
+			// Spent and Unconfirmed news should come from the updates
+			let wallet_outputs_to_check: Vec<pedersen::Commitment> = outputs
+				.values()
+				.filter(|out| out.output.is_spendable() && !out.commit.is_empty())
+				// Parsing Commtment string into the binary, how API needed
+				.map(|out| util::from_hex(&out.output.commit.as_ref().unwrap()))
+				.filter(|out| out.is_ok())
+				.map(|out| pedersen::Commitment::from_vec(out.unwrap()))
+				.collect();
+
+			// get_outputs_from_nodefor large number will take a time. Chunk size is 200 ids.
+
+			let mut commits: HashMap<pedersen::Commitment, (String, u64, u64)> = HashMap::new();
+
+			if wallet_outputs_to_check.len() > 100 {
+				if let Some(ref s) = status_send_channel {
+					let _ = s.send(StatusMessage::Warning(format!("You have {} active outputs, it is a large number, validation will take time. Please wait...", wallet_outputs_to_check.len())));
+				}
+
+				// processing them by groups becuase we want to shouw the progress
+				let slices: Vec<&[pedersen::Commitment]> =
+					wallet_outputs_to_check.chunks(100).collect();
+
+				let mut chunk_num = 0;
+
+				for chunk in &slices {
+					if let Some(ref s) = status_send_channel {
+						let _ = s.send(StatusMessage::Scanning(
+							show_progress,
+							"Validating outputs".to_string(),
+							(chunk_num * 100 / slices.len()) as u8,
+						));
+					}
+					chunk_num += 1;
+
+					commits.extend(client.get_outputs_from_node(&chunk.to_vec())?);
+				}
+
+				if let Some(ref s) = status_send_channel {
+					let _ = s.send(StatusMessage::ScanningComplete(
+						show_progress,
+						"Finish outputs validation".to_string(),
+					));
+				}
+			} else {
+				commits = client.get_outputs_from_node(&wallet_outputs_to_check)?;
+			}
+
+			// Updating commits data with that
+			// Key: commt, Value Heihgt
+			let node_commits: HashMap<String, u64> = commits
+				.values()
+				.map(|(commit, height, _mmr)| (commit.clone(), height.clone()))
+				.collect();
+
+			for out in outputs
+				.values_mut()
+				.filter(|out| out.output.is_spendable() && out.output.commit.is_some())
+			{
+				if let Some(height) = node_commits.get(&out.commit) {
+					if out.output.height != *height {
+						out.output.height = *height;
+						out.updated = true;
+					}
+				} else {
+					// Commit is gone. Probably it is spent
+					// Initial state 'Unspent' is possible if user playing with cancellations. So just ignore it
+					// Next workflow will take case about the transaction state as well as Spent/Unconfirmed uncertainty
+					out.output.status = match &out.output.status {
+						OutputStatus::Locked => OutputStatus::Spent,
+						OutputStatus::Unspent => OutputStatus::Unconfirmed,
+						a => {
+							debug_assert!(false);
+							a.clone()
+						}
+					};
+					out.updated = true;
+				}
 			}
 		}
-	}
 
-	commits.retain(|c| outputs.contains_key(c));
+		// Now let's process inputs from transaction that change it's status from confirmed to non confirmed
+		// the issue that some Spent can be exist on the chain and they must be turn to Locked for now
+		let mut commits: HashSet<String> = HashSet::new();
 
-	if !commits.is_empty() {
-		let wallet_outputs_to_check: Vec<pedersen::Commitment> = commits
-			.iter()
-			.map(|out| util::from_hex(out))
-			.filter(|out| out.is_ok())
-			.map(|out| pedersen::Commitment::from_vec(out.unwrap()))
-			.collect();
-
-		let client = w.w2n_client().clone();
-
-		// Node will return back only Commits that are exist now.
-		let active_commits: HashMap<pedersen::Commitment, (String, u64, u64)> =
-			client.get_outputs_from_node(&wallet_outputs_to_check)?;
-
-		for (active_commit, _, _) in active_commits.values() {
-			let output = outputs
-				.get_mut(active_commit)
-				.ok_or(ErrorKind::GenericError(
-					"Node return unknown commit value".to_string(),
-				))?;
-			if output.output.status != OutputStatus::Locked {
-				output.output.status = OutputStatus::Locked;
-				output.updated = true;
+		for tx in transactions.values() {
+			if tx.kernel_validation.is_some() {
+				if tx.tx_log.confirmed && tx.kernel_validation.clone().unwrap() == false {
+					// All input commits need to reevaluate
+					commits.extend(tx.input_commit.clone());
+				}
 			}
 		}
+
+		commits.retain(|c| outputs.contains_key(c));
+
+		if !commits.is_empty() {
+			let wallet_outputs_to_check: Vec<pedersen::Commitment> = commits
+				.iter()
+				.map(|out| util::from_hex(out))
+				.filter(|out| out.is_ok())
+				.map(|out| pedersen::Commitment::from_vec(out.unwrap()))
+				.collect();
+
+			let client = w.w2n_client().clone();
+
+			// Node will return back only Commits that are exist now.
+			let active_commits: HashMap<pedersen::Commitment, (String, u64, u64)> =
+				client.get_outputs_from_node(&wallet_outputs_to_check)?;
+
+			for (active_commit, _, _) in active_commits.values() {
+				let output = outputs
+					.get_mut(active_commit)
+					.ok_or(ErrorKind::GenericError(
+						"Node return unknown commit value".to_string(),
+					))?;
+				if output.output.status != OutputStatus::Locked {
+					output.output.status = OutputStatus::Locked;
+					output.updated = true;
+				}
+			}
+		}
+		//convert the commitment to string in self_spend list
+		for output in self_spend_candidate_list {
+			let commit = w
+				.calc_commit_for_cache(keychain_mask, output.value, &output.key_id)
+				.unwrap()
+				.unwrap();
+			self_spend_candidate_light_list.push(OutputResultLight {
+				key_id: output.key_id,
+				value: output.value.clone(),
+				commit: commit,
+			});
+		}
+	}
+	// //do the self_spend
+	for output in self_spend_candidate_light_list {
+		self_spend_particular_output(
+			wallet_inst.clone(),
+			keychain_mask,
+			output.value,
+			output.commit,
+			None,
+			0,
+			0,
+		)?;
 	}
 
 	Ok((outputs, chain_outs, transactions, last_output))
@@ -981,6 +1066,7 @@ pub fn scan<'a, L, C, K>(
 	status_send_channel: &Option<Sender<StatusMessage>>,
 	show_progress: bool,
 	do_full_outputs_refresh: bool,
+	replay_config: Option<ReplayMitigationConfig>,
 ) -> Result<(), Error>
 where
 	L: WalletLCProvider<'a, C, K>,
@@ -1005,6 +1091,7 @@ where
 		status_send_channel,
 		show_progress,
 		do_full_outputs_refresh,
+		replay_config,
 	)?;
 
 	// Printing values for debug...
@@ -1978,7 +2065,8 @@ where
 pub fn self_spend_particular_output<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
-	output: OutputData,
+	amount: u64,
+	commit_string: String,
 	address: Option<String>,
 	_current_height: u64,
 	_minimum_confirmations: u64,
@@ -1991,10 +2079,9 @@ where
 	//spend this output to the account itself.
 	let fee = tx_fee(1, 1, 1, None); //there is only one input and one output and one kernel
 								 //let amount = output.eligible_to_spend(current_height, minimum_confirmations);
-	let amount = output.value;
 
 	let mut output_vec = Vec::new();
-	output_vec.push(output.commit.unwrap());
+	output_vec.push(commit_string);
 	let args = InitTxArgs {
 		src_acct_name: address.clone(),
 		amount: amount - fee,

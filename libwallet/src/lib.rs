@@ -84,7 +84,8 @@ pub use api_impl::owner_swap;
 pub use api_impl::owner_updater::StatusMessage;
 pub use api_impl::types::{
 	BlockFees, InitTxArgs, InitTxSendArgs, IssueInvoiceTxArgs, NodeHeightResult,
-	OutputCommitMapping, PaymentProof, SendTXArgs, SwapStartArgs, VersionInfo,
+	OutputCommitMapping, PaymentProof, ReplayMitigationConfig, SendTXArgs, SwapStartArgs,
+	VersionInfo,
 };
 pub use internal::scan::scan;
 pub use proof::tx_proof::TxProof;
