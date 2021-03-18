@@ -87,9 +87,6 @@ pub enum Currency {
 	Bch,
 	/// Litecoin, the BTC clone
 	Ltc,
-	/// BSV, orthodox coin that cut the Swap support intentionally on Feb 2020. Keeping this code
-	/// until we finish support for the rest of the coins.
-	Bsv,
 	/// Dash
 	Dash,
 	/// ZCash
@@ -105,7 +102,6 @@ impl Currency {
 			Currency::Btc
 			| Currency::Bch
 			| Currency::Ltc
-			| Currency::Bsv
 			| Currency::Dash
 			| Currency::ZCash
 			| Currency::Doge => 8,
@@ -115,7 +111,7 @@ impl Currency {
 	/// Block period for this coin (seconds)
 	pub fn block_time_period_sec(&self) -> i64 {
 		match self {
-			Currency::Btc | Currency::Bch | Currency::Bsv => 10 * 60,
+			Currency::Btc | Currency::Bch => 10 * 60,
 			Currency::Ltc => 60 * 2 + 30,  // Blocks period is 2.5 minutes
 			Currency::Dash => 60 * 2 + 39, // 2.65 Minutes
 			Currency::ZCash => 75,
@@ -243,22 +239,6 @@ impl Currency {
 				})?;
 				Self::validate_address_network(&addr, "LTC")?;
 			}
-			Currency::Bsv => {
-				let addr = Address::new_btc().from_str(address).map_err(|e| {
-					ErrorKind::Generic(format!("Unable to parse BSV address {}, {}", address, e))
-				})?;
-				Self::validate_address_network(&addr, "BSV")?;
-
-				match &addr.payload {
-					bitcoin::util::address::Payload::PubkeyHash(_)
-					| bitcoin::util::address::Payload::ScriptHash(_) => (),
-					_ => {
-						return Err(ErrorKind::Generic(
-							"Address is not supported by BSV".to_string(),
-						))
-					}
-				}
-			}
 			Currency::Dash => {
 				let addr = Address::new_dash().from_str(address).map_err(|e| {
 					ErrorKind::Generic(format!("Unable to parse Dash address {}, {}", address, e))
@@ -323,7 +303,7 @@ impl Currency {
 	/// Generate a script for this address. Address MUST be Hash160
 	pub fn address_2_script_pubkey(&self, address: &String) -> Result<bitcoin::Script, ErrorKind> {
 		let addr_str = match self {
-			Currency::Btc | Currency::Bsv => address.clone(),
+			Currency::Btc => address.clone(),
 			Currency::Bch => {
 				// With BCH problem that it doesn't have functionality to build scripts for pay to pubkey
 				// That is why we will use BTC library to do that.
@@ -349,7 +329,7 @@ impl Currency {
 
 						let hash160 = bch::util::Hash160(hash_dt);
 						// Converting into legacy address that is equal to BTC.
-						bch::address::legacyaddr_encode(&hash160, addr_type, Self::bch_network())
+						bch::address::legacyaddr_encode(&hash160.0, addr_type, Self::bch_network())
 					}
 				}
 			}
@@ -416,13 +396,6 @@ impl Currency {
 					Network::Mainnet => 100.0 as f32,
 				}
 			}
-			Currency::Bsv => {
-				// Default values
-				match network {
-					Network::Floonet => 1.0 as f32,
-					Network::Mainnet => 1.0 as f32,
-				}
-			}
 			Currency::Dash => {
 				// Default values
 				match network {
@@ -453,9 +426,7 @@ impl Currency {
 	/// - true: per byte, false: flat unit price
 	pub fn get_fee_units(&self) -> (String, u64, bool) {
 		match self {
-			Currency::Btc | Currency::Bch | Currency::Bsv => {
-				("satoshi per byte".to_string(), 1, true)
-			}
+			Currency::Btc | Currency::Bch => ("satoshi per byte".to_string(), 1, true),
 			Currency::Ltc => ("litoshi per byte".to_string(), 1, true),
 			Currency::Dash => ("duff per byte".to_string(), 1, true),
 			Currency::ZCash => ("ZEC".to_string(), 100_000_000, false),
@@ -468,7 +439,7 @@ impl Currency {
 		// Bch is clone of BTC, so even the same transaction does exist. For other alts that will not be true
 		if testnet {
 			match self {
-				Currency::Btc | Currency::Bch | Currency::Bsv => {
+				Currency::Btc | Currency::Bch => {
 					"f0315ffc38709d70ad5647e22048358dd3745f3ce3874223c80a7c92fab0c8ba".to_string()
 				}
 				Currency::Ltc => {
@@ -486,7 +457,7 @@ impl Currency {
 			}
 		} else {
 			match self {
-				Currency::Btc | Currency::Bch | Currency::Bsv => {
+				Currency::Btc | Currency::Bch => {
 					"0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098".to_string()
 				}
 				Currency::Ltc => {
@@ -512,7 +483,6 @@ impl fmt::Display for Currency {
 			Currency::Btc => "BTC",
 			Currency::Bch => "BCH",
 			Currency::Ltc => "LTC",
-			Currency::Bsv => "BSV",
 			Currency::Dash => "Dash",
 			Currency::ZCash => "ZCash",
 			Currency::Doge => "Doge",
@@ -529,7 +499,6 @@ impl TryFrom<&str> for Currency {
 			"btc" => Ok(Currency::Btc),
 			"bch" => Ok(Currency::Bch),
 			"ltc" => Ok(Currency::Ltc),
-			"bsv" => Ok(Currency::Bsv),
 			"dash" => Ok(Currency::Dash),
 			"zec" | "zcash" => Ok(Currency::ZCash),
 			"doge" => Ok(Currency::Doge),
@@ -756,8 +725,8 @@ pub enum Action {
 		currency: Currency,
 		/// Amount
 		amount: u64,
-		/// Address to deposit
-		address: String,
+		/// Address to deposit. Here is vector because some coins might have legacy and new addresses that mean the same
+		address: Vec<String>,
 	},
 	/// Wait for sufficient confirmations. Lock transaction on MWC network
 	WaitForMwcConfirmations {
@@ -776,8 +745,8 @@ pub enum Action {
 		expected_to_be_posted: u64,
 		/// Type of currency (BTC)
 		currency: Currency,
-		/// Address to deposit
-		address: String,
+		/// Address to deposit. Array because for BCH locking, we might have legacy and BCH addresses
+		address: Vec<String>,
 		/// Required number of confirmations
 		required: u64,
 		/// Actual number of confirmations
@@ -791,8 +760,8 @@ pub enum Action {
 		mwc_actual: u64,
 		/// Type of secondary currency (BTC)
 		currency: Currency,
-		/// Address to deposit
-		address: String,
+		/// Address to deposit. Array because for BCH locking, it might have legacy and BCH addresses
+		address: Vec<String>,
 		/// Expected amount to be posted
 		sec_expected_to_be_posted: u64,
 		/// Required number of confirmations for secondary
@@ -965,12 +934,16 @@ impl fmt::Display for Action {
 				currency,
 				amount,
 				address,
-			} => format!(
-				"Please deposit exactly {} {} to {}",
-				currency.amount_to_hr_string(*amount, true),
-				currency,
-				address
-			),
+			} => {
+				debug_assert!(address.len()>0);
+				debug_assert!(address.len()<=2);
+				format!(
+					"Please deposit exactly {} {} to {}",
+					currency.amount_to_hr_string(*amount, true),
+					currency,
+					address.join(" or ")
+				)
+			},
 			Action::WaitForMwcConfirmations {
 				name,
 				required,
@@ -987,12 +960,14 @@ impl fmt::Display for Action {
 				required,
 				actual,
 			} => {
+				debug_assert!(address.len()>0);
+				debug_assert!(address.len()<=2);
 				if *expected_to_be_posted == 0 {
-					format!("{}, waiting for confirmations for {} address {} {}/{}", name, currency, address, actual, required)
+					format!("{}, waiting for confirmations for {} address {} {}/{}", name, currency, address.join(","), actual, required)
 				}
 				else {
 					let posted_str = currency.amount_to_hr_string(*expected_to_be_posted, true);
-					format!("{}, waiting for {} {} to be sent to {}", name, posted_str, currency, address)
+					format!("{}, waiting for {} {} to be sent to {}", name, posted_str, currency, address.join(" or "))
 				}
 			}
 			Action::WaitForLockConfirmations {
@@ -1013,18 +988,20 @@ impl fmt::Display for Action {
 
 				let sec_str = if *sec_expected_to_be_posted==0 {
 					if sec_actual.unwrap() == 0 {
-						format!("{} {} are in memory pool", currency, address)
+						format!("{} {} are in memory pool", currency, address.join(","))
 					}
 					else if sec_actual.unwrap() >= *sec_required {
-						format!("{} {}, are locked", currency, address)
+						format!("{} {}, are locked", currency, address.join(","))
 					}
 					else {
-						format!("{} {}, {}/{}", currency, address, sec_actual.unwrap(), sec_required)
+						format!("{} {}, {}/{}", currency, address.join(","), sec_actual.unwrap(), sec_required)
 					}
 				}
 				else {
 					let sec_posted_str = currency.amount_to_hr_string(*sec_expected_to_be_posted, true);
-					format!("Waiting for {} {} to be sent to {}", sec_posted_str, currency, address)
+					debug_assert!(address.len()>0);
+					debug_assert!(address.len()<=2);
+					format!("Waiting for {} {} to be sent to {}", sec_posted_str, currency, address.join(" or "))
 				};
 
 				format!("Locking, waiting for confirmations. {}; {}", mwc_str, sec_str)

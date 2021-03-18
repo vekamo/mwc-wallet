@@ -357,10 +357,15 @@ where
 	}
 	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
 		let name = match self.swap_api.get_secondary_lock_address(swap) {
-			Ok(address) => format!(
-				"Send {} to lock account {}",
-				swap.secondary_currency, address
-			),
+			Ok(address) => {
+				debug_assert!(address.len() > 0);
+				debug_assert!(address.len() <= 2);
+				format!(
+					"Send {} to lock account {}",
+					swap.secondary_currency,
+					address.join(" or ")
+				)
+			}
 			Err(_) => format!("Send {} to lock account", swap.secondary_currency),
 		};
 		Some(StateEtaInfo::new(&name).end_time(swap.get_time_start_lock()))
@@ -427,17 +432,21 @@ where
 					.action(Action::DepositSecondary {
 						currency: swap.secondary_currency,
 						amount: swap.secondary_amount - chain_amount,
-						address: format!("{}", self.swap_api.get_secondary_lock_address(swap)?),
+						address: self.swap_api.get_secondary_lock_address(swap)?,
 					})
 					.time_limit(time_limit));
 				}
+
+				let lock_address = self.swap_api.get_secondary_lock_address(swap)?;
+				debug_assert!(lock_address.len() > 0);
+				debug_assert!(lock_address.len() <= 2);
 
 				// Posted more then expected. We are not going forward. Deal is broken, probably it is a mistake. We are cancelling the trade because of that.
 				if chain_amount > swap.secondary_amount {
 					swap.add_journal_message(format!(
 						"{} {}. Expected {} {}, but get {} {}",
 						JOURNAL_CANCELLED_BYER_LOCK_TOO_MUCH_FUNDS,
-						self.swap_api.get_secondary_lock_address(swap)?,
+						lock_address.join(" or "),
 						swap.secondary_currency
 							.amount_to_hr_string(swap.secondary_amount, true),
 						swap.secondary_currency,
@@ -453,7 +462,7 @@ where
 				swap.add_journal_message(format!(
 					"{} have been posted to lock account {}",
 					swap.secondary_currency,
-					self.swap_api.get_secondary_lock_address(swap)?
+					lock_address.join(" or ")
 				));
 				Ok(StateProcessRespond::new(
 					StateId::BuyerWaitingForLockConfirmations,
@@ -539,6 +548,9 @@ where
 				let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
 
 				if tx_conf.secondary_lock_amount < swap.secondary_amount {
+					let lock_address = self.swap_api.get_secondary_lock_address(swap)?;
+					debug_assert!(lock_address.len() > 0);
+					debug_assert!(lock_address.len() <= 2);
 					swap.add_journal_message(format!(
 						"Waiting for posting {} {} to lock account {}",
 						swap.secondary_currency.amount_to_hr_string(
@@ -547,7 +559,7 @@ where
 							true
 						),
 						swap.secondary_currency,
-						self.swap_api.get_secondary_lock_address(swap)?
+						lock_address.join(" or ")
 					));
 					// Need to deposit more. Something happens? Likely will be cancelled because of timeout.
 					return Ok(StateProcessRespond::new(
@@ -1451,7 +1463,7 @@ where
 							name: format!("{} Refund", swap.secondary_currency),
 							expected_to_be_posted: 0,
 							currency: swap.secondary_currency,
-							address: swap.unwrap_buyer()?.unwrap_or("XXXXX".to_string()),
+							address: vec![swap.unwrap_buyer()?.unwrap_or("XXXXX".to_string())],
 							required: swap.secondary_confirmations,
 							actual: tx_conf.secondary_refund_conf.unwrap_or(0),
 						},

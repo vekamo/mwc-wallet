@@ -192,11 +192,6 @@ impl BuyApi {
 			| Currency::Dash
 			| Currency::ZCash
 			| Currency::Doge => (),
-			Currency::Bsv => {
-				return Err(ErrorKind::InvalidMessageData(
-					"Unexpected currency value".to_string(),
-				))
-			}
 		}
 		// Comparing BTC lock time with expected
 		let btc_data = BtcData::from_offer(

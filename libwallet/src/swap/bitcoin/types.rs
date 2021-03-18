@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::client::Output;
-use crate::grin_util::to_hex;
 use crate::swap::message::SecondaryUpdate;
 use crate::swap::ser::*;
 use crate::swap::swap;
@@ -177,15 +176,17 @@ impl BtcData {
 		currency: Currency,
 		script: &Script,
 		network: Network,
-	) -> Result<String, ErrorKind> {
+	) -> Result<Vec<String>, ErrorKind> {
 		match currency {
 			Currency::Btc => {
 				let address = Address::new_btc().p2sh(script, btc_network(network));
-				Ok(address.to_string())
+				Ok(vec![address.to_string()])
 			}
 			Currency::Bch => {
+				// Bch Address
+				let script_hash = hash160::Hash::hash(&script[..]);
 				let address = bch::address::cashaddr_encode(
-					&hash160::Hash::hash(&script[..]),
+					&script_hash,
 					bch::address::AddressType::P2SH,
 					bch_network(network),
 				)
@@ -195,13 +196,19 @@ impl BtcData {
 						e
 					))
 				})?;
-				Ok(address)
+				// Legacy BCH address is BTC address, some might like it as well
+				let legacy_address = bch::address::legacyaddr_encode(
+					&script_hash,
+					bch::address::AddressType::P2SH,
+					bch_network(network),
+				);
+				Ok(vec![address, legacy_address])
 			}
 			Currency::Ltc => {
 				let address = Address::new_ltc().p2sh(script, btc_network(network));
-				Ok(address.to_string())
+				Ok(vec![address.to_string()])
 			}
-			Currency::Bsv => {
+			/*			Currency::Bsv => {
 				// Bsv deleted pay to script hash, so we need a script instead
 				// https://github.com/moneybutton/bips/blob/master/bip-0276.mediawiki
 				let mut script_res = Vec::new();
@@ -223,18 +230,18 @@ impl BtcData {
 
 				script_res.push_str(&to_hex(&checksum));
 				Ok(script_res)
-			}
+			}*/
 			Currency::Dash => {
 				let address = Address::new_dash().p2sh(script, btc_network(network));
-				Ok(address.to_string())
+				Ok(vec![address.to_string()])
 			}
 			Currency::ZCash => {
 				let address = Address::new_zec().p2sh(script, btc_network(network));
-				Ok(address.to_string())
+				Ok(vec![address.to_string()])
 			}
 			Currency::Doge => {
 				let address = Address::new_doge().p2sh(script, btc_network(network));
-				Ok(address.to_string())
+				Ok(vec![address.to_string()])
 			}
 		}
 	}
@@ -344,7 +351,6 @@ impl BtcData {
 
 				(cosign_ser, redeem_ser)
 			}
-			Currency::Bsv => panic!("BSV not supported"),
 		};
 
 		let script_sig = Builder::new()
@@ -523,7 +529,6 @@ impl BtcData {
 					None,
 				));
 			}
-			Currency::Bsv => panic!("BSV not supported"),
 		};
 
 		let mut cursor = Cursor::new(Vec::with_capacity(tx_size));
@@ -563,7 +568,6 @@ impl BtcData {
 				sign_ser.push(0x01); // SIGHASH_ALL
 				sign_ser
 			}
-			Currency::Bsv => panic!("BSV not supported"),
 		};
 
 		let script_sig = Builder::new()
@@ -733,7 +737,7 @@ mod tests {
 			format!(
 				"{}",
 				data.address(Currency::Btc, &input_script, Network::Floonet)
-					.unwrap()
+					.unwrap()[0]
 			),
 			String::from("2NEwEAG9VyFYt2sjLpuHrU4Abb7nGJfc7PR")
 		);
@@ -769,7 +773,7 @@ mod tests {
 			.unwrap();
 		let lock_address = data.address(Currency::Btc, &input_script, network).unwrap();
 		let lock_script_pubkey = Currency::Btc
-			.address_2_script_pubkey(&lock_address)
+			.address_2_script_pubkey(&lock_address[0])
 			.unwrap();
 
 		// Create a bunch of funding transactions

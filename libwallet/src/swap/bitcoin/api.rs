@@ -121,16 +121,17 @@ where
 	) -> Result<(u64, u64, u64, Vec<Output>), ErrorKind> {
 		let btc_data = swap.secondary_data.unwrap_btc()?;
 		let address = btc_data.address(self.secondary_currency, input_script, swap.network)?;
+		debug_assert!(address.len() > 0);
 		let outputs = match self
 			.btc_node_client1
 			.lock()
-			.unspent(self.secondary_currency, &address)
+			.unspent(self.secondary_currency, &address[0])
 		{
 			Ok(r) => r,
 			Err(_) => self
 				.btc_node_client2
 				.lock()
-				.unspent(self.secondary_currency, &address)?,
+				.unspent(self.secondary_currency, &address[0])?,
 		};
 		let height = match self.btc_node_client1.lock().height() {
 			Ok(r) => r,
@@ -368,7 +369,6 @@ where
 			Currency::Btc
 			| Currency::Bch
 			| Currency::Ltc
-			| Currency::Bsv
 			| Currency::Dash
 			| Currency::ZCash
 			| Currency::Doge => Ok(4),
@@ -390,7 +390,6 @@ where
 			Currency::Btc
 			| Currency::Bch
 			| Currency::Ltc
-			| Currency::Bsv
 			| Currency::Dash
 			| Currency::ZCash
 			| Currency::Doge => (),
@@ -468,7 +467,6 @@ where
 			Currency::Btc
 			| Currency::Bch
 			| Currency::Ltc
-			| Currency::Bsv
 			| Currency::Dash
 			| Currency::ZCash
 			| Currency::Doge => (),
@@ -592,16 +590,17 @@ where
 			if let Ok(address) =
 				btc_data.address(swap.secondary_currency, &input_script, swap.network)
 			{
+				debug_assert!(address.len() > 0);
 				let outputs = match self
 					.btc_node_client1
 					.lock()
-					.unspent(swap.secondary_currency, &address)
+					.unspent(swap.secondary_currency, &address[0])
 				{
 					Ok(r) => r,
 					Err(_) => self
 						.btc_node_client2
 						.lock()
-						.unspent(swap.secondary_currency, &address)?,
+						.unspent(swap.secondary_currency, &address[0])?,
 				};
 				for output in outputs {
 					secondary_lock_amount += output.value;
@@ -731,15 +730,16 @@ where
 		}
 	}
 
-	/// Get a secondary address for the lock account
-	fn get_secondary_lock_address(&self, swap: &Swap) -> Result<String, ErrorKind> {
+	/// Get a secondary addresses for the lock account
+	/// We can have several addresses because of different formats
+	fn get_secondary_lock_address(&self, swap: &Swap) -> Result<Vec<String>, ErrorKind> {
 		let input_script = self.script(swap)?;
 		let address = swap.secondary_data.unwrap_btc()?.address(
 			swap.secondary_currency,
 			&input_script,
 			swap.network,
 		)?;
-		Ok(address.to_string())
+		Ok(address)
 	}
 
 	/// Check if tx fee for the secondary is different from the posted

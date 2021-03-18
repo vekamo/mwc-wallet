@@ -115,8 +115,9 @@ pub trait SwapApi<K: Keychain>: Sync + Send {
 		post_tx: bool,
 	) -> Result<(), ErrorKind>;
 
-	/// Get a secondary address for the lock account
-	fn get_secondary_lock_address(&self, swap: &Swap) -> Result<String, ErrorKind>;
+	/// Get a secondary addresses for the lock account
+	/// We can have several addresses because of different formats
+	fn get_secondary_lock_address(&self, swap: &Swap) -> Result<Vec<String>, ErrorKind>;
 
 	/// Check if tx fee for the secondary is different from the posted. compare swap.secondary_fee with
 	/// posted BTC secondary_fee

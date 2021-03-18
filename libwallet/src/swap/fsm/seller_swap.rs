@@ -319,10 +319,21 @@ where
 			None
 		} else {
 			let name = match self.swap_api.get_secondary_lock_address(swap) {
-				Ok(address) => format!(
-					"Waiting For Buyer to send {} coins to {}",
-					swap.secondary_currency, address
-				),
+				Ok(address) => {
+					debug_assert!(address.len() > 0);
+					if address.len() > 1 {
+						format!(
+							"Waiting For Buyer to send {} coins to any of those addresses: {}",
+							swap.secondary_currency,
+							address.join(", ")
+						)
+					} else {
+						format!(
+							"Waiting For Buyer to send {} coins to {}",
+							swap.secondary_currency, address[0]
+						)
+					}
+				}
 				Err(_) => format!("Post {} to lock account", swap.secondary_currency),
 			};
 
@@ -370,12 +381,16 @@ where
 						conf = 0;
 					}
 
+					let lock_addresses = self.swap_api.get_secondary_lock_address(swap)?;
+					debug_assert!(lock_addresses.len() > 0);
+					debug_assert!(lock_addresses.len() <= 2);
+
 					if tx_conf.secondary_lock_amount > swap.secondary_amount {
 						// Posted too much, byer probably will cancel the deal, we are not going to lock the MWCs
 						swap.add_journal_message(format!(
 							"Cancelled because buyer sent funds greater than the agreed upon {} amount to the lock address {}",
 							swap.secondary_currency,
-							self.swap_api.get_secondary_lock_address(swap)?,
+							lock_addresses.join(" or "),
 						));
 						return Ok(StateProcessRespond::new(StateId::SellerCancelled));
 					}
@@ -391,7 +406,7 @@ where
 								address: self
 									.swap_api
 									.get_secondary_lock_address(swap)
-									.unwrap_or("XXXXX".to_string()),
+									.unwrap_or(vec!["XXXXX".to_string()]),
 								required: 1,
 								actual: conf,
 							})
@@ -399,7 +414,7 @@ where
 					} else {
 						swap.add_journal_message(format!(
 							"Buyer sent the funds to lock address {}",
-							self.swap_api.get_secondary_lock_address(swap)?
+							lock_addresses.join(" or ")
 						));
 						Ok(StateProcessRespond::new(StateId::SellerPostingLockMwcSlate))
 					}
@@ -569,7 +584,15 @@ impl<'a, K: Keychain> State for SellerWaitingForLockConfirmations<'a, K> {
 	}
 	fn get_eta(&self, swap: &Swap) -> Option<StateEtaInfo> {
 		let address_info = match self.swap_api.get_secondary_lock_address(swap) {
-			Ok(address) => format!(" {} lock address {}", swap.secondary_currency, address),
+			Ok(address) => {
+				debug_assert!(address.len() > 0);
+				debug_assert!(address.len() <= 2);
+				format!(
+					" {} lock address {}",
+					swap.secondary_currency,
+					address.join(" or ")
+				)
+			}
 			Err(_) => "".to_string(),
 		};
 		Some(
@@ -1420,7 +1443,7 @@ where
 							name: "Redeeming funds".to_string(),
 							expected_to_be_posted: 0,
 							currency: swap.secondary_currency,
-							address: swap.unwrap_seller()?.0,
+							address: vec![swap.unwrap_seller()?.0],
 							required: swap.secondary_confirmations,
 							actual: tx_conf.secondary_redeem_conf.unwrap_or(0),
 						},

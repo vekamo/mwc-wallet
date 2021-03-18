@@ -667,7 +667,7 @@ mod tests {
 			}
 			_ => panic!("Invalid action"),
 		};
-		let address = Address::new_btc().from_str(&address).unwrap();
+		let address = Address::new_btc().from_str(&address[0]).unwrap();
 
 		// Buyer: first deposit
 		let tx_1 = BtcTransaction {
@@ -2242,7 +2242,7 @@ mod tests {
 			output: vec![TxOut {
 				value: btc_amount_1,
 				script_pubkey: Currency::Btc
-					.address_2_script_pubkey(&btc_address_to_deposit)
+					.address_2_script_pubkey(&btc_address_to_deposit[0])
 					.unwrap(),
 			}],
 		};
@@ -2254,7 +2254,7 @@ mod tests {
 			output: vec![TxOut {
 				value: btc_amount_2,
 				script_pubkey: Currency::Btc
-					.address_2_script_pubkey(&btc_address_to_deposit)
+					.address_2_script_pubkey(&btc_address_to_deposit[0])
 					.unwrap(),
 			}],
 		};
@@ -2266,7 +2266,7 @@ mod tests {
 			output: vec![TxOut {
 				value: btc_amount_plus,
 				script_pubkey: Currency::Btc
-					.address_2_script_pubkey(&btc_address_to_deposit)
+					.address_2_script_pubkey(&btc_address_to_deposit[0])
 					.unwrap(),
 			}],
 		};
@@ -2829,7 +2829,7 @@ mod tests {
 			} => {
 				assert_eq!(currency, Currency::Btc);
 				assert_eq!(amount, btc_amount);
-				assert_eq!(address, btc_address_to_deposit.to_string());
+				assert_eq!(address, btc_address_to_deposit);
 			}
 			_ => panic!("Invalid action"),
 		}
@@ -2929,7 +2929,7 @@ mod tests {
 			} => {
 				assert_eq!(currency, Currency::Btc);
 				assert_eq!(amount, btc_amount - btc_amount_1);
-				assert_eq!(address, btc_address_to_deposit.to_string());
+				assert_eq!(address, btc_address_to_deposit);
 			}
 			_ => panic!("Invalid action"),
 		}
@@ -3107,7 +3107,7 @@ mod tests {
 				} => {
 					assert_eq!(currency, Currency::Btc);
 					assert_eq!(amount, btc_amount);
-					assert_eq!(address, btc_address_to_deposit.to_string());
+					assert_eq!(address, btc_address_to_deposit);
 				}
 				_ => panic!("Invalid action"),
 			}
@@ -5510,7 +5510,7 @@ mod tests {
 		//let lock_address = swap_api.get_secondary_lock_address(&swap_buy).unwrap();
 		println!(
 			"Lock address: {}. please deposit {} {} and press Enter",
-			lock_address,
+			lock_address[0],
 			currency.amount_to_hr_string(btc_amount, true),
 			currency
 		);
