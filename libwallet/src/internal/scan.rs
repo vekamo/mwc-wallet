@@ -130,17 +130,14 @@ lazy_static! {
 	pub static ref REPLAY_MITIGATION_CONFIG: Mutex< ReplayMitigationConfig> = Mutex::new(ReplayMitigationConfig::default());
 }
 /// Set address derivative index
-pub fn set_replay_config(config : ReplayMitigationConfig) {
+pub fn set_replay_config(config: ReplayMitigationConfig) {
 	let mut lock = REPLAY_MITIGATION_CONFIG.lock();
 	*lock = config;
-
-
 }
 /// Get address derivative index
 pub fn get_replay_config() -> ReplayMitigationConfig {
 	REPLAY_MITIGATION_CONFIG.lock().clone()
 }
-
 
 fn identify_utxo_outputs<'a, K>(
 	keychain: &K,
@@ -1059,7 +1056,10 @@ where
 	}
 
 	// //do the self_spend
-	println!("the self spent list is {:?}",self_spend_candidate_light_list );
+	println!(
+		"the self spent list is {:?}",
+		self_spend_candidate_light_list
+	);
 	for output in self_spend_candidate_light_list {
 		self_spend_particular_output(
 			wallet_inst.clone(),
@@ -1103,9 +1103,7 @@ where
 	}
 
 	// Collect the data form the chain and from the wallet
-	let mut replay_config = get_replay_config();
-	replay_config.replay_mitigation_flag = true;
-	replay_config.replay_mitigation_min_amount = 500000 as u64;
+	let replay_config = get_replay_config();
 	let (mut outputs, chain_outs, mut transactions, last_output) = get_wallet_and_chain_data(
 		wallet_inst.clone(),
 		keychain_mask.clone(),

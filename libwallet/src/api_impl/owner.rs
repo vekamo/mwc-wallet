@@ -126,11 +126,7 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	let validated = update_wallet_state(
-		wallet_inst.clone(),
-		keychain_mask,
-		status_send_channel,
-	)?;
+	let validated = update_wallet_state(wallet_inst.clone(), keychain_mask, status_send_channel)?;
 
 	Ok(validated)
 }
@@ -151,11 +147,8 @@ where
 {
 	let mut validated = false;
 	if refresh_from_node {
-		validated = perform_refresh_from_node(
-			wallet_inst.clone(),
-			keychain_mask,
-			status_send_channel,
-		)?;
+		validated =
+			perform_refresh_from_node(wallet_inst.clone(), keychain_mask, status_send_channel)?;
 	}
 
 	wallet_lock!(wallet_inst, w);
@@ -209,11 +202,8 @@ where
 {
 	let mut validated = false;
 	if refresh_from_node {
-		validated = perform_refresh_from_node(
-			wallet_inst.clone(),
-			keychain_mask,
-			status_send_channel,
-		)?;
+		validated =
+			perform_refresh_from_node(wallet_inst.clone(), keychain_mask, status_send_channel)?;
 	}
 
 	wallet_lock!(wallet_inst, w);
@@ -247,11 +237,8 @@ where
 {
 	let mut validated = false;
 	if refresh_from_node {
-		validated = perform_refresh_from_node(
-			wallet_inst.clone(),
-			keychain_mask,
-			status_send_channel,
-		)?;
+		validated =
+			perform_refresh_from_node(wallet_inst.clone(), keychain_mask, status_send_channel)?;
 	}
 
 	wallet_lock!(wallet_inst, w);
@@ -281,11 +268,7 @@ where
 		.into());
 	}
 	if refresh_from_node {
-		update_wallet_state(
-			wallet_inst.clone(),
-			keychain_mask,
-			status_send_channel,
-		)?
+		update_wallet_state(wallet_inst.clone(), keychain_mask, status_send_channel)?
 	} else {
 		false
 	};
@@ -933,11 +916,7 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	if !perform_refresh_from_node(
-		wallet_inst.clone(),
-		keychain_mask,
-		status_send_channel,
-	)? {
+	if !perform_refresh_from_node(wallet_inst.clone(), keychain_mask, status_send_channel)? {
 		return Err(ErrorKind::TransactionCancellationError(
 			"Can't contact running MWC node. Not Cancelling.",
 		))?;
@@ -1361,11 +1340,7 @@ where
 
 	if tip_was_changed {
 		// Since head was chaged, we need to update it
-		return update_wallet_state(
-			wallet_inst,
-			keychain_mask,
-			&status_send_channel,
-		);
+		return update_wallet_state(wallet_inst, keychain_mask, &status_send_channel);
 	}
 
 	// wasn't be able to confirm the tip. Scan is failed, scan height not updated.
