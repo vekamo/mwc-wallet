@@ -225,7 +225,7 @@ where
 	K: keychain::Keychain + 'a,
 {
 	// Caller need to update the wallet first
-	owner::update_wallet_state(wallet.clone(), keychain_mask, &None, None)?;
+	owner::update_wallet_state(wallet.clone(), keychain_mask, &None)?;
 
 	let slate = {
 		let mut w_lock = wallet.lock();
@@ -273,7 +273,7 @@ where
 	K: keychain::Keychain + 'a,
 {
 	let (wallet_refreshed, wallet_info) =
-		owner::retrieve_summary_info(wallet, keychain_mask, &None, true, 1, None)?;
+		owner::retrieve_summary_info(wallet, keychain_mask, &None, true, 1)?;
 	assert!(wallet_refreshed);
 	Ok(wallet_info)
 }

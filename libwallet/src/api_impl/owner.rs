@@ -37,7 +37,6 @@ use crate::{
 use crate::{Error, ErrorKind};
 
 use crate::proof::tx_proof::{pop_proof_for_slate, TxProof};
-use crate::ReplayMitigationConfig;
 use ed25519_dalek::PublicKey as DalekPublicKey;
 use std::cmp;
 use std::fs::File;
@@ -121,7 +120,6 @@ fn perform_refresh_from_node<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	status_send_channel: &Option<Sender<StatusMessage>>,
-	replay_config: Option<ReplayMitigationConfig>,
 ) -> Result<bool, Error>
 where
 	L: WalletLCProvider<'a, C, K>,
@@ -132,7 +130,6 @@ where
 		wallet_inst.clone(),
 		keychain_mask,
 		status_send_channel,
-		replay_config,
 	)?;
 
 	Ok(validated)
@@ -158,7 +155,6 @@ where
 			wallet_inst.clone(),
 			keychain_mask,
 			status_send_channel,
-			None,
 		)?;
 	}
 
@@ -217,7 +213,6 @@ where
 			wallet_inst.clone(),
 			keychain_mask,
 			status_send_channel,
-			None,
 		)?;
 	}
 
@@ -244,7 +239,6 @@ pub fn retrieve_summary_info<'a, L, C, K>(
 	status_send_channel: &Option<Sender<StatusMessage>>,
 	refresh_from_node: bool,
 	minimum_confirmations: u64,
-	replay_config: Option<ReplayMitigationConfig>,
 ) -> Result<(bool, WalletInfo), Error>
 where
 	L: WalletLCProvider<'a, C, K>,
@@ -257,7 +251,6 @@ where
 			wallet_inst.clone(),
 			keychain_mask,
 			status_send_channel,
-			replay_config,
 		)?;
 	}
 
@@ -292,7 +285,6 @@ where
 			wallet_inst.clone(),
 			keychain_mask,
 			status_send_channel,
-			None,
 		)?
 	} else {
 		false
@@ -945,7 +937,6 @@ where
 		wallet_inst.clone(),
 		keychain_mask,
 		status_send_channel,
-		None,
 	)? {
 		return Err(ErrorKind::TransactionCancellationError(
 			"Can't contact running MWC node. Not Cancelling.",
@@ -1077,7 +1068,6 @@ where
 		status_send_channel,
 		true,
 		do_full_outputs_refresh,
-		None, //should we pass in None or not?
 	)?;
 
 	wallet_lock!(wallet_inst, w);
@@ -1274,7 +1264,6 @@ pub fn update_wallet_state<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	status_send_channel: &Option<Sender<StatusMessage>>,
-	replay_config: Option<ReplayMitigationConfig>,
 ) -> Result<bool, Error>
 where
 	L: WalletLCProvider<'a, C, K>,
@@ -1347,7 +1336,6 @@ where
 		status_send_channel,
 		show_progress,
 		has_reorg,
-		replay_config.clone(),
 	)?;
 
 	// Checking if tip was changed. In this case we need to retry. Retry will be handles naturally optimal
@@ -1377,7 +1365,6 @@ where
 			wallet_inst,
 			keychain_mask,
 			&status_send_channel,
-			replay_config,
 		);
 	}
 

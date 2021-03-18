@@ -3286,7 +3286,6 @@ pub fn run_doctest_owner(
 			&None,
 			true,
 			1,
-			None,
 		)
 		.unwrap();
 		assert!(wallet_refreshed);
@@ -3319,7 +3318,7 @@ pub fn run_doctest_owner(
 	let w2_slatepack_address = ProvableAddress::from_tor_pub_key(&w2_tor_pubkey);
 
 	if perform_tx {
-		api_impl::owner::update_wallet_state(wallet1.clone(), (&mask1).as_ref(), &None, None)
+		api_impl::owner::update_wallet_state(wallet1.clone(), (&mask1).as_ref(), &None)
 			.unwrap();
 
 		let amount = 2_000_000_000;

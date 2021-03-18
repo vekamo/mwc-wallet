@@ -87,7 +87,7 @@ pub use api_impl::types::{
 	OutputCommitMapping, PaymentProof, ReplayMitigationConfig, SendTXArgs, SwapStartArgs,
 	VersionInfo,
 };
-pub use internal::scan::scan;
+pub use internal::scan::{scan, set_replay_config};
 pub use proof::tx_proof::TxProof;
 pub use proof::tx_proof::{proof_ok, verify_tx_proof_wrapper};
 pub use slate_versions::ser as dalek_ser;

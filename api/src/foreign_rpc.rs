@@ -1193,7 +1193,6 @@ pub fn run_doctest_foreign(
 			&None,
 			true,
 			1,
-			None,
 		)
 		.unwrap();
 		assert!(wallet_refreshed);
@@ -1236,7 +1235,7 @@ pub fn run_doctest_foreign(
 
 			api_impl::owner::issue_invoice_tx(&mut **w, (&mask2).as_ref(), &args, true, 1).unwrap()
 		};
-		api_impl::owner::update_wallet_state(wallet1.clone(), (&mask1).as_ref(), &None, None)
+		api_impl::owner::update_wallet_state(wallet1.clone(), (&mask1).as_ref(), &None)
 			.unwrap();
 		slate = {
 			let mut w_lock = wallet1.lock();
@@ -1282,7 +1281,7 @@ pub fn run_doctest_foreign(
 		}
 	}
 
-	api_impl::owner::update_wallet_state(wallet1.clone(), (&mask1).as_ref(), &None, None).unwrap();
+	api_impl::owner::update_wallet_state(wallet1.clone(), (&mask1).as_ref(), &None).unwrap();
 	if init_tx {
 		let amount = 2_000_000_000;
 		let mut w_lock = wallet1.lock();

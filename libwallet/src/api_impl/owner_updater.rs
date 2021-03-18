@@ -196,7 +196,6 @@ where
 					self.wallet_inst.clone(),
 					(&keychain_mask).as_ref(),
 					status_send_channel,
-					None,
 				)?;
 			}
 
