@@ -881,6 +881,7 @@ where
 			for tx in transactions.values_mut() {
 				if !(tx.tx_log.confirmed || tx.tx_log.is_cancelled())
 					|| tx.tx_log.output_height >= start_height
+					|| start_height < 2
 				{
 					// Skipping old coinbase transaction that are not confirmed
 					if tx.tx_log.tx_type == TxLogEntryType::ConfirmedCoinbase
