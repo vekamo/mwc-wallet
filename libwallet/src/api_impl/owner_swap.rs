@@ -138,21 +138,26 @@ where
 	swap_api.test_client_connections()?;
 
 	let parent_key_id = w.parent_key_id(); // account is current one
-	let (outputs, total, amount, fee) = crate::internal::selection::select_coins_and_fee(
-		&mut **w,
-		params.mwc_amount,
-		&None,
-		height,
-		params.minimum_confirmations.unwrap_or(10),
-		500,
-		1,
-		false,
-		&parent_key_id,
-		&Some(outputs), // outputs to include into the transaction
-		1,              // Number of resulting outputs. Normally it is 1
-		false,
-		0,
-	)?;
+	let (outputs, total, amount, fee) = if !(params.dry_run && params.mwc_amount == 0) {
+		crate::internal::selection::select_coins_and_fee(
+			&mut **w,
+			params.mwc_amount,
+			&None,
+			height,
+			params.minimum_confirmations.unwrap_or(10),
+			500,
+			1,
+			false,
+			&parent_key_id,
+			&Some(outputs), // outputs to include into the transaction
+			1,              // Number of resulting outputs. Normally it is 1
+			false,
+			0,
+		)?
+	} else {
+		// dry run with no amount. It is possible for Buy offer validation
+		(vec![], 0, 0, 0)
+	};
 
 	let context = create_context(
 		&mut **w,
@@ -186,6 +191,7 @@ where
 		params.buyer_communication_address.clone(),
 		params.electrum_node_uri1.clone(),
 		params.electrum_node_uri2.clone(),
+		params.dry_run,
 	)?;
 
 	// Store swap result into the file.

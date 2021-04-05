@@ -277,7 +277,8 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	debug_assert!(amount > *fee.iter().max().unwrap());
+	let max_fee = *fee.iter().max().unwrap_or(&0);
+	let amount = std::cmp::max(max_fee * 2, amount);
 
 	let (account, outputs, tip_height, mut transactions) =
 		get_integral_balance(wallet_inst.clone(), keychain_mask)?;
@@ -287,7 +288,11 @@ where
 	// Sorting because we want to apply the best choice (minimal fee that is needed) first
 	transactions.sort_by(|t1, t2| t1.0.fee.partial_cmp(&t2.0.fee).unwrap());
 
-	for f in fee {
+	// We want to fill fees starting from the largest value, and apply least transaction
+	let mut fee = fee.clone();
+	fee.sort_by(|f1, f2| f2.partial_cmp(f1).unwrap());
+
+	for f in &fee {
 		match transactions.iter().position(|tx| tx.0.fee >= *f) {
 			Some(idx) => {
 				let (c, conf) = transactions.remove(idx);

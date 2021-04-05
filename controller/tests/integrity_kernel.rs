@@ -135,15 +135,15 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 		&Some("default".to_string()),
 	)?;
 	assert_eq!(integral_balance.len(), 2);
-	assert_eq!(integral_balance[0].0.is_some(), true);
-	assert_eq!(integral_balance[0].0.clone().unwrap().fee, 30_000_000);
-	assert_eq!(integral_balance[0].1, false);
+	assert_eq!(integral_balance[1].0.is_some(), true);
+	assert_eq!(integral_balance[1].0.clone().unwrap().fee, 30_000_000);
+	assert_eq!(integral_balance[1].1, false);
 	assert_eq!(
-		integral_balance[0].0.clone().unwrap().expiration_height,
+		integral_balance[1].0.clone().unwrap().expiration_height,
 		1445
 	);
-	assert_eq!(integral_balance[1].0.is_some(), false);
-	assert_eq!(integral_balance[1].1, false);
+	assert_eq!(integral_balance[0].0.is_some(), false);
+	assert_eq!(integral_balance[0].1, false);
 
 	// Mine a block, the transaction should be confirmed
 	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), mask1, 1, false);
@@ -167,16 +167,16 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 		&Some("default".to_string()),
 	)?;
 	assert_eq!(integral_balance.len(), 2);
-	assert_eq!(integral_balance[0].0.clone().unwrap().fee, 30_000_000);
-	assert_eq!(integral_balance[0].1, true);
-	assert_eq!(
-		integral_balance[0].0.clone().unwrap().expiration_height,
-		1446
-	);
-	assert_eq!(integral_balance[1].0.clone().unwrap().fee, 35_000_000);
-	assert_eq!(integral_balance[1].1, false);
+	assert_eq!(integral_balance[1].0.clone().unwrap().fee, 30_000_000);
+	assert_eq!(integral_balance[1].1, true);
 	assert_eq!(
 		integral_balance[1].0.clone().unwrap().expiration_height,
+		1446
+	);
+	assert_eq!(integral_balance[0].0.clone().unwrap().fee, 35_000_000);
+	assert_eq!(integral_balance[0].1, false);
+	assert_eq!(
+		integral_balance[0].0.clone().unwrap().expiration_height,
 		1447
 	);
 
@@ -224,7 +224,7 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	// Let's check if all signaatures are unique. It is expected
 	let mut signatures: Vec<secp::Signature> = Vec::new();
 
-	let peer_id = PeerId::random("/onion3/what_ever_address:77".to_string());
+	let peer_id = PeerId::random();
 	let peer_id_message =
 		Message::from_slice(Hash::from_vec(&peer_id.to_bytes()).as_bytes()).unwrap();
 
@@ -282,7 +282,7 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 		1_000_000,
 	);
 	let validate_fail = libp2p_connection::validate_integrity_message(
-		&PeerId::random("AnotherPeer".to_string()),
+		&PeerId::random(),
 		&libp2p_message,
 		output_validation_fn,
 		&mut HashMap::new(),

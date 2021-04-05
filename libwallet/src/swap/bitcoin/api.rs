@@ -452,6 +452,7 @@ where
 		buyer_destination_address: String,
 		electrum_node_uri1: Option<String>,
 		electrum_node_uri2: Option<String>,
+		dry_run: bool,
 	) -> Result<Swap, ErrorKind> {
 		// Checking if address is valid
 
@@ -493,6 +494,7 @@ where
 			buyer_destination_address,
 			electrum_node_uri1,
 			electrum_node_uri2,
+			dry_run,
 		)?;
 
 		let btc_data = BtcData::new(keychain, context.unwrap_seller()?.unwrap_btc()?)?;

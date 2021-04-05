@@ -1754,6 +1754,8 @@ pub struct MessagingArgs {
 	pub add_topic: Option<String>,
 	/// The integrity fee to pay or filter
 	pub fee: Option<u64>,
+	/// The integrity fee transaction Uuid
+	pub fee_uuid: Option<Uuid>,
 	/// Topic to remove from listening
 	pub remove_topic: Option<String>,
 	/// Message to start publishing
@@ -2803,7 +2805,10 @@ where
 			} else {
 				("Integrity balance is empty.".to_string(), 0)
 			};
-			json_res.insert("balance".to_string(), JsonValue::from(integrity_balance));
+			json_res.insert(
+				"balance".to_string(),
+				JsonValue::from(integrity_balance.to_string()),
+			);
 
 			let fee_str = if fee_transaction.is_empty() {
 				"Fee is not paid.".to_string()
@@ -2831,7 +2836,7 @@ where
 					.map(|(ic, conf)| {
 						let mut res = JsonMap::new();
 						res.insert("uuid".to_string(), JsonValue::from(ic.tx_uuid.to_string()));
-						res.insert("fee".to_string(), JsonValue::from(ic.fee));
+						res.insert("fee".to_string(), JsonValue::from(ic.fee.to_string()));
 						res.insert(
 							"expiration_height".to_string(),
 							JsonValue::from(ic.expiration_height),
@@ -2889,11 +2894,14 @@ where
 
 				let mut tx_info = JsonMap::new();
 				let (ic, conf) = &res[i];
-				tx_info.insert("ask_fee".to_string(), JsonValue::from(args.fee[i]));
+				tx_info.insert(
+					"ask_fee".to_string(),
+					JsonValue::from(args.fee[i].to_string()),
+				);
 				match ic {
 					Some(ic) => {
 						tx_info.insert("uuid".to_string(), JsonValue::from(ic.tx_uuid.to_string()));
-						tx_info.insert("fee".to_string(), JsonValue::from(ic.fee));
+						tx_info.insert("fee".to_string(), JsonValue::from(ic.fee.to_string()));
 						tx_info.insert(
 							"expiration_height".to_string(),
 							JsonValue::from(ic.expiration_height),
@@ -2976,7 +2984,7 @@ where
 		// Printing the status...
 		if !libp2p_connection::get_libp2p_running() {
 			if args.json {
-				json_res.insert("gossippub_peers".to_string(), JsonValue::from(-1));
+				json_res.insert("gossippub_peers".to_string(), JsonValue::Null);
 			} else {
 				println!("gossippub is not running");
 			}
@@ -3088,7 +3096,7 @@ where
 						.map(|msg| {
 							json!( {
 							"uuid" : msg.uuid.to_string(),
-							"fee" : msg.integrity_ctx.fee,
+							"fee" : msg.integrity_ctx.fee.to_string(),
 							"broadcasting_interval" : msg.broadcasting_interval,
 							"published_time" : cur_time-msg.last_time_published,
 							"message" : msg.message,
@@ -3204,9 +3212,15 @@ where
 		};
 
 		if context.is_some() {
-			if context.as_ref().unwrap().fee < fee {
-				// We need higher fee, we can't reuse it...
-				context = None;
+			if args.fee_uuid.is_some() {
+				if context.as_ref().unwrap().tx_uuid != *args.fee_uuid.as_ref().unwrap() {
+					context = None;
+				}
+			} else {
+				if context.as_ref().unwrap().fee < fee {
+					// We need higher fee, we can't reuse it...
+					context = None;
+				}
 			}
 		}
 
@@ -3219,13 +3233,30 @@ where
 			let (_account, _outputs, _tip_height, fee_transaction) =
 				owner_libp2p::get_integral_balance(wallet_inst.clone(), keychain_mask)?;
 
-			context = fee_transaction
-				.iter()
-				.filter(|(ctx, conf)| {
-					*conf && !used_ctx_uuid.contains(&ctx.tx_uuid) && ctx.fee >= fee
-				})
-				.map(|(ctx, _conf)| ctx.clone())
-				.next();
+			context = if args.fee_uuid.is_some() {
+				let fee_uuid = args.fee_uuid.clone().unwrap();
+				if used_ctx_uuid.contains(&fee_uuid) {
+					return Err(ErrorKind::GenericError(
+						"Fee uuid {} if already used for another transaction".to_string(),
+					)
+					.into());
+				}
+				fee_transaction
+					.iter()
+					.filter(|(ctx, conf)| {
+						*conf && !used_ctx_uuid.contains(&ctx.tx_uuid) && ctx.tx_uuid == fee_uuid
+					})
+					.map(|(ctx, _conf)| ctx.clone())
+					.next()
+			} else {
+				fee_transaction
+					.iter()
+					.filter(|(ctx, conf)| {
+						*conf && !used_ctx_uuid.contains(&ctx.tx_uuid) && ctx.fee >= fee
+					})
+					.map(|(ctx, _conf)| ctx.clone())
+					.next()
+			};
 		}
 
 		if context.is_none() {
@@ -3291,8 +3322,9 @@ where
 						.iter()
 						.map(|msg| {
 							json!({ "topic": msg.topic.to_string(),
-								"fee": msg.fee,
-								"message": msg.message
+								"fee": msg.fee.to_string(),
+								"message": msg.message,
+								"wallet" : msg.peer_id.get_address().unwrap_or("".to_string()),
 							})
 						})
 						.collect::<Vec<JsonValue>>(),
@@ -3302,7 +3334,8 @@ where
 			println!("There are {} messages in receive buffer.", messages.len());
 			for m in &messages {
 				println!(
-					"  topic: {}, fee: {}, message: {}",
+					"  wallet: {}, topic: {}, fee: {}, message: {}",
+					m.peer_id.get_address().unwrap_or("".to_string()),
 					m.topic,
 					amount_to_hr_string(m.fee, true),
 					m.message

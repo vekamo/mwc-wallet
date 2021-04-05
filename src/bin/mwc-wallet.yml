@@ -822,6 +822,11 @@ subcommands:
             short: f
             long: fee
             takes_value: true
+        - fee_uuid:
+            help: Integrity fee transaction ID to use.
+            short: u
+            long: fee_uuid
+            takes_value: true
         - remove_topic:
             help: Stop listening on the topic.
             short: r

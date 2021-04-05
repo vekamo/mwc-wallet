@@ -349,7 +349,7 @@ impl Currency {
 
 						let hash160 = bch::util::Hash160(hash_dt);
 						// Converting into legacy address that is equal to BTC.
-						bch::address::legacyaddr_encode(&hash160, addr_type, Self::bch_network())
+						bch::address::legacyaddr_encode(&hash160.0, addr_type, Self::bch_network())
 					}
 				}
 			}

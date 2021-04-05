@@ -456,6 +456,7 @@ mod tests {
 				"/tmp/del.me".to_string(),
 				None,
 				None,
+				false,
 			)
 			.unwrap();
 		let mut fsm_sell = api_sell.get_fsm(&kc_sell, &swap);
@@ -533,6 +534,7 @@ mod tests {
 				"/tmp/del.me".to_string(),
 				None,
 				None,
+				false,
 			)
 			.unwrap();
 
@@ -1453,7 +1455,7 @@ mod tests {
 			} else {
 				assert_eq!(trader.is_cancellable(), false);
 				let sr = trader.process(Input::Cancel);
-				assert!(sr.is_err(), true);
+				assert_eq!(sr.is_err(), true);
 			}
 			trader.pops();
 		}
@@ -1598,6 +1600,7 @@ mod tests {
 					"/tmp/del.me".to_string(),
 					None,
 					None,
+					false,
 				)
 				.unwrap();
 			let fsm_sell = api_sell.get_fsm(&kc_sell, &swap_sell);
@@ -5462,6 +5465,7 @@ mod tests {
 				"/tmp/del.me".to_string(),
 				None,
 				None,
+				false,
 			)
 			.unwrap();
 
