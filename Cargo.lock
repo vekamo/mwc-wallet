@@ -210,7 +210,7 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 [[package]]
 name = "bch"
 version = "0.2.0"
-source = "git+https://github.com/mwcproject/rust-bch?branch=master#0fd3d9291b116daf34ad00859f5e053a122a646b"
+source = "git+https://github.com/mwcproject/rust-bch?branch=master#1a25701dc5ad49819f724ff1775a72064e59b6cf"
 dependencies = [
  "byteorder",
  "digest 0.7.6",
@@ -1716,7 +1716,7 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet_api"
-version = "4.1.1"
+version = "4.2.0"
 dependencies = [
  "base64 0.9.3",
  "chrono",
@@ -1742,7 +1742,7 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet_config"
-version = "4.1.1"
+version = "4.2.0"
 dependencies = [
  "dirs 1.0.5",
  "failure",
@@ -1757,7 +1757,7 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet_controller"
-version = "4.1.1"
+version = "4.2.0"
 dependencies = [
  "chrono",
  "colored",
@@ -1789,7 +1789,7 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet_impls"
-version = "4.1.1"
+version = "4.2.0"
 dependencies = [
  "blake2-rfc",
  "byteorder",
@@ -1833,7 +1833,7 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet_libwallet"
-version = "4.1.1"
+version = "4.2.0"
 dependencies = [
  "base64 0.9.3",
  "bch",
@@ -1887,7 +1887,7 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet_util"
-version = "4.1.1"
+version = "4.2.0"
 dependencies = [
  "data-encoding",
  "ed25519-dalek",
@@ -2631,7 +2631,7 @@ dependencies = [
 
 [[package]]
 name = "mwc_wallet"
-version = "4.1.1"
+version = "4.2.0"
 dependencies = [
  "built",
  "clap",

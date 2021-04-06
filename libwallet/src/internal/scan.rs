@@ -881,6 +881,7 @@ where
 			for tx in transactions.values_mut() {
 				if !(tx.tx_log.confirmed || tx.tx_log.is_cancelled())
 					|| tx.tx_log.output_height >= start_height
+					|| start_height < 2
 				{
 					// Skipping old coinbase transaction that are not confirmed
 					if tx.tx_log.tx_type == TxLogEntryType::ConfirmedCoinbase
@@ -1484,7 +1485,7 @@ where
 			}
 		}
 
-		let _update_result = update_non_kernel_transaction(wallet_inst.clone(), tx_info, outputs);
+		let _update_result = update_non_kernel_transaction(&mut **w, tx_info, outputs);
 
 		// Update confirmation flag fr the cancelled.
 		if tx_info.tx_log.is_cancelled() {
@@ -1876,13 +1877,13 @@ where
 	Ok(())
 }
 
-fn update_non_kernel_transaction<'a, L, C, K>(
-	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
+fn update_non_kernel_transaction<'a, T: ?Sized, C, K>(
+	wallet: &mut T,
 	tx_info: &mut WalletTxInfo,
 	outputs: &HashMap<String, WalletOutputInfo>,
 ) -> Result<(), Error>
 where
-	L: WalletLCProvider<'a, C, K>,
+	T: WalletBackend<'a, C, K>,
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
@@ -1911,9 +1912,9 @@ where
 			if !tx_info.tx_log.confirmed {
 				tx_info.tx_log.confirmed = true;
 				{
-					wallet_lock!(wallet_inst, w);
-					if let Ok(hdr_info) =
-						w.w2n_client().get_header_info(tx_info.tx_log.output_height)
+					if let Ok(hdr_info) = wallet
+						.w2n_client()
+						.get_header_info(tx_info.tx_log.output_height)
 					{
 						tx_info
 							.tx_log
