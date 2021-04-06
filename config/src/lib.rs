@@ -35,5 +35,6 @@ pub use crate::config::{
 	config_file_exists, initial_setup_wallet, GRIN_WALLET_DIR, WALLET_CONFIG_FILE_NAME,
 };
 pub use crate::types::{
-	ConfigError, GlobalWalletConfig, GlobalWalletConfigMembers, MQSConfig, TorConfig, WalletConfig,
+	parse_node_address_string, ConfigError, GlobalWalletConfig, GlobalWalletConfigMembers,
+	MQSConfig, TorConfig, WalletConfig,
 };

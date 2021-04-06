@@ -31,6 +31,7 @@ use grin_wallet_util::grin_util as util;
 use std::env;
 use std::path::PathBuf;
 
+use grin_wallet_config::parse_node_address_string;
 use grin_wallet_libwallet::proof::proofaddress;
 use mwc_wallet::cmd;
 
@@ -162,7 +163,9 @@ fn real_main() -> i32 {
 	// Default derive index is 1 to match what mwc713 has by default...
 	proofaddress::set_address_index(wallet_config.grinbox_address_index.unwrap_or(0));
 
-	let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None)
+	//parse the nodes address and put them in a vec
+	let node_list = parse_node_address_string(wallet_config.check_node_api_http_addr.clone());
+	let node_client = HTTPNodeClient::new(node_list, None)
 		.expect("Unable create HTTP client for mwc-node connection");
 
 	cmd::wallet_command(&args, config, node_client)

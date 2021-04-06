@@ -40,7 +40,7 @@ pub struct WalletConfig {
 	/// Location of the node api secret for basic auth on the Grin API
 	pub node_api_secret_path: Option<String>,
 	/// The api address of a running server node against which transaction inputs
-	/// will be checked during send
+	/// will be checked during send; could be multiple nodes separated by semicolon
 	pub check_node_api_http_addr: String,
 	/// Whether to include foreign API endpoints on the Owner API
 	pub owner_api_include_foreign: Option<bool>,
@@ -247,4 +247,14 @@ pub struct GlobalWalletConfigMembers {
 	pub mqs: Option<MQSConfig>,
 	/// Logging config
 	pub logging: Option<LoggingConfig>,
+}
+
+pub fn parse_node_address_string(input: String) -> Vec<String> {
+	//parse the nodes address and put them in a vec
+	let node_list: Vec<String> = input
+		.split(";")
+		.map(|s| s.to_string())
+		.filter(|s| !s.is_empty())
+		.collect();
+	node_list
 }

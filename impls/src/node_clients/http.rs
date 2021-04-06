@@ -34,6 +34,7 @@ use super::resp_types::*;
 use crate::client_utils::json_rpc::*;
 use std::time::{Duration, Instant};
 use std::sync::{Arc, RwLock};
+use failure::_core::sync::atomic::{AtomicU8, Ordering};
 
 const ENDPOINT: &str = "/v2/foreign";
 const CACHE_VALID_TIME_MS: u128 = 5000; // 2 seconds for cache should be enough for our purpose
@@ -83,10 +84,12 @@ impl<K,T> CachedValue<K,T>
 	}
 }
 
+
 #[derive(Clone)]
 pub struct HTTPNodeClient {
-	node_url: String,
-	node_api_secret: Option<String>,
+	node_url_list: Vec<String>,
+	node_api_secret: Option<String>, //share the same secret for all the nodes.
+	current_node_index: Arc<AtomicU8>, //default is 0. start from the first one.
 	node_version_info: Option<NodeVersionInfo>,
 	client: Client,
 
@@ -98,13 +101,14 @@ pub struct HTTPNodeClient {
 
 impl HTTPNodeClient {
 	/// Create a new client that will communicate with the given grin node
-	pub fn new(node_url: &str, node_api_secret: Option<String>) -> Result<HTTPNodeClient, Error> {
+	pub fn new(node_url_list: Vec<String>, node_api_secret: Option<String>) -> Result<HTTPNodeClient, Error> {
 		let client = Client::new(false, None)
 			.map_err(|e| Error::GenericError(format!("Unable to create a client, {}", e)))?;
 
 		Ok(HTTPNodeClient {
-			node_url: node_url.to_owned(),
+			node_url_list: node_url_list,
 			node_api_secret: node_api_secret,
+			current_node_index: Arc::new(AtomicU8::new(0)),
 			node_version_info: None,
 			client,
 			chain_tip: 	 CachedValue::new(),
@@ -133,6 +137,8 @@ impl HTTPNodeClient {
 				if counter>0 {
 					debug!("Retrying to call Node API method {}: {}", method, e);
 					thread::sleep(Duration::from_millis(NODE_CALL_DELAY[(counter-1) as usize]));
+					//fail over use the next node.
+					self.increase_index();
 					return self.send_json_request(method, params, counter-1);
 				}
 				let report = format!("Error calling {}: {}", method, e);
@@ -145,6 +151,8 @@ impl HTTPNodeClient {
 					if counter>0 {
 						debug!("Retrying to call Node API method {}: {}", method, e);
 						thread::sleep(Duration::from_millis(NODE_CALL_DELAY[(counter-1) as usize]));
+						//fail over use the next node.
+						self.increase_index();
 						return self.send_json_request(method, params, counter-1);
 					}
 					error!("{:?}", inner);
@@ -171,6 +179,7 @@ impl HTTPNodeClient {
 				if counter>0 {
 					debug!("Retry to call connected peers API {}, {}", url, e);
 					thread::sleep(Duration::from_millis(NODE_CALL_DELAY[(counter-1) as usize]));
+					self.increase_index();
 					return self.get_connected_peer_info_impls(counter-1);
 				}
 				let report = format!("Get connected peers error {}, {}", url, e);
@@ -201,6 +210,7 @@ impl HTTPNodeClient {
 				if counter>0 {
 					debug!("Retry to call API get_kernel, {}", e);
 					thread::sleep(Duration::from_millis(NODE_CALL_DELAY[(counter-1) as usize]));
+					self.increase_index();
 					return self.get_kernel_impl(excess, min_height, max_height, counter-1);
 				}
 				let report = format!("Error calling {}: {}", method, e);
@@ -314,6 +324,7 @@ impl HTTPNodeClient {
 							if counter>0 {
 								debug!("Retry to call API get_outputs, {}", e);
 								thread::sleep(Duration::from_millis(NODE_CALL_DELAY[(counter-1) as usize]));
+								self.increase_index();
 								return self.get_outputs_from_node_impl(wallet_outputs,counter-1);
 							}
 
@@ -329,6 +340,7 @@ impl HTTPNodeClient {
 				if counter>0 {
 					debug!("Retry to call API get_outputs, {}", e);
 					thread::sleep(Duration::from_millis(NODE_CALL_DELAY[(counter-1) as usize]));
+					self.increase_index();
 					return self.get_outputs_from_node_impl(wallet_outputs,counter-1);
 				}
 				let report = format!("Outputs by id failed: {}", e);
@@ -358,15 +370,22 @@ impl HTTPNodeClient {
 }
 
 impl NodeClient for HTTPNodeClient {
+	fn increase_index(&self) {
+		let index = self.current_node_index.load(Ordering::Relaxed);
+		if index < (self.node_url_list.len() -1) as u8 {
+			self.current_node_index.store(index+1, Ordering::Relaxed);
+		}
+	}
 	fn node_url(&self) -> &str {
-		&self.node_url
+		let index = self.current_node_index.load(Ordering::Relaxed);
+		&self.node_url_list.get(index as usize).unwrap()
 	}
 	fn node_api_secret(&self) -> Option<String> {
 		self.node_api_secret.clone()
 	}
 
-	fn set_node_url(&mut self, node_url: &str) {
-		self.node_url = node_url.to_owned();
+	fn set_node_url(&mut self, node_url_list: Vec<String>) {
+		self.node_url_list = node_url_list;
 	}
 
 	fn set_node_api_secret(&mut self, node_api_secret: Option<String>) {
@@ -404,7 +423,7 @@ impl NodeClient for HTTPNodeClient {
 				} else {
 					error!(
 						"Unable to contact Node to get version info: {}, {}",
-						self.node_url, e
+						self.node_url(), e
 					);
 					return None;
 				}
@@ -615,7 +634,7 @@ impl NodeClient for HTTPNodeClient {
 					Err(e) => {
 						let report = format!(
 							"get_blocks_by_height: error calling api 'get_block' at {}. Error: {}",
-							self.node_url, e
+							self.node_url(), e
 						);
 						error!("{}", report);
 						return Err(libwallet::ErrorKind::ClientCallback(report).into());
@@ -655,7 +674,9 @@ mod tests {
 		let print_stat = true;
 
 		//let node_url = "http://127.0.0.1:13413";
-		let node_url = "https://mwc713.floonet.mwc.mw";
+		let node_url = "https://mwc713.floonet.mwc.mw".to_owned();
+		let mut node_list = Vec::new();
+		node_list.push(node_url);
 		let api_secret = "11ne3EAUtOXVKwhxm84U";
 
 		//let node_url = "http://52.47.109.152:13413";
@@ -683,9 +704,10 @@ mod tests {
 				Commitment::from_vec(util::from_hex("09118e17c6a39d50336344cb490c94f96503d1fa45a7014ac037c89778839639c5").unwrap())
 			];
 
+			let node_list_clone = node_list.clone();
 			joins.push(
 				thread::spawn(move || {
-					let client = HTTPNodeClient::new(node_url, Some( api_secret.to_string() ))
+					let client = HTTPNodeClient::new(node_list_clone, Some( api_secret.to_string() ))
 						.map_err(|e| libwallet::ErrorKind::ClientCallback(format!("{}", e)))?;
 
 					let total_time = Instant::now();

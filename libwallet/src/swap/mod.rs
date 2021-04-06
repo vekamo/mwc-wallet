@@ -281,10 +281,13 @@ mod tests {
 	}
 
 	impl NodeClient for TestNodeClient {
+		fn increase_index(&self) {
+			unimplemented!()
+		}
 		fn node_url(&self) -> &str {
 			"test_node_url"
 		}
-		fn set_node_url(&mut self, _node_url: &str) {
+		fn set_node_url(&mut self, _node_url: Vec<String>) {
 			unimplemented!()
 		}
 		fn node_api_secret(&self) -> Option<String> {

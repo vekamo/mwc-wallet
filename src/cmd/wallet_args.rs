@@ -25,6 +25,7 @@ use clap::ArgMatches;
 use ed25519_dalek::SecretKey as DalekSecretKey;
 use failure::Fail;
 use grin_wallet_api::Owner;
+use grin_wallet_config::parse_node_address_string;
 use grin_wallet_config::{MQSConfig, TorConfig, WalletConfig};
 use grin_wallet_controller::command;
 use grin_wallet_controller::{Error, ErrorKind};
@@ -1189,7 +1190,10 @@ where
 
 	let global_wallet_args = arg_parse!(parse_global_args(&wallet_config, &wallet_args));
 
-	node_client.set_node_url(&wallet_config.check_node_api_http_addr);
+	//parse the nodes address and put them in a vec
+	let node_list = parse_node_address_string(wallet_config.check_node_api_http_addr.clone());
+
+	node_client.set_node_url(node_list);
 	node_client.set_node_api_secret(global_wallet_args.node_api_secret.clone());
 
 	// legacy hack to avoid the need for changes in existing grin-wallet.toml files

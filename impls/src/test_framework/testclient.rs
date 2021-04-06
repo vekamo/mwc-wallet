@@ -468,13 +468,14 @@ impl LocalWalletClient {
 }
 
 impl NodeClient for LocalWalletClient {
+	fn increase_index(&self) {}
 	fn node_url(&self) -> &str {
 		"node"
 	}
 	fn node_api_secret(&self) -> Option<String> {
 		None
 	}
-	fn set_node_url(&mut self, _node_url: &str) {}
+	fn set_node_url(&mut self, _node_url: Vec<String>) {}
 	fn set_node_api_secret(&mut self, _node_api_secret: Option<String>) {}
 	fn reset_cache(&self) {}
 	fn get_version_info(&mut self) -> Option<NodeVersionInfo> {

@@ -347,11 +347,14 @@ where
 /// Encapsulate all wallet-node communication functions. No functions within libwallet
 /// should care about communication details
 pub trait NodeClient: Send + Sync + Clone {
+	///we have a list of nodes for failover, point the index to the next one.
+	fn increase_index(&self);
+
 	/// Return the URL of the check node
 	fn node_url(&self) -> &str;
 
 	/// Set the node URL
-	fn set_node_url(&mut self, node_url: &str);
+	fn set_node_url(&mut self, node_url: Vec<String>);
 
 	/// Return the node api secret
 	fn node_api_secret(&self) -> Option<String>;

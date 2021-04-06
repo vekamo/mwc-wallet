@@ -118,6 +118,7 @@ where
 	/// use config::WalletConfig;
 	/// use impls::{DefaultWalletImpl, DefaultLCProvider, HTTPNodeClient};
 	/// use libwallet::WalletInst;
+	/// use grin_wallet_config::parse_node_address_string;
 	///
 	/// grin_wallet_util::grin_core::global::set_local_chain_type(grin_wallet_util::grin_core::global::ChainTypes::AutomatedTesting);
 	///
@@ -132,7 +133,8 @@ where
 	///
 	/// // A NodeClient must first be created to handle communication between
 	/// // the wallet and the node.
-	/// let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None).unwrap();
+	/// let node_list = parse_node_address_string(wallet_config.check_node_api_http_addr.clone());
+	/// let node_client = HTTPNodeClient::new(node_list, None).unwrap();
 	///
 	/// // impls::DefaultWalletImpl is provided for convenience in instantiating the wallet
 	/// // It contains the LMDBBackend, DefaultLCProvider (lifecycle) and ExtKeychain used
@@ -558,7 +560,7 @@ macro_rules! doctest_helper_setup_doc_env_foreign {
 		use util::{Mutex, ZeroingString};
 
 		use api::{Foreign, Owner};
-		use config::WalletConfig;
+		use config::{parse_node_address_string, WalletConfig};
 		use impls::{DefaultLCProvider, DefaultWalletImpl, HTTPNodeClient};
 		use libwallet::{BlockFees, IssueInvoiceTxArgs, Slate, WalletInst};
 
@@ -576,8 +578,8 @@ macro_rules! doctest_helper_setup_doc_env_foreign {
 		wallet_config.data_file_dir = dir.to_owned();
 		let pw = ZeroingString::from("");
 
-		let node_client =
-			HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None).unwrap();
+		let node_list = parse_node_address_string(wallet_config.check_node_api_http_addr.clone());
+		let node_client = HTTPNodeClient::new(node_list, None).unwrap();
 		let mut wallet = Box::new(
 			DefaultWalletImpl::<'static, HTTPNodeClient>::new(node_client.clone()).unwrap(),
 			)
