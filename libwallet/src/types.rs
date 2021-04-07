@@ -299,6 +299,12 @@ where
 		block: &Vec<ScannedBlockInfo>,
 	) -> Result<(), Error>;
 
+	/// Save the last used good node index
+	fn save_last_working_node_index(&mut self, node_index: u8) -> Result<(), Error>;
+
+	/// get the last used good node index
+	fn get_last_working_node_index(&mut self) -> Result<u8, Error>;
+
 	/// get next tx log entry for the parent
 	fn next_tx_log_id(&mut self, parent_key_id: &Identifier) -> Result<u32, Error>;
 
@@ -355,6 +361,12 @@ pub trait NodeClient: Send + Sync + Clone {
 
 	/// Set the node URL
 	fn set_node_url(&mut self, node_url: Vec<String>);
+
+	/// Set the node index
+	fn set_node_index(&mut self, index: u8);
+
+	/// Set the node index
+	fn get_node_index(&self) -> u8;
 
 	/// Return the node api secret
 	fn node_api_secret(&self) -> Option<String>;

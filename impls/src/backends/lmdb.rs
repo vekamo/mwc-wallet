@@ -50,6 +50,7 @@ const TX_LOG_ENTRY_PREFIX: u8 = b't';
 const TX_LOG_ID_PREFIX: u8 = b'i';
 const ACCOUNT_PATH_MAPPING_PREFIX: u8 = b'a';
 const LAST_SCANNED_BLOCK: u8 = b'm'; // pre v3.0 was l
+const LAST_WORKING_NODE_INDEX: u8 = b'n';
 
 /// test to see if database files exist in the current directory. If so,
 /// use a DB backend for all operations
@@ -670,6 +671,34 @@ where
 		}
 
 		Ok(())
+	}
+
+	/// Save the last used good node index
+	fn save_last_working_node_index(&mut self, node_index: u8) -> Result<(), Error> {
+		let node_index_key = u64_to_key(LAST_WORKING_NODE_INDEX, 0 as u64);
+		self.db
+			.borrow()
+			.as_ref()
+			.unwrap()
+			.put_ser(&node_index_key, &node_index)?;
+		Ok(())
+	}
+
+	/// Save the last used good node index
+	fn get_last_working_node_index(&mut self) -> Result<u8, Error> {
+		let node_index_key = u64_to_key(LAST_WORKING_NODE_INDEX, 0 as u64);
+
+		let index: Option<u8> = self
+			.db
+			.borrow()
+			.as_ref()
+			.unwrap()
+			.get_ser(&node_index_key)?;
+		let last_working_node_index = match index {
+			Some(ind) => ind as u8, //the normal index started from 1. 0 is error
+			None => 0,
+		};
+		Ok(last_working_node_index)
 	}
 
 	fn save_child_index(&mut self, parent_id: &Identifier, child_n: u32) -> Result<(), Error> {

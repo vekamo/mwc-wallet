@@ -40,6 +40,7 @@ const ENDPOINT: &str = "/v2/foreign";
 const CACHE_VALID_TIME_MS: u128 = 5000; // 2 seconds for cache should be enough for our purpose
 
 const NODE_CALL_RETRY: i32 = 2; // it is total 3 attempts  to get the data
+const NODE_VERSION_CALL_RETRY: i32 = 7; // it is total 3 attempts  to get the data
 lazy_static! {
 	// We used delays, 5000, 3000, 1000.  It is very slow and really doesn't make sense with connect,
 	// read, write timouts of 20 seconds. Keeping non zero sleeps just in case of internal glitch
@@ -374,6 +375,8 @@ impl NodeClient for HTTPNodeClient {
 		let index = self.current_node_index.load(Ordering::Relaxed);
 		if index < (self.node_url_list.len() -1) as u8 {
 			self.current_node_index.store(index+1, Ordering::Relaxed);
+		} else {
+			self.current_node_index.store(0, Ordering::Relaxed); //start over again.
 		}
 	}
 	fn node_url(&self) -> &str {
@@ -391,6 +394,13 @@ impl NodeClient for HTTPNodeClient {
 	fn set_node_api_secret(&mut self, node_api_secret: Option<String>) {
 		self.node_api_secret = node_api_secret;
 	}
+	fn set_node_index(&mut self, node_index: u8) {
+		self.current_node_index.store(node_index, Ordering::Relaxed);
+	}
+	fn get_node_index( &self) ->u8 {
+		let index = self.current_node_index.load(Ordering::Relaxed);
+		index
+	}
 
 	fn reset_cache(&self) {
 		self.chain_tip.clean();
@@ -403,7 +413,7 @@ impl NodeClient for HTTPNodeClient {
 			return Some(v.clone());
 		}
 		let retval = match self
-			.send_json_request::<GetVersionResp>("get_version", &serde_json::Value::Null, 1)
+			.send_json_request::<GetVersionResp>("get_version", &serde_json::Value::Null, NODE_VERSION_CALL_RETRY) //mainnet has 6 nodes.
 		{
 			Ok(n) => NodeVersionInfo {
 				node_version: n.node_version,

@@ -476,6 +476,10 @@ impl NodeClient for LocalWalletClient {
 		None
 	}
 	fn set_node_url(&mut self, _node_url: Vec<String>) {}
+	fn set_node_index(&mut self, _node_index: u8) {}
+	fn get_node_index(&self) -> u8 {
+		0
+	}
 	fn set_node_api_secret(&mut self, _node_api_secret: Option<String>) {}
 	fn reset_cache(&self) {}
 	fn get_version_info(&mut self) -> Option<NodeVersionInfo> {

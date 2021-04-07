@@ -290,6 +290,12 @@ mod tests {
 		fn set_node_url(&mut self, _node_url: Vec<String>) {
 			unimplemented!()
 		}
+		fn set_node_index(&mut self, _node_index: u8) {
+			unimplemented!()
+		}
+		fn get_node_index(&self) -> u8 {
+			0
+		}
 		fn node_api_secret(&self) -> Option<String> {
 			unimplemented!()
 		}

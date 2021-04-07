@@ -1195,6 +1195,7 @@ where
 
 	node_client.set_node_url(node_list);
 	node_client.set_node_api_secret(global_wallet_args.node_api_secret.clone());
+	let node_client_index = node_client.get_node_index();
 
 	// legacy hack to avoid the need for changes in existing grin-wallet.toml files
 	// remove `wallet_data` from end of path as
@@ -1228,7 +1229,7 @@ where
 	let wallet =
 		inst_wallet::<DefaultLCProvider<C, keychain::ExtKeychain>, C, keychain::ExtKeychain>(
 			wallet_config.clone(),
-			node_client,
+			node_client.clone(),
 		)
 		.unwrap_or_else(|e| {
 			println!("{}", e);
@@ -1278,6 +1279,18 @@ where
 				wallet_inst.get_data_file_dir(),
 				&wallet_config.swap_electrumx_addr,
 			);
+
+			//read or save the node index(the good node)
+			{
+				let mut batch = wallet_inst.batch(mask.as_ref())?;
+				let index = batch.get_last_working_node_index()?;
+				if index == 0 {
+					let _ = batch.save_last_working_node_index(node_client_index + 1); //index stored in db start from 1. need to offset by +1
+				} else {
+					node_client.set_node_index(index - 1); //index stored in db start from 1. need to offset by -1
+				}
+				batch.commit()?;
+			}
 
 			if let Some(account) = wallet_args.value_of("account") {
 				wallet_inst.set_parent_key_id_by_name(account)?;
