@@ -289,7 +289,3 @@ Yes
 Stopping.....
 Command 'swap' completed
 ```
-
-# Secondary Currency List #
- * BTC - BitcoinCore
- * BCH - BitcoinCashABC
