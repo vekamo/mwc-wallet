@@ -344,6 +344,8 @@ pub struct PaymentProof {
 pub struct SwapStartArgs {
 	/// MWC to send
 	pub mwc_amount: u64,
+	/// Outputs to trade
+	pub outputs: Option<Vec<String>>, // Outputs to select for this swap. Must be unlocked but can belong to other trades.
 	/// Secondary currency
 	pub secondary_currency: String,
 	/// BTC to recieve
@@ -374,4 +376,6 @@ pub struct SwapStartArgs {
 	pub electrum_node_uri2: Option<String>,
 	/// Dry run flag. Use true if you want to validate config
 	pub dry_run: bool,
+	/// Tag for this offer. Needed for swap marketplace related offers management
+	pub tag: Option<String>,
 }

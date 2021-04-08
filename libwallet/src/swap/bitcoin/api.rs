@@ -453,6 +453,7 @@ where
 		electrum_node_uri1: Option<String>,
 		electrum_node_uri2: Option<String>,
 		dry_run: bool,
+		tag: Option<String>,
 	) -> Result<Swap, ErrorKind> {
 		// Checking if address is valid
 
@@ -495,6 +496,7 @@ where
 			electrum_node_uri1,
 			electrum_node_uri2,
 			dry_run,
+			tag,
 		)?;
 
 		let btc_data = BtcData::new(keychain, context.unwrap_seller()?.unwrap_btc()?)?;

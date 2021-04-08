@@ -1075,6 +1075,9 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 
 	Ok(SwapStartArgs {
 		mwc_amount,
+		outputs: args
+			.value_of("outputs")
+			.map(|s| s.split(",").map(|s| s.to_string()).collect::<Vec<String>>()),
 		secondary_currency: secondary_currency.to_string(),
 		secondary_amount: btc_amount.to_string(),
 		secondary_redeem_address: btc_address.to_string(),
@@ -1090,6 +1093,7 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 		electrum_node_uri1,
 		electrum_node_uri2,
 		dry_run,
+		tag: args.value_of("tag").map(|s| s.to_string()),
 	})
 }
 
@@ -1238,6 +1242,16 @@ pub fn parse_messaging_args(args: &ArgMatches) -> Result<command::MessagingArgs,
 		check_integrity_expiration: args.is_present("check_integrity"),
 		check_integrity_retain: args.is_present("check_integrity_retain"),
 		json: args.is_present("json"),
+	})
+}
+
+pub fn parse_send_marketplace_message(
+	args: &ArgMatches,
+) -> Result<command::SendMarketplaceMessageArgs, ParseError> {
+	Ok(command::SendMarketplaceMessageArgs {
+		command: parse_required(args, "command")?.to_string(),
+		offer_id: parse_required(args, "offer_id")?.to_string(),
+		tor_address: parse_required(args, "tor_address")?.to_string(),
 	})
 }
 
@@ -1639,6 +1653,10 @@ where
 		("messaging", Some(args)) => {
 			let a = arg_parse!(parse_messaging_args(&args));
 			command::messaging(owner_api.wallet_inst.clone(), km, a)
+		}
+		("send_marketplace_message", Some(args)) => {
+			let a = arg_parse!(parse_send_marketplace_message(&args));
+			command::send_marketplace_message(owner_api.wallet_inst.clone(), km, tor_config, a)
 		}
 		(cmd, _) => {
 			return Err(ErrorKind::ArgumentError(format!(

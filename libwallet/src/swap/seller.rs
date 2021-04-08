@@ -62,6 +62,7 @@ impl SellApi {
 		electrum_node_uri1: Option<String>,
 		electrum_node_uri2: Option<String>,
 		dry_run: bool,
+		tag: Option<String>,
 	) -> Result<Swap, ErrorKind> {
 		#[cfg(test)]
 		let test_mode = is_test_mode();
@@ -134,6 +135,7 @@ impl SellApi {
 			last_process_error: None,
 			last_check_error: None,
 			wait_for_backup1: false,
+			tag,
 		};
 
 		swap.add_journal_message("Swap offer created".to_string());

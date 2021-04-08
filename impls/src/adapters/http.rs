@@ -24,6 +24,7 @@ use serde_json::{json, Value};
 use std::net::SocketAddr;
 use std::path::MAIN_SEPARATOR;
 
+use crate::adapters::MarketplaceMessageSender;
 use crate::tor;
 use crate::tor::config as tor_config;
 use crate::tor::process as tor_process;
@@ -566,7 +567,7 @@ impl SlateSender for HttpDataSender {
 }
 
 impl SwapMessageSender for HttpDataSender {
-	/// Send a swap message. Return true is message delivery acknowledge can be set (message was delivered and procesed)
+	/// Send a swap message. Return true is message delivery acknowledge can be set (message was delivered and processed)
 	fn send_swap_message(&self, swap_message: &Message) -> Result<bool, Error> {
 		// we need to keep _tor in scope so that the process is not killed by drop.
 		let (url_str, _tor) = self.set_up_tor_send_process()?;
@@ -622,5 +623,59 @@ impl SwapMessageSender for HttpDataSender {
 
 		// http call is synchronouse, so message was delivered and processes. Ack cn be granted.
 		Ok(true)
+	}
+}
+
+impl MarketplaceMessageSender for HttpDataSender {
+	fn send_swap_marketplace_message(&self, json_str: &String) -> Result<String, Error> {
+		// we need to keep _tor in scope so that the process is not killed by drop.
+		let (url_str, _tor) = self.set_up_tor_send_process()?;
+		let res_str: String;
+		let start_time = std::time::Instant::now();
+
+		loop {
+			let req = json!({
+				"jsonrpc": "2.0",
+				"method": "marketplace_message",
+				"id": 1,
+				"params": [
+							json_str,
+						]
+			});
+			trace!("Sending marketplace_message request: {}", req);
+
+			let res = self.post(&url_str, self.apisecret.clone(), req);
+
+			let diff_time = start_time.elapsed().as_millis();
+			if !res.is_err() {
+				res_str = res.unwrap();
+				break;
+			} else if diff_time <= 30_000 {
+				continue;
+			}
+
+			res.map_err(|e| {
+				let report = format!("Posting swap message (is recipient listening?): {}", e);
+				error!("{}", report);
+				ErrorKind::ClientCallback(report)
+			})?;
+		}
+
+		let res: Value = serde_json::from_str(&res_str).map_err(|e| {
+			ErrorKind::GenericError(format!("Unable to parse respond {}, {}", res_str, e))
+		})?;
+
+		if res["error"] != json!(null) {
+			let report = format!(
+				"Sending marketplace_message: Error: {}, Message: {}",
+				res["error"]["code"], res["error"]["message"]
+			);
+			error!("{}", report);
+			return Err(ErrorKind::ClientCallback(report).into());
+		}
+
+		// http call is synchronouse, so message was delivered and processes. Ack cn be granted.
+		let result = res["result"]["ok"].as_str().unwrap_or("").to_string();
+		Ok(result)
 	}
 }

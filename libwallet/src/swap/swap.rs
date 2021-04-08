@@ -157,6 +157,8 @@ pub struct Swap {
 	#[serde(skip)]
 	#[serde(default = "default_false")]
 	pub wait_for_backup1: bool,
+	/// Tag for the swap. Using for swap marketplace automation process.
+	pub tag: Option<String>,
 }
 
 fn default_false() -> bool {

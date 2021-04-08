@@ -344,6 +344,28 @@ where
 	Ok(())
 }
 
+/// Process swap marketplace message. Please note. Wallet does a minor role here,
+/// The marketplace workflow and managed by QT wallet.
+pub fn marketplace_message<'a, L, C, K>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
+	message: &String,
+) -> Result<String, Error>
+where
+	L: WalletLCProvider<'a, C, K>,
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
+{
+	let response =
+		owner_swap::marketplace_message(wallet_inst, keychain_mask, &message).map_err(|e| {
+			ErrorKind::SwapError(format!(
+				"Error occurred in receiving the swap message by TOR, {}",
+				e
+			))
+		})?;
+	Ok(response)
+}
+
 /// Utility method to decrypt the slate pack for receive operation.
 /// Returns: slate, content, sender PK, recipient Pk
 pub fn decrypt_slate<'a, T: ?Sized, C, K>(

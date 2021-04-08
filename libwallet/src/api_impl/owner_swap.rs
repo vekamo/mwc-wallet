@@ -35,7 +35,8 @@ use grin_core::core;
 use grin_keychain::ExtKeychainPath;
 use grin_util::to_hex;
 use grin_wallet_util::grin_core::core::Committed;
-use std::collections::HashMap;
+use serde_json::json;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::fs::File;
 use std::io::Read;
@@ -93,22 +94,28 @@ where
 
 	let mut swap_reserved_amount = 0;
 
-	// Searching to swaps that are started, but not locked
-	let swap_id = trades::list_swap_trades()?;
-	for sw_id in &swap_id {
-		let swap_lock = trades::get_swap_lock(sw_id);
-		let _l = swap_lock.lock();
-		let (_, swap) = trades::get_swap_trade(sw_id.as_str(), &skey, &*swap_lock)?;
+	if params.outputs.is_some() {
+		let outputs_to_use: HashSet<String> =
+			params.outputs.clone().unwrap().iter().cloned().collect();
+		outs.retain(|k, _| outputs_to_use.contains(k));
+	} else {
+		// Searching to swaps that are started, but not locked
+		let swap_id = trades::list_swap_trades()?;
+		for sw_id in &swap_id {
+			let swap_lock = trades::get_swap_lock(sw_id);
+			let _l = swap_lock.lock();
+			let (_, swap) = trades::get_swap_trade(sw_id.as_str(), &skey, &*swap_lock)?;
 
-		if swap.is_seller() && !swap.state.is_final_state() {
-			// Check if funds are not locked yet
-			if swap.posted_lock.is_none() {
-				// So funds are not posted, transaction doesn't exist and outpuyts are not locked.
-				// We have to exclude those outputs
-				for inp in swap.lock_slate.tx.inputs_committed() {
-					let in_commit = to_hex(&inp.0);
-					if let Some(amount) = outs.remove(&in_commit) {
-						swap_reserved_amount += amount;
+			if swap.is_seller() && !swap.state.is_final_state() {
+				// Check if funds are not locked yet
+				if swap.posted_lock.is_none() {
+					// So funds are not posted, transaction doesn't exist and outpuyts are not locked.
+					// We have to exclude those outputs
+					for inp in swap.lock_slate.tx.inputs_committed() {
+						let in_commit = to_hex(&inp.0);
+						if let Some(amount) = outs.remove(&in_commit) {
+							swap_reserved_amount += amount;
+						}
 					}
 				}
 			}
@@ -192,6 +199,7 @@ where
 		params.electrum_node_uri1.clone(),
 		params.electrum_node_uri2.clone(),
 		params.dry_run,
+		params.tag.clone(),
 	)?;
 
 	// Store swap result into the file.
@@ -230,6 +238,8 @@ where
 pub struct SwapListInfo {
 	/// Swap id
 	pub swap_id: String,
+	/// Marketplace Tag for the trade.
+	pub tag: Option<String>,
 	/// flag if trade is seller
 	pub is_seller: bool,
 	/// MWC amount that was traded
@@ -304,6 +314,7 @@ where
 
 			result.push(SwapListInfo {
 				swap_id: sw_id.clone(),
+				tag: swap.tag.clone(),
 				is_seller: swap.is_seller(),
 				mwc_amount: core::amount_to_hr_string(swap.primary_amount, true),
 				secondary_amount: swap
@@ -320,6 +331,7 @@ where
 		} else {
 			result.push(SwapListInfo {
 				swap_id: sw_id.clone(),
+				tag: swap.tag.clone(),
 				is_seller: swap.is_seller(),
 				mwc_amount: core::amount_to_hr_string(swap.primary_amount, true),
 				secondary_amount: swap
@@ -1194,6 +1206,120 @@ where
 
 	swap_income_message(wallet_inst, keychain_mask, &contents, None)?;
 	Ok(message.id.to_string())
+}
+
+// read string value. Return empty if doesn't exist
+fn json_get_str(json_msg: &serde_json::Value, key: &str) -> String {
+	json_msg
+		.get(key)
+		.unwrap_or(&json!(""))
+		.as_str()
+		.unwrap_or(key)
+		.to_string()
+}
+
+/// Get message for the marketplace.
+pub fn marketplace_message<'a, L, C, K>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
+	message: &str,
+) -> Result<String, Error>
+where
+	L: WalletLCProvider<'a, C, K>,
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
+{
+	let json_msg: serde_json::Value = serde_json::from_str(message)
+		.map_err(|e| ErrorKind::Generic(format!("Unable to parse json request, {}", e)))?;
+
+	// For response we need to enumerate all swaps. Let's start from that
+	let swap_id = trades::list_swap_trades()?;
+	wallet_lock!(wallet_inst, w);
+	let keychain = w.keychain(keychain_mask)?;
+	let skey = get_swap_storage_key(&keychain)?;
+	let node_client = w.w2n_client();
+
+	let mut swaps: Vec<Swap> = Vec::new();
+
+	for sw_id in &swap_id {
+		let swap_lock = trades::get_swap_lock(sw_id);
+		let _l = swap_lock.lock();
+		let (_context, swap) = trades::get_swap_trade(sw_id.as_str(), &skey, &*swap_lock)?;
+		swaps.push(swap);
+	}
+
+	let command = json_get_str(&json_msg, "command");
+	let response = if command == "accept_offer" {
+		let from = json_get_str(&json_msg, "from");
+		let offer_id = json_get_str(&json_msg, "offer_id");
+		if from.is_empty() || offer_id.is_empty() {
+			return Err(
+				ErrorKind::Generic(format!("Incomplete marketplace message {}", message)).into(),
+			);
+		}
+		println!("Get accept_offer message from {} for {}", from, offer_id);
+		// Check if this offer is broadcasting and how many are running
+		let tag = Some(offer_id.clone());
+		let accepted_peers = swaps.iter().filter(|s| s.tag == tag).count();
+		format!("{{\"running\":{}}}", accepted_peers)
+	} else if command == "fail_bidding" {
+		let from = json_get_str(&json_msg, "from");
+		let offer_id = json_get_str(&json_msg, "offer_id");
+		if from.is_empty() || offer_id.is_empty() {
+			return Err(
+				ErrorKind::Generic(format!("Incomplete marketplace message {}", message)).into(),
+			);
+		}
+		println!("Get fail_bidding message from {} for {}", from, offer_id);
+		// Let's cancel swap if we sell. For Buy we can't cancel automatically
+		let swap_tag = Some(from + "_" + &offer_id);
+		for swap in swaps.iter().filter(|s| s.tag == swap_tag) {
+			if swap.is_seller() {
+				// Lock and cancel...
+				let swap_lock = trades::get_swap_lock(&swap.id.to_string());
+				let _l = swap_lock.lock();
+				let (context, mut swap) =
+					trades::get_swap_trade(&swap.id.to_string(), &skey, &*swap_lock)?;
+
+				let (uri1, uri2) = trades::get_electrumx_uri(
+					&swap.secondary_currency,
+					&swap.electrum_node_uri1,
+					&swap.electrum_node_uri2,
+				)?;
+				let swap_api = crate::swap::api::create_instance(
+					&swap.secondary_currency,
+					node_client.clone(),
+					uri1,
+					uri2,
+				)?;
+				let mut fsm = swap_api.get_fsm(&keychain, &swap);
+
+				if fsm.is_cancellable(&swap)? {
+					let tx_conf = swap_api.request_tx_confirmations(&keychain, &swap)?;
+					let _resp = fsm.process(Input::Cancel, &mut swap, &context, &tx_conf)?;
+					trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+				} else {
+					warn!(
+						"Get fail_bidding message for non cancellable swap trade {}, message: {}",
+						swap.id, message
+					);
+				}
+			} else {
+				// Can't cancel automatically because user might post the funds to lock account. As a result
+				// cancellation needs to be done manually.
+				debug!("Get fail_bidding for Buyer swap trade. Nothing what we can do. Must be cancelled manually");
+			}
+		}
+		"".to_string()
+	} else {
+		return Err(ErrorKind::Generic(format!(
+			"marketplace message contains unknown command {}, message: {}",
+			command, message
+		))
+		.into());
+	};
+	debug!("marketplace_message response: {}", response);
+	Ok(response)
 }
 
 /// Processing swap income message. Note result of that can be a new offer of modification of the current one

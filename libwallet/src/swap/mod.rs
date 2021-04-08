@@ -457,6 +457,7 @@ mod tests {
 				None,
 				None,
 				false,
+				None,
 			)
 			.unwrap();
 		let mut fsm_sell = api_sell.get_fsm(&kc_sell, &swap);
@@ -535,6 +536,7 @@ mod tests {
 				None,
 				None,
 				false,
+				None,
 			)
 			.unwrap();
 
@@ -1601,6 +1603,7 @@ mod tests {
 					None,
 					None,
 					false,
+					None,
 				)
 				.unwrap();
 			let fsm_sell = api_sell.get_fsm(&kc_sell, &swap_sell);
@@ -5466,6 +5469,7 @@ mod tests {
 				None,
 				None,
 				false,
+				None,
 			)
 			.unwrap();
 

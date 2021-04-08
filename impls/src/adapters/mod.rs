@@ -103,6 +103,12 @@ pub trait SwapMessageSender {
 	fn send_swap_message(&self, swap_message: &Message) -> Result<bool, Error>;
 }
 
+/// Swap Message Sender
+pub trait MarketplaceMessageSender {
+	/// Send a swap message. Return true is message delivery acknowledge can be set (message was delivered and procesed)
+	fn send_swap_marketplace_message(&self, json_str: &String) -> Result<String, Error>;
+}
+
 impl SlateGetData {
 	/// Check if the slate is encrypted
 	pub fn is_encrypted(&self) -> bool {

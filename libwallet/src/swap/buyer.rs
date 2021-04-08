@@ -271,6 +271,7 @@ impl BuyApi {
 			last_process_error: None,
 			last_check_error: None,
 			wait_for_backup1: false,
+			tag: None,
 		};
 		swap.add_journal_message("Received a swap offer".to_string());
 

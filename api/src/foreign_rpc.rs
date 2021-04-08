@@ -913,6 +913,12 @@ pub trait ForeignRpc {
 	# Json rpc example
 	*/
 	fn receive_swap_message(&self, message: String) -> Result<(), ErrorKind>;
+
+	/**
+	Networked version of [Foreign::marketplace_message](struct.Foreign.html#method.marketplace_message).
+	# Json rpc example
+	*/
+	fn marketplace_message(&self, accept_offer_message: &String) -> Result<String, ErrorKind>;
 }
 
 impl<'a, L, C, K> ForeignRpc for Foreign<'a, L, C, K>
@@ -1038,6 +1044,13 @@ where
 			ErrorKind::SwapError(format!("Error encountered receiving swap message, {}", e))
 		})?;
 		Ok(())
+	}
+
+	fn marketplace_message(&self, message: &String) -> Result<String, ErrorKind> {
+		let res = Foreign::marketplace_message(&self, &message).map_err(|e| {
+			ErrorKind::SwapError(format!("Error encountered receiving swap message, {}", e))
+		})?;
+		Ok(res)
 	}
 }
 
@@ -1365,7 +1378,7 @@ macro_rules! doctest_helper_json_rpc_foreign_assert_response {
 			$init_tx,
 			$init_invoice_tx,
 			$compact_slate,
-			)
+		)
 		.unwrap()
 		.unwrap();
 
@@ -1374,8 +1387,8 @@ macro_rules! doctest_helper_json_rpc_foreign_assert_response {
 				"(left != right) \nleft: {}\nright: {}",
 				serde_json::to_string_pretty(&response).unwrap(),
 				serde_json::to_string_pretty(&expected_response).unwrap()
-				);
-			}
+			);
+		}
 	};
 }
 

@@ -28,9 +28,11 @@ use crate::util::{Mutex, ZeroingString};
 use crate::{controller, display};
 use chrono::Utc;
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
-use grin_wallet_impls::adapters::{create_swap_message_sender, validate_tor_address};
-use grin_wallet_impls::libp2p_messaging;
+use grin_wallet_impls::adapters::{
+	create_swap_message_sender, validate_tor_address, MarketplaceMessageSender,
+};
 use grin_wallet_impls::tor;
+use grin_wallet_impls::{libp2p_messaging, HttpDataSender};
 use grin_wallet_impls::{Address, MWCMQSAddress, Publisher};
 use grin_wallet_libwallet::api_impl::{owner, owner_libp2p, owner_swap};
 use grin_wallet_libwallet::internal::selection;
@@ -1776,6 +1778,16 @@ pub struct MessagingArgs {
 	pub json: bool,
 }
 
+/// Arguments for send marketplace message
+pub struct SendMarketplaceMessageArgs {
+	/// marketplace command
+	pub command: String,
+	/// Offer id
+	pub offer_id: String,
+	/// wallet address to send the message
+	pub tor_address: String,
+}
+
 // For Json we can't use int 64, we have to convert all of them to Strings
 #[derive(Serialize, Deserialize)]
 pub struct StateEtaInfoString {
@@ -1834,6 +1846,7 @@ where
 								"secondary_amount" : swap_info.secondary_amount,
 								"secondary_currency" : swap_info.secondary_currency,
 								"swap_id": swap_info.swap_id,
+								"tag" : swap_info.tag.clone().unwrap_or("".to_string()),
 								"state" : swap_info.state.to_string(),
 								"state_cmd" : swap_info.state.to_cmd_str(),
 								"action" : swap_info.action.unwrap_or(Action::None).to_string(),
@@ -1986,6 +1999,7 @@ where
 
 								let item = json::json!({
 									"swapId" : swap.id.to_string(),
+									"tag": swap.tag.clone().unwrap_or("".to_string()),
 									"isSeller" : swap.is_seller(),
 									"mwcAmount": core::amount_to_hr_string(swap.primary_amount, true),
 									"secondaryCurrency" : swap.secondary_currency.to_string(),
@@ -3386,5 +3400,51 @@ where
 		println!("JSON: {}", JsonValue::from(json_res));
 	}
 
+	Ok(())
+}
+
+/// integrity fee related operations
+pub fn send_marketplace_message<L, C, K>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
+	tor_config: &TorConfig,
+	args: SendMarketplaceMessageArgs,
+) -> Result<(), Error>
+where
+	L: WalletLCProvider<'static, C, K> + 'static,
+	C: NodeClient + 'static,
+	K: keychain::Keychain + 'static,
+{
+	if !controller::is_foreign_api_running() {
+		return Err(ErrorKind::GenericError(
+			"TOR is not running. Please start tor listener for your wallet".to_string(),
+		)
+		.into());
+	}
+
+	let dest = validate_tor_address(&args.tor_address)?;
+
+	let sender = HttpDataSender::with_socks_proxy(
+		&dest,
+		None, // It is foreign API, no secret
+		&tor_config.socks_proxy_addr,
+		Some(tor_config.send_config_dir.clone()),
+		tor_config.socks_running,
+	)
+	.map_err(|e| ErrorKind::GenericError(format!("Unable to create HTTP client to send, {}", e)))?;
+
+	let tor_pk = owner::get_wallet_public_address(wallet_inst.clone(), keychain_mask)?;
+	let tor_addr = ProvableAddress::from_tor_pub_key(&tor_pk);
+
+	let this_tor_address = tor_addr.to_string();
+
+	let message = json!({
+		"command": args.command,
+		"from": this_tor_address,
+		"offer_id": args.offer_id,
+	});
+
+	let response = sender.send_swap_marketplace_message(&message.to_string())?;
+	println!("JSON: {}", response);
 	Ok(())
 }

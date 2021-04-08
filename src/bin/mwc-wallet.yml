@@ -542,6 +542,11 @@ subcommands:
             short: w
             long: mwc_amount
             takes_value: true
+        - outputs:
+            help: Comma separated outputs to include into the Swap Trade. Outputs can belong to another trades
+            short: o
+            long: outputs
+            takes_value: true
         - minimum_confirmations:
             help: Minimum number of confirmations required for an output to be spendable
             short: c
@@ -630,6 +635,10 @@ subcommands:
             help: verify parameters, do not create a new swap trade
             long: dry_run
             takes_value: false
+        - tag:
+            help: Swap trade tag. This parameter is used by wap markeplace engine to manage the swap trades.
+            long: tag
+            takes_value: true
   - swap:
       about: Trade MWC with another currency via atomic swap
       args:
@@ -873,3 +882,22 @@ subcommands:
             short: j
             long: json
             takes_value: false
+  - send_marketplace_message:
+      about: Send marketplace related message to another wallet by tor address
+      args:
+        - command:
+            help: Command to perform. Current supported values 'accept_offer' and 'fail_bidding'
+            short: c
+            long: command
+            takes_value: true
+        - offer_id:
+            help: Marketplace offer ID
+            short: o
+            long: offer_id
+            takes_value: true
+        - tor_address:
+            help: Another wallet tor address
+            short: a
+            long: tor_address
+            takes_value: true
+
