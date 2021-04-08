@@ -215,7 +215,7 @@ where
 			//if the build height or height is out of the horizon range, should we trigger the self-spend(based on the configuration)
 			let built_height_64 = built_height as u64;
 
-			println!(
+			debug!(
 				"the build_height and chain height is {}, {}",
 				built_height_64, on_the_chain_height
 			);
@@ -1057,7 +1057,7 @@ where
 	}
 
 	// //do the self_spend
-	println!(
+	debug!(
 		"the self spent list is {:?}",
 		self_spend_candidate_light_list
 	);
