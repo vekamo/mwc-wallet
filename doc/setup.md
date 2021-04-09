@@ -45,6 +45,13 @@ $ ./mwc-wallet --floonet init --help
 
 After wallet is initiated, mwc-wallet.toml file will be generated( either in the default ~/.mwc directory or current directory )
 Open this file, update the parameter check_node_api_http_addr to the address of the remote node.
+The address can contain multiple nodes for failover purpose. There needs be a semicolon in between the addresses.
+For example: https://mwc713.floonet.mwc.mw;https://mwc7132.floonet.mwc.mw;https://mwc7133.floonet.mwc.mw;
+https://mwc7134.floonet.mwc.mw
+
+Mainnet: mwc713.mwc.mw mwc71362.mwc.mw mwc7133.mwc.mw mwc7134.mwc.mw mwc7135.mwc.mw mwc7136.mwc.mw
+Floonet: mwc713.floonet.mwc.mw mwc7132.floonet.mwc.mw mwc7133.floonet.mwc.mw mwc7134.floonet.mwc.mw
+
 
 api_seed in the .api_seed file(same directory as mwc-wallet.toml file) will also be updated.
 
