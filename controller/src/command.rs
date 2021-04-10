@@ -3028,9 +3028,9 @@ where
 				// let's add peer is possible
 				let mut w_lock = wallet_inst.lock();
 				let w = w_lock.lc_provider()?.wallet_inst()?;
-				match w.w2n_client().get_tor_address() {
-					Ok(tor_addr) => match tor_addr {
-						Some(addr) => {
+				match w.w2n_client().get_libp2p_peers() {
+					Ok(libp2p_peers) => {
+						for addr in libp2p_peers.libp2p_peers {
 							libp2p_connection::add_new_peer(&PeerAddr::Onion(addr.clone()))
 								.map_err(|e| {
 									ErrorKind::GenericError(format!(
@@ -3042,12 +3042,20 @@ where
 								println!("Joining the node peer at {}", addr);
 							}
 						}
-						None => {
-							if args.json {
-								println!("Your mwc-node run without TOR, only seed nodes will be used to bootstrap")
+						// Use all peers. Faster we join is better
+						for addr in libp2p_peers.node_peers {
+							libp2p_connection::add_new_peer(&PeerAddr::Onion(addr.clone()))
+								.map_err(|e| {
+									ErrorKind::GenericError(format!(
+										"Failed to add libp2p peer, {}",
+										e
+									))
+								})?;
+							if !args.json {
+								println!("Joining the node peer at {}", addr);
 							}
 						}
-					},
+					}
 					Err(e) => {
 						println!(
 							"ERROR: Unable to contact the mwc node to get address to join, {}",

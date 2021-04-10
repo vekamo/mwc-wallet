@@ -34,6 +34,7 @@ use super::resp_types::*;
 use crate::client_utils::json_rpc::*;
 use std::time::{Duration, Instant};
 use std::sync::{Arc, RwLock};
+use grin_wallet_util::grin_api::Libp2pPeers;
 
 const ENDPOINT: &str = "/v2/foreign";
 const CACHE_VALID_TIME_MS: u128 = 5000; // 2 seconds for cache should be enough for our purpose
@@ -630,10 +631,10 @@ impl NodeClient for HTTPNodeClient {
 	}
 
 	/// Get Node Tor address
-	fn get_tor_address(&self) -> Result<Option<String>, libwallet::Error> {
-		debug!("Requesting tor address from mwc-node");
+	fn get_libp2p_peers(&self) -> Result<Libp2pPeers, libwallet::Error> {
+		debug!("Requesting libp2p peer connections from mwc-node");
 		let params = json!([]);
-		let res = self.send_json_request::<Option<String>>("get_tor_address", &params, NODE_CALL_RETRY)?;
+		let res = self.send_json_request::<Libp2pPeers>("get_libp2p_peers", &params, NODE_CALL_RETRY)?;
 		Ok(res)
 	}
 }

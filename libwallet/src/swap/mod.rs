@@ -122,6 +122,7 @@ mod tests {
 	use crate::swap::fsm::state;
 	use crate::swap::fsm::state::{Input, StateId, StateProcessRespond};
 	use crate::swap::message::{SecondaryUpdate, Update};
+	use grin_api::Libp2pPeers;
 	use grin_core::global;
 	use grin_core::global::ChainTypes;
 	use grin_wallet_util::grin_core::core::Committed;
@@ -418,8 +419,11 @@ mod tests {
 		}
 
 		/// Get Node Tor address
-		fn get_tor_address(&self) -> Result<Option<String>, crate::Error> {
-			Ok(None)
+		fn get_libp2p_peers(&self) -> Result<Libp2pPeers, crate::Error> {
+			Ok(Libp2pPeers {
+				libp2p_peers: vec![],
+				node_peers: vec![],
+			})
 		}
 	}
 

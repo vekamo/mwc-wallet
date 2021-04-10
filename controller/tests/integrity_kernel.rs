@@ -155,8 +155,18 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(outputs.len(), 1); // Should see available output
 	assert_eq!(integral_balance.len(), 1);
 	assert_eq!(integral_balance[0].0.fee, 30_000_000);
-	assert_eq!(integral_balance[0].1, true); // Now should be confirmed...
+	assert_eq!(integral_balance[0].1, false); // Now should be confirmed...
 	assert_eq!(integral_balance[0].0.expiration_height, 1446);
+
+	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), mask1, 2, false);
+	let _ = owner::perform_refresh_from_node(wallet1.clone(), mask1, &None)?;
+	let (account, outputs, _height, integral_balance) =
+		libwallet::owner_libp2p::get_integral_balance(wallet1.clone(), mask1)?;
+	assert!(account.is_some());
+	assert_eq!(outputs.len(), 1); // Should see available output
+	assert_eq!(integral_balance.len(), 1);
+	assert_eq!(integral_balance[0].0.fee, 30_000_000);
+	assert_eq!(integral_balance[0].1, true); // Now should be confirmed...
 
 	// Now create second one should succeed
 	let integral_balance = libwallet::owner_libp2p::create_integral_balance(
@@ -177,11 +187,11 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance[0].1, false);
 	assert_eq!(
 		integral_balance[0].0.clone().unwrap().expiration_height,
-		1447
+		1449
 	);
 
 	// Mine a block, the second transaction should be confirmed
-	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), mask1, 1, false);
+	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), mask1, 3, false);
 	let _ = owner::perform_refresh_from_node(wallet1.clone(), mask1, &None)?;
 
 	let (account, outputs, _height, integral_balance) =
@@ -194,7 +204,7 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance[0].0.expiration_height, 1446);
 	assert_eq!(integral_balance[1].0.fee, 35_000_000);
 	assert_eq!(integral_balance[1].1, true);
-	assert_eq!(integral_balance[1].0.expiration_height, 1448); // +1 because post in test environment mining another block.
+	assert_eq!(integral_balance[1].0.expiration_height, 1450); // +1 because post in test environment mining another block.
 
 	// Let's verify if Integrity context match the Tx Kernels.
 	let txs = {

@@ -33,6 +33,7 @@ use crate::Slate;
 use crate::{InitTxArgs, IntegrityContext};
 use chrono::prelude::*;
 use grin_util::ToHex;
+use grin_wallet_util::grin_api::Libp2pPeers;
 use grin_wallet_util::grin_core::core::Committed;
 use rand::rngs::mock::StepRng;
 use rand::thread_rng;
@@ -445,7 +446,7 @@ pub trait NodeClient: Send + Sync + Clone {
 	) -> Result<Vec<grin_api::BlockPrintable>, Error>;
 
 	/// Get Node Tor address
-	fn get_tor_address(&self) -> Result<Option<String>, Error>;
+	fn get_libp2p_peers(&self) -> Result<Libp2pPeers, Error>;
 }
 
 /// Node version info

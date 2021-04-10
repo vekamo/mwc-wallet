@@ -43,6 +43,8 @@ use uuid::Uuid;
 pub const INTEGRITY_ACCOUNT_ID: u32 = 65536;
 /// account name for integrity outputs
 pub const INTEGRITY_ACCOUNT_NAME: &str = "integrity";
+/// Number of blocks to identity output can be used. Mitigating network nodes update time
+pub const INTEGRITY_FEE_MIN_CONFIRMATIONS: u64 = 2;
 
 /// Integral fee proof data. It build form the both contexts and a transaction.
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -249,7 +251,10 @@ where
 				Err(_) => continue,
 			}
 		};
-		integrity_tx.push((integrity_context, confirmed));
+		integrity_tx.push((
+			integrity_context,
+			confirmed && height + INTEGRITY_FEE_MIN_CONFIRMATIONS < tip_height,
+		));
 	}
 
 	// Sorting by height
@@ -350,6 +355,7 @@ where
 			args.min_fee = Some(fee);
 			args.ttl_blocks = Some(3);
 			args.late_lock = Some(true);
+			args.selection_strategy_is_use_all = false;
 
 			let slate = owner::init_send_tx(&mut **w, keychain_mask, &args, false, 1)?;
 

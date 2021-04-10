@@ -38,6 +38,7 @@ use crate::util::{Mutex, RwLock};
 use grin_core::core::hash::Hashed;
 use grin_core::core::BlockHeader;
 use grin_util::ToHex;
+use grin_wallet_util::grin_api::Libp2pPeers;
 use serde_json;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -776,8 +777,11 @@ impl NodeClient for LocalWalletClient {
 		Ok(o)
 	}
 
-	fn get_tor_address(&self) -> Result<Option<String>, libwallet::Error> {
-		Ok(None)
+	fn get_libp2p_peers(&self) -> Result<Libp2pPeers, libwallet::Error> {
+		Ok(Libp2pPeers {
+			libp2p_peers: vec![],
+			node_peers: vec![],
+		})
 	}
 }
 unsafe impl<'a, L, C, K> Send for WalletProxy<'a, L, C, K>
