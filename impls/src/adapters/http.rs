@@ -675,7 +675,7 @@ impl MarketplaceMessageSender for HttpDataSender {
 		}
 
 		// http call is synchronouse, so message was delivered and processes. Ack cn be granted.
-		let result = res["result"]["ok"].as_str().unwrap_or("").to_string();
+		let result = res["result"]["Ok"].as_str().unwrap_or("").to_string();
 		Ok(result)
 	}
 }
