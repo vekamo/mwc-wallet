@@ -406,6 +406,7 @@ pub fn swap_adjust<'a, L, C, K>(
 	secondary_fee: Option<f32>,
 	electrum_node_uri1: Option<String>,
 	electrum_node_uri2: Option<String>,
+	tag: Option<String>,
 ) -> Result<(StateId, Action), Error>
 where
 	L: WalletLCProvider<'a, C, K>,
@@ -505,6 +506,15 @@ where
 			}
 
 			swap.secondary_fee = secondary_fee;
+			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+			return Ok((swap.state.clone(), Action::None));
+		}
+		"tag" => {
+			if tag.is_none() {
+				return Err(ErrorKind::Generic("Please define '--tag' values".to_string()).into());
+			}
+
+			swap.tag = tag;
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 			return Ok((swap.state.clone(), Action::None));
 		}

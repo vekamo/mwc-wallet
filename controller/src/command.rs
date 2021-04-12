@@ -39,6 +39,7 @@ use grin_wallet_libwallet::internal::selection;
 use grin_wallet_libwallet::proof::proofaddress::{self, ProvableAddress};
 use grin_wallet_libwallet::proof::tx_proof::TxProof;
 use grin_wallet_libwallet::slatepack::SlatePurpose;
+use grin_wallet_libwallet::swap::fsm::state::StateId;
 use grin_wallet_libwallet::swap::message;
 use grin_wallet_libwallet::swap::trades;
 use grin_wallet_libwallet::swap::types::Action;
@@ -1699,7 +1700,7 @@ pub struct SwapArgs {
 	/// Swap ID that will are working with
 	pub swap_id: Option<String>,
 	/// Action to process. Value must match expected
-	pub adjust: Option<String>,
+	pub adjust: Vec<String>,
 	/// Transport that can be used for interaction
 	pub method: Option<String>,
 	/// Destination for messages that needed to be send
@@ -1724,6 +1725,8 @@ pub struct SwapArgs {
 	pub electrum_node_uri2: Option<String>,
 	/// Need to wait for the first backup.
 	pub wait_for_backup1: bool,
+	/// Assign tag to this trade
+	pub tag: Option<String>,
 }
 
 // Integrity operation
@@ -1900,10 +1903,6 @@ where
 				"Not found expected 'swap_id' argument".to_string(),
 			))?;
 
-			let adjast_cmd = args.adjust.ok_or(ErrorKind::ArgumentError(
-				"Not found expected 'adjust' argument".to_string(),
-			))?;
-
 			// Checking parameters here. We can't do that at libwallet side
 			if let Some(method) = args.method.clone() {
 				let destination = args.destination.clone().ok_or(ErrorKind::ArgumentError(
@@ -1941,34 +1940,41 @@ where
 				secondary_address = args.secondary_address.clone();
 			}
 
-			let result = owner_swap::swap_adjust(
-				wallet_inst,
-				keychain_mask,
-				&swap_id,
-				&adjast_cmd,
-				args.method.clone(),
-				args.destination.clone(),
-				secondary_address,
-				args.secondary_fee,
-				args.electrum_node_uri1,
-				args.electrum_node_uri2,
-			);
-			match result {
-				Ok((state, _action)) => {
-					println!(
-						"Swap trade {} was successfully adjusted. New state: {}",
-						swap_id, state
-					);
-					Ok(())
-				}
-				Err(e) => {
-					error!("Unable to adjust the Swap {}: {}", swap_id, e);
-					Err(
-						ErrorKind::LibWallet(format!("Unable to adjust Swap {}: {}", swap_id, e))
-							.into(),
-					)
+			let mut res_state = StateId::BuyerCancelled;
+			for adjust_cmd in args.adjust {
+				let result = owner_swap::swap_adjust(
+					wallet_inst.clone(),
+					keychain_mask,
+					&swap_id,
+					&adjust_cmd,
+					args.method.clone(),
+					args.destination.clone(),
+					secondary_address.clone(),
+					args.secondary_fee,
+					args.electrum_node_uri1.clone(),
+					args.electrum_node_uri2.clone(),
+					args.tag.clone(),
+				);
+				match result {
+					Ok((state, _action)) => {
+						res_state = state;
+					}
+					Err(e) => {
+						error!("Unable to adjust the Swap {}: {}", swap_id, e);
+						return Err(ErrorKind::LibWallet(format!(
+							"Unable to adjust Swap {}: {}",
+							swap_id, e
+						))
+						.into());
+					}
 				}
 			}
+
+			println!(
+				"Swap trade {} was successfully adjusted. New state: {}",
+				swap_id, res_state
+			);
+			Ok(())
 		}
 		SwapSubcommand::Check => {
 			let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(

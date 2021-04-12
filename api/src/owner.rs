@@ -2398,6 +2398,7 @@ where
 		secondary_fee: Option<f32>,
 		electrum_node_uri1: Option<String>,
 		electrum_node_uri2: Option<String>,
+		tag: Option<String>,
 	) -> Result<(StateId, Action), Error> {
 		owner_swap::swap_adjust(
 			self.wallet_inst.clone(),
@@ -2410,6 +2411,7 @@ where
 			secondary_fee,
 			electrum_node_uri1,
 			electrum_node_uri2,
+			tag,
 		)
 	}
 
@@ -2603,7 +2605,7 @@ macro_rules! doctest_helper_setup_doc_env {
 
 		grin_wallet_util::grin_core::global::set_local_chain_type(
 			grin_wallet_util::grin_core::global::ChainTypes::AutomatedTesting,
-			);
+		);
 
 		let dir = tempdir().map_err(|e| format!("{:#?}", e)).unwrap();
 		let dir = dir
@@ -2619,7 +2621,7 @@ macro_rules! doctest_helper_setup_doc_env {
 			HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None).unwrap();
 		let mut wallet = Box::new(
 			DefaultWalletImpl::<'static, HTTPNodeClient>::new(node_client.clone()).unwrap(),
-			)
+		)
 			as Box<
 				WalletInst<
 					'static,
@@ -2627,7 +2629,7 @@ macro_rules! doctest_helper_setup_doc_env {
 					HTTPNodeClient,
 					ExtKeychain,
 				>,
-				>;
+			>;
 		let lc = wallet.lc_provider().unwrap();
 		let _ = lc.set_top_level_directory(&wallet_config.data_file_dir);
 		lc.open_wallet(None, pw, false, false, None);

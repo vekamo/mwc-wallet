@@ -1099,7 +1099,10 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 
 pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseError> {
 	let swap_id = args.value_of("swap_id").map(|s| String::from(s));
-	let adjust = args.value_of("adjust").map(|s| String::from(s));
+	let adjust = args
+		.value_of("adjust")
+		.map(|s| s.split(",").map(|s| String::from(s)).collect())
+		.unwrap_or(vec![]);
 	let method = args.value_of("method").map(|s| String::from(s));
 	let mut destination = args.value_of("dest").map(|s| String::from(s));
 	let apisecret = args.value_of("apisecret").map(|s| String::from(s));
@@ -1134,7 +1137,7 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 	} else if args.is_present("trade_import") {
 		destination = args.value_of("trade_import").map(|s| String::from(s));
 		command::SwapSubcommand::TradeImport
-	} else if adjust.is_some() {
+	} else if !adjust.is_empty() {
 		command::SwapSubcommand::Adjust
 	} else if args.is_present("autoswap") {
 		command::SwapSubcommand::Autoswap
@@ -1165,6 +1168,7 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		electrum_node_uri1,
 		electrum_node_uri2,
 		wait_for_backup1: false, // waiting is a primary usage for qt wallet. We are not documented that properly to make available for all users.
+		tag: args.value_of("tag").map(|s| String::from(s)),
 	})
 }
 

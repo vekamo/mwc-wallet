@@ -686,6 +686,7 @@ subcommands:
             long: adjust
             takes_value: true
             possible_values:
+              - tag
               - cancel
               - destination
               - secondary_address
@@ -779,6 +780,10 @@ subcommands:
         - electrum_uri2:
             help: secondary private ElectrumX node URI. If never setup, community node will be used
             long: electrum_uri2
+            takes_value: true
+        - tag:
+            help: Adjusted tag for the swap trade. Tags are used for managing swap marketplace trades
+            long: tag
             takes_value: true
   - integrity:
       about: Manage integrity fees and funds.
