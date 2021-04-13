@@ -159,6 +159,9 @@ pub struct Swap {
 	pub wait_for_backup1: bool,
 	/// Tag for the swap. Using for swap marketplace automation process.
 	pub tag: Option<String>,
+	/// Flag that other party locking is confirmed. Utility flag for swap marketplace
+	#[serde(default = "default_false")]
+	pub other_lock_first_done: bool,
 }
 
 fn default_false() -> bool {

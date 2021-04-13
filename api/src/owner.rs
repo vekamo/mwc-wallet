@@ -2364,7 +2364,7 @@ where
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		do_check: bool,
-	) -> Result<Vec<owner_swap::SwapListInfo>, Error> {
+	) -> Result<(Vec<owner_swap::SwapListInfo>, Vec<Swap>), Error> {
 		owner_swap::swap_list(self.wallet_inst.clone(), keychain_mask, do_check)
 	}
 
@@ -2425,7 +2425,7 @@ where
 	}
 
 	/// Refresh and get a status and current expected action for the swap.
-	/// return: <state>, <Action>, <time limit>, <Readmap lines>, <Journal records>
+	/// return: <state>, <Action>, <time limit>, <Roadmap lines>, <Journal records>, <last error> , <mkt place cancelled trades>
 	/// time limit shows when this action will be expired
 	pub fn update_swap_status_action(
 		&self,
@@ -2441,6 +2441,7 @@ where
 			Vec<StateEtaInfo>,
 			Vec<SwapJournalRecord>,
 			Option<String>,
+			Vec<Swap>,
 		),
 		Error,
 	> {
@@ -2482,7 +2483,7 @@ where
 		secondary_address: Option<String>,
 		electrum_node_uri1: Option<String>,
 		electrum_node_uri2: Option<String>,
-	) -> Result<StateProcessRespond, Error>
+	) -> Result<(StateProcessRespond, Vec<Swap>), Error>
 	where
 		F: FnOnce(Message, String, String) -> Result<(bool, String), crate::libwallet::Error>
 			+ 'static,

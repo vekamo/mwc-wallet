@@ -380,6 +380,11 @@ where
 						return Ok(StateProcessRespond::new(StateId::SellerCancelled));
 					}
 
+					// Memory pool does count
+					if tx_conf.secondary_lock_amount == swap.secondary_amount {
+						swap.other_lock_first_done = true;
+					}
+
 					if conf < 1 {
 						Ok(StateProcessRespond::new(StateId::SellerWaitingForBuyerLock)
 							.action(Action::WaitForSecondaryConfirmations {
@@ -401,6 +406,7 @@ where
 							"Buyer sent the funds to lock address {}",
 							self.swap_api.get_secondary_lock_address(swap)?
 						));
+						swap.other_lock_first_done = true;
 						Ok(StateProcessRespond::new(StateId::SellerPostingLockMwcSlate))
 					}
 				}

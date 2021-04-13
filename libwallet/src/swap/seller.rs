@@ -136,6 +136,7 @@ impl SellApi {
 			last_check_error: None,
 			wait_for_backup1: false,
 			tag,
+			other_lock_first_done: false,
 		};
 
 		swap.add_journal_message("Swap offer created".to_string());

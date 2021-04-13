@@ -212,7 +212,7 @@ pub fn create_swap_message_sender(
 	method: &str,
 	dest: &str,
 	apisecret: &Option<String>,
-	tor_config: Option<TorConfig>,
+	tor_config: &TorConfig,
 ) -> Result<Box<dyn SwapMessageSender>, Error> {
 	let invalid = |e| {
 		ErrorKind::WalletComms(format!(
@@ -222,26 +222,19 @@ pub fn create_swap_message_sender(
 	};
 
 	Ok(match method {
-		"tor" => match tor_config {
-			None => {
-				return Err(
-					ErrorKind::WalletComms("Tor Configuration required".to_string()).into(),
-				);
-			}
-			Some(tc) => {
-				let dest = validate_tor_address(dest)?;
-				Box::new(
-					HttpDataSender::with_socks_proxy(
-						&dest,
-						apisecret.clone(),
-						&tc.socks_proxy_addr,
-						Some(tc.send_config_dir),
-						tc.socks_running,
-					)
-					.map_err(|e| invalid(e))?,
+		"tor" => {
+			let dest = validate_tor_address(dest)?;
+			Box::new(
+				HttpDataSender::with_socks_proxy(
+					&dest,
+					apisecret.clone(),
+					&tor_config.socks_proxy_addr,
+					Some(tor_config.send_config_dir.clone()),
+					tor_config.socks_running,
 				)
-			}
-		},
+				.map_err(|e| invalid(e))?,
+			)
+		}
 		"mwcmqs" => Box::new(MwcMqsChannel::new(dest.to_string())),
 		_ => {
 			return Err(handle_unsupported_types(method));

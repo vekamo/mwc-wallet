@@ -263,11 +263,12 @@ pub struct SwapListInfo {
 }
 
 /// List Swap trades. Returns SwapId + Status
+/// Return: (<trades list>, <marketplace cancelled swaps>)
 pub fn swap_list<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	do_check: bool,
-) -> Result<Vec<SwapListInfo>, Error>
+) -> Result<(Vec<SwapListInfo>, Vec<Swap>), Error>
 where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
@@ -285,12 +286,14 @@ where
 
 	let mut do_check = do_check;
 
+	let mut cancelled_swaps: Vec<Swap> = vec![];
+
 	for sw_id in &swap_id {
 		let swap_lock = trades::get_swap_lock(sw_id);
 		let _l = swap_lock.lock();
 		let (context, mut swap) = trades::get_swap_trade(sw_id.as_str(), &skey, &*swap_lock)?;
 		let trade_start_time = swap.started.timestamp();
-		swap.wait_for_backup1 = true; // allways waiting becasue moving forward it is not a swap list task
+		swap.wait_for_backup1 = true; // always waiting because moving forward it is not a swap list task
 
 		if do_check && !swap.state.is_final_state() {
 			let (state, action, expiration) = match update_swap_status_action_impl(
@@ -299,9 +302,13 @@ where
 				node_client.clone(),
 				&keychain,
 			) {
-				Ok((state, action, expiration, _state_eta)) => {
+				Ok((state, action, expiration, _state_eta, other_was_locked)) => {
 					swap.last_check_error = None;
 					trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+					if other_was_locked {
+						let mut cncl_sw = cancel_trades_by_tag(&keychain, &swap)?;
+						cancelled_swaps.append(&mut cncl_sw);
+					}
 					(state, action, expiration)
 				}
 				Err(e) => {
@@ -349,7 +356,7 @@ where
 		trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 	}
 
-	Ok(result)
+	Ok((result, cancelled_swaps))
 }
 
 /// Delete Swap trade.
@@ -702,7 +709,7 @@ fn update_swap_status_action_impl<'a, C, K>(
 	context: &Context,
 	node_client: C,
 	keychain: &K,
-) -> Result<(StateId, Action, Option<i64>, Vec<StateEtaInfo>), Error>
+) -> Result<(StateId, Action, Option<i64>, Vec<StateEtaInfo>, bool), Error>
 where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
@@ -716,7 +723,9 @@ where
 		crate::swap::api::create_instance(&swap.secondary_currency, node_client, uri1, uri2)?;
 	let mut fsm = swap_api.get_fsm(keychain, swap);
 	let tx_conf = swap_api.request_tx_confirmations(keychain, swap)?;
+	let start_locked = swap.other_lock_first_done;
 	let resp = fsm.process(Input::Check, swap, &context, &tx_conf)?;
+
 	let eta = fsm.get_swap_roadmap(swap)?;
 
 	Ok((
@@ -724,11 +733,60 @@ where
 		resp.action.unwrap_or(Action::None),
 		resp.time_limit,
 		eta,
+		swap.tag.is_some() && start_locked != swap.other_lock_first_done,
 	))
 }
 
 /// Refresh and get a status and current expected action for the swap.
 /// return: <state>, <Action>, <time limit>
+/// time limit shows when this action will be expired
+pub fn cancel_trades_by_tag<'a, K>(keychain: &K, win_swap: &Swap) -> Result<Vec<Swap>, Error>
+where
+	K: Keychain + 'a,
+{
+	if win_swap.tag.is_none() {
+		return Ok(vec![]);
+	}
+
+	let swap_id = trades::list_swap_trades()?;
+	let skey = get_swap_storage_key(keychain)?;
+
+	// Note, it is not locked copies, we can't use much data from them
+	let mut swaps_to_cancel: Vec<Swap> = vec![];
+
+	{
+		// Use the fake lock to get the swap list. Should be fine for our use case
+		let swap_lock = trades::get_swap_lock(&"cancel_trades_by_tag".to_string());
+		let _l = swap_lock.lock();
+
+		let exclude_swap_id = win_swap.id.to_string();
+		for sw_id in &swap_id {
+			if *sw_id == exclude_swap_id {
+				continue;
+			}
+
+			let (context, mut swap) = trades::get_swap_trade(sw_id.as_str(), &skey, &*swap_lock)?;
+
+			if swap.tag == win_swap.tag && swap.state.is_initial_state() {
+				swaps_to_cancel.push(swap.clone());
+
+				// Cancelling by changing the state. For initial it is safe.
+				swap.add_journal_message("Cancelling, another marketplace trade win".to_string());
+				swap.state = if swap.is_seller() {
+					StateId::SellerCancelled
+				} else {
+					StateId::BuyerCancelled
+				};
+				trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+			}
+		}
+	}
+
+	Ok(swaps_to_cancel)
+}
+
+/// Refresh and get a status and current expected action for the swap.
+/// return: <state>, <Action>, <time limit>, ...., <marketplace cancelled swaps>
 /// time limit shows when this action will be expired
 pub fn update_swap_status_action<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
@@ -745,6 +803,7 @@ pub fn update_swap_status_action<'a, L, C, K>(
 		Vec<StateEtaInfo>,
 		Vec<SwapJournalRecord>,
 		Option<String>,
+		Vec<Swap>,
 	),
 	Error,
 >
@@ -773,10 +832,16 @@ where
 	swap.wait_for_backup1 = wait_for_backup1;
 
 	match update_swap_status_action_impl(&mut swap, &context, node_client, &keychain) {
-		Ok((next_state_id, action, time_limit, eta)) => {
+		Ok((next_state_id, action, time_limit, eta, cancel_mkt_place_trades)) => {
 			swap.last_check_error = None;
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 			let last_error = swap.get_last_error();
+
+			let mut cancelled_swaps: Vec<Swap> = vec![];
+			if cancel_mkt_place_trades {
+				cancelled_swaps = cancel_trades_by_tag(&keychain, &swap)?;
+			}
+
 			Ok((
 				next_state_id,
 				action,
@@ -784,6 +849,7 @@ where
 				eta,
 				swap.journal,
 				last_error,
+				cancelled_swaps,
 			))
 		}
 		Err(e) => {
@@ -837,6 +903,7 @@ where
 	Ok(res)
 }
 
+// return: <response, cancelled trades>
 fn swap_process_impl<'a, L, C, K, F>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
@@ -850,7 +917,7 @@ fn swap_process_impl<'a, L, C, K, F>(
 	buyer_refund_address: Option<String>,
 	secondary_fee: Option<f32>,
 	secondary_address: Option<String>,
-) -> Result<StateProcessRespond, Error>
+) -> Result<(StateProcessRespond, Vec<Swap>), Error>
 where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
@@ -889,11 +956,17 @@ where
 
 	let tx_conf = swap_api.request_tx_confirmations(&keychain, swap)?;
 	let mut fsm = swap_api.get_fsm(&keychain, swap);
-
+	let other_lock_first_changed = swap.other_lock_first_done;
 	let mut process_respond = fsm.process(Input::Check, swap, &context, &tx_conf)?;
 
+	let cancelled_swaps = if other_lock_first_changed != swap.other_lock_first_done {
+		cancel_trades_by_tag(&keychain, &swap)?
+	} else {
+		vec![]
+	};
+
 	if process_respond.action.is_none() {
-		return Ok(process_respond);
+		return Ok((process_respond, cancelled_swaps));
 	}
 
 	match process_respond.action.clone().unwrap() {
@@ -1053,7 +1126,7 @@ where
 		_ => (), // Nothing to do
 	}
 
-	Ok(process_respond)
+	Ok((process_respond, cancelled_swaps))
 }
 
 /// Process the action for the swap. Action has to match the expected one
@@ -1071,7 +1144,7 @@ pub fn swap_process<'a, L, C, K, F>(
 	electrum_node_uri1: Option<String>,
 	electrum_node_uri2: Option<String>,
 	wait_for_backup1: bool,
-) -> Result<StateProcessRespond, Error>
+) -> Result<(StateProcessRespond, Vec<Swap>), Error>
 where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
@@ -1117,7 +1190,7 @@ where
 	) {
 		Ok(mut respond) => {
 			swap.last_process_error = None;
-			respond.last_error = swap.get_last_error();
+			respond.0.last_error = swap.get_last_error();
 			trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
 			Ok(respond)
 		}

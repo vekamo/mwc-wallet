@@ -40,9 +40,9 @@ use grin_wallet_libwallet::proof::proofaddress::{self, ProvableAddress};
 use grin_wallet_libwallet::proof::tx_proof::TxProof;
 use grin_wallet_libwallet::slatepack::SlatePurpose;
 use grin_wallet_libwallet::swap::fsm::state::StateId;
-use grin_wallet_libwallet::swap::message;
 use grin_wallet_libwallet::swap::trades;
 use grin_wallet_libwallet::swap::types::Action;
+use grin_wallet_libwallet::swap::{message, Swap};
 use grin_wallet_libwallet::{Slate, TxLogEntry, WalletInst};
 use grin_wallet_util::grin_core::consensus::GRIN_BASE;
 use grin_wallet_util::grin_core::core::amount_to_hr_string;
@@ -1810,12 +1810,49 @@ pub struct SwapJournalRecordString {
 	pub message: String,
 }
 
+fn notify_about_cancelled_swaps<L, C, K>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
+	tor_config: TorConfig,
+	cancelled_swaps: Vec<Swap>,
+) where
+	L: WalletLCProvider<'static, C, K> + 'static,
+	C: NodeClient + 'static,
+	K: keychain::Keychain + 'static,
+{
+	if !cancelled_swaps.is_empty() {
+		// Notify peers about that async is fine
+		let keychain_mask = keychain_mask.map(|s| s.clone());
+		let _ = thread::Builder::new()
+			.name("cancelled_swaps_notification".to_string())
+			.spawn(move || {
+				for swap in cancelled_swaps {
+					if let Err(e) = send_marketplace_message(
+						wallet_inst.clone(),
+						keychain_mask.as_ref(),
+						&tor_config,
+						SendMarketplaceMessageArgs {
+							command: "fail_bidding".to_string(),
+							offer_id: swap.tag.clone().unwrap_or("????".to_string()),
+							tor_address: swap.communication_address.clone(),
+						},
+					) {
+						error!(
+							"Unable to send fail_bidding message to the wallet {}, {}",
+							swap.communication_address, e
+						);
+					}
+				}
+			});
+	}
+}
+
 pub fn swap<L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	api_listen_addr: String,
-	mqs_config: Option<MQSConfig>,
-	tor_config: Option<TorConfig>,
+	mqs_config: MQSConfig,
+	tor_config: TorConfig,
 	tls_conf: Option<TLSConfig>,
 	args: SwapArgs,
 	cli_mode: bool,
@@ -1832,12 +1869,19 @@ where
 	match args.subcommand {
 		SwapSubcommand::List | SwapSubcommand::ListAndCheck => {
 			let result = owner_swap::swap_list(
-				wallet_inst,
+				wallet_inst.clone(),
 				keychain_mask,
 				args.subcommand == SwapSubcommand::ListAndCheck,
 			);
 			match result {
-				Ok(list) => {
+				Ok((list, cancelled_swaps)) => {
+					notify_about_cancelled_swaps(
+						wallet_inst.clone(),
+						keychain_mask,
+						tor_config.clone(),
+						cancelled_swaps,
+					);
+
 					if args.json_format {
 						let mut res = Vec::new();
 
@@ -2039,15 +2083,29 @@ where
 						}
 					};
 
-					let (_status, action, time_limit, roadmap, journal_records, last_error) =
-						owner_swap::update_swap_status_action(
-							wallet_inst.clone(),
-							keychain_mask,
-							&swap_id,
-							args.electrum_node_uri1,
-							args.electrum_node_uri2,
-							args.wait_for_backup1,
-						)?;
+					let (
+						_status,
+						action,
+						time_limit,
+						roadmap,
+						journal_records,
+						last_error,
+						cancelled_swaps,
+					) = owner_swap::update_swap_status_action(
+						wallet_inst.clone(),
+						keychain_mask,
+						&swap_id,
+						args.electrum_node_uri1,
+						args.electrum_node_uri2,
+						args.wait_for_backup1,
+					)?;
+
+					notify_about_cancelled_swaps(
+						wallet_inst.clone(),
+						keychain_mask,
+						tor_config.clone(),
+						cancelled_swaps,
+					);
 
 					let mwc_lock_time = if conf_status.mwc_tip < swap.refund_slate.lock_height {
 						Utc::now().timestamp() as u64
@@ -2141,6 +2199,7 @@ where
 			let apisecret = args.apisecret.clone();
 			let swap_id2 = swap_id.clone();
 			let wallet_inst2 = wallet_inst.clone();
+			let tor_config2 = tor_config.clone();
 			let message_sender = move |swap_message: message::Message,
 			                           method: String,
 			                           dest: String|
@@ -2155,7 +2214,7 @@ where
 						if grin_wallet_impls::adapters::get_mwcmqs_brocker().is_none() {
 							let _ = controller::start_mwcmqs_listener(
 								wallet_inst2,
-								mqs_config.expect("No MQS config found!").clone(),
+								mqs_config.clone(),
 								false,
 								Arc::new(Mutex::new(km)),
 								true,
@@ -2184,11 +2243,7 @@ where
 					}
 					"tor" => {
 						if !controller::is_foreign_api_running() {
-							let tor_config = tor_config.clone().ok_or(
-								crate::libwallet::ErrorKind::GenericError(
-									"Tor configuration is not defined".to_string(),
-								),
-							)?;
+							let tor_config = tor_config2.clone();
 							let _api_thread = thread::Builder::new()
 								.name("wallet-http-listener".to_string())
 								.spawn(move || {
@@ -2241,7 +2296,7 @@ where
 					method.as_str(),
 					dest.as_str(),
 					&apisecret,
-					tor_config,
+					&tor_config2,
 				)
 				.map_err(|e| {
 					crate::libwallet::ErrorKind::SwapError(format!(
@@ -2273,7 +2328,7 @@ where
 			};
 
 			let result = owner_swap::swap_process(
-				wallet_inst,
+				wallet_inst.clone(),
 				keychain_mask,
 				&swap_id,
 				message_sender,
@@ -2287,7 +2342,15 @@ where
 			);
 
 			match result {
-				Ok(_) => Ok(()),
+				Ok((_, cancelled_swaps)) => {
+					notify_about_cancelled_swaps(
+						wallet_inst,
+						keychain_mask,
+						tor_config.clone(),
+						cancelled_swaps,
+					);
+					Ok(())
+				}
 				Err(e) => {
 					error!("Unable to process Swap {}: {}", swap_id, e);
 					Err(
@@ -2330,7 +2393,7 @@ where
 						// Startting MQS
 						let _ = controller::start_mwcmqs_listener(
 							wallet_inst,
-							mqs_config.expect("No MQS config found!").clone(),
+							mqs_config.clone(),
 							false,
 							Arc::new(Mutex::new(km)),
 							true,
@@ -2347,9 +2410,7 @@ where
 						}
 
 						// Starting tor
-						let tor_config = tor_config.clone().ok_or(ErrorKind::GenericError(
-							"Tor configuration is not defined".to_string(),
-						))?;
+						let tor_config = tor_config.clone();
 						let _api_thread = thread::Builder::new()
 							.name("wallet-http-listener".to_string())
 							.spawn(move || {
@@ -2441,7 +2502,7 @@ where
 					method.as_str(),
 					destination.as_str(),
 					&apisecret,
-					tor_config,
+					&tor_config,
 				)
 				.map_err(|e| {
 					crate::libwallet::ErrorKind::SwapError(format!(
@@ -2473,15 +2534,27 @@ where
 					args.electrum_node_uri1.clone(),
 					args.electrum_node_uri2.clone(),
 				)?;
-				let (state, action, time_limit, roadmap, journal_records, _last_error) =
-					owner_swap::update_swap_status_action(
-						wallet_inst2.clone(),
-						keychain_mask,
-						&swap_id,
-						args.electrum_node_uri1,
-						args.electrum_node_uri2,
-						args.wait_for_backup1,
-					)?;
+				let (
+					state,
+					action,
+					time_limit,
+					roadmap,
+					journal_records,
+					_last_error,
+					cancelled_swaps,
+				) = owner_swap::update_swap_status_action(
+					wallet_inst2.clone(),
+					keychain_mask,
+					&swap_id,
+					args.electrum_node_uri1,
+					args.electrum_node_uri2,
+					args.wait_for_backup1,
+				)?;
+
+				// cli is not supposed tto handle marketplace workflow. Just printing an error. We don't sending notifications
+				if !cancelled_swaps.is_empty() {
+					error!("Cli can be used for marketplace swap trades and swap tags. Some swaps was cancelled because of that. Please review your swap statuses.")
+				}
 
 				// Autoswap has to be sure that ALL parameters are defined. There are multiple steps and potentioly all of them can be used.
 				// We are checking them here because the swap object is known, so the second currency is known. And we can validate the data
@@ -2557,6 +2630,7 @@ where
 							roadmap,
 							mut journal_records,
 							mut last_error,
+							cancelled_swaps,
 						) = match owner_swap::update_swap_status_action(
 							wallet_inst2.clone(),
 							km2.as_ref(),
@@ -2571,6 +2645,10 @@ where
 								continue;
 							}
 						};
+
+						if !cancelled_swaps.is_empty() {
+							error!("Cli can be used for marketplace swap trades and swap tags. Some swaps was cancelled because of that. Please review your swap statuses.")
+						}
 
 						// If actin require execution - it must be executed
 						let mut was_executed = false;
@@ -2587,7 +2665,11 @@ where
 								None, None, // URIs was already updated before. No need to update the same.
 								wait_for_backup1,
 							) {
-								Ok(res) => {
+								Ok( (res, cancelled_swaps)) => {
+									if !cancelled_swaps.is_empty() {
+										error!("Cli can be used for marketplace swap trades and swap tags. Some swaps was cancelled because of that. Please review your swap statuses.")
+									}
+
 									curr_state = res.next_state_id;
 									last_error = res.last_error;
 									if let Some(a) = res.action {

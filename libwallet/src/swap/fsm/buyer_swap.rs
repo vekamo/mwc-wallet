@@ -305,6 +305,7 @@ impl State for BuyerWaitingForSellerToLock {
 						swap.add_journal_message(
 							"Seller has started locking MWC funds".to_string(),
 						);
+						swap.other_lock_first_done = true;
 						Ok(StateProcessRespond::new(
 							StateId::BuyerPostingSecondaryToMultisigAccount,
 						))
