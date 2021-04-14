@@ -891,7 +891,7 @@ subcommands:
       about: Send marketplace related message to another wallet by tor address
       args:
         - command:
-            help: Command to perform. Current supported values 'accept_offer' and 'fail_bidding'
+            help: Command to perform. Current supported values 'check_offer', 'accept_offer' and 'fail_bidding'
             short: c
             long: command
             takes_value: true

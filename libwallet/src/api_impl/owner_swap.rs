@@ -1363,7 +1363,7 @@ where
 	}
 
 	let command = json_get_str(&json_msg, "command");
-	let response = if command == "accept_offer" {
+	let response = if command == "accept_offer" || command == "check_offer" {
 		let from = json_get_str(&json_msg, "from");
 		let offer_id = json_get_str(&json_msg, "offer_id");
 		if from.is_empty() || offer_id.is_empty() {
@@ -1373,7 +1373,9 @@ where
 		}
 
 		if ONLINE_OFFERS.read().unwrap().contains_key(&offer_id) {
-			println!("Get accept_offer message from {} for {}", from, offer_id);
+			if command == "accept_offer" {
+				println!("Get accept_offer message from {} for {}", from, offer_id);
+			}
 
 			// Check if this offer is broadcasting and how many are running
 			let tag = Some(offer_id.clone());
