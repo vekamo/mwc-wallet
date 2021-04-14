@@ -210,8 +210,8 @@ pub fn add_broadcasting_messages(
 							if let Some(msg) = messages
 								.iter_mut()
 								.filter(|m| {
-									(m.last_time_published + (m.broadcasting_interval as i64) < cur_time)
-										&& (m.integrity_ctx_expiration_check > cur_time)
+									(m.last_time_published + (m.broadcasting_interval as i64)
+										< cur_time) && (m.integrity_ctx_expiration_check > cur_time)
 								})
 								.next()
 							{

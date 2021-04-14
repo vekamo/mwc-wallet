@@ -41,6 +41,30 @@ use std::convert::TryFrom;
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
+use std::sync::RwLock;
+use uuid::Uuid;
+
+lazy_static! {
+	/// Offers that are online now. It is needed to answer correctly about offers status
+	/// Key: offer Id,  Value: message uuid
+	static ref ONLINE_OFFERS:   RwLock<HashMap<String,Uuid>>  = RwLock::new(HashMap::new());
+}
+
+/// Register marketplace offer that is publishing now. SO now income requests are expected.
+pub fn add_published_offer(offer_id: String, message_uuid: Uuid) {
+	ONLINE_OFFERS
+		.write()
+		.unwrap()
+		.insert(offer_id, message_uuid);
+}
+
+/// Unregister marketplace offer. Any incoming requests about it are not expected.
+pub fn remove_published_offer(message_uuid: &Uuid) {
+	ONLINE_OFFERS
+		.write()
+		.unwrap()
+		.retain(|_k, v| v != message_uuid);
+}
 
 fn get_swap_storage_key<K: Keychain>(keychain: &K) -> Result<SecretKey, Error> {
 	Ok(keychain.derive_key(
@@ -748,6 +772,12 @@ where
 		return Ok(vec![]);
 	}
 
+	println!(
+		"Winning Trade with SwapId {} and tag {}",
+		win_swap.id,
+		win_swap.tag.clone().unwrap()
+	);
+
 	let swap_id = trades::list_swap_trades()?;
 	let skey = get_swap_storage_key(keychain)?;
 
@@ -778,6 +808,7 @@ where
 					StateId::BuyerCancelled
 				};
 				trades::store_swap_trade(&context, &swap, &skey, &*swap_lock)?;
+				trades::delete_swap_trade(&sw_id, &skey, &*swap_lock)?;
 			}
 		}
 	}
@@ -1340,11 +1371,17 @@ where
 				ErrorKind::Generic(format!("Incomplete marketplace message {}", message)).into(),
 			);
 		}
-		println!("Get accept_offer message from {} for {}", from, offer_id);
-		// Check if this offer is broadcasting and how many are running
-		let tag = Some(offer_id.clone());
-		let accepted_peers = swaps.iter().filter(|s| s.tag == tag).count();
-		format!("{{\"running\":{}}}", accepted_peers)
+
+		if ONLINE_OFFERS.read().unwrap().contains_key(&offer_id) {
+			println!("Get accept_offer message from {} for {}", from, offer_id);
+
+			// Check if this offer is broadcasting and how many are running
+			let tag = Some(offer_id.clone());
+			let accepted_peers = swaps.iter().filter(|s| s.tag == tag).count();
+			format!("{{\"running\":{}}}", accepted_peers)
+		} else {
+			"{\"running\":-1}".to_string() // Doesn't exist
+		}
 	} else if command == "fail_bidding" {
 		let from = json_get_str(&json_msg, "from");
 		let offer_id = json_get_str(&json_msg, "offer_id");

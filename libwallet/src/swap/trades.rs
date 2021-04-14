@@ -30,8 +30,12 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-/// Lacation of the swaps states
+/// Location of the swaps states
 pub const SWAP_DEAL_SAVE_DIR: &'static str = "saved_swap_deal";
+/// Location of the normal deleted swap trades
+pub const SWAP_DEAL_DELETED_DIR: &'static str = "deleted";
+/// Location of the marketplace not started swap trades.
+pub const SWAP_DEAL_MKT_DELETED_DIR: &'static str = "deleted_mkt";
 
 lazy_static! {
 	static ref TRADE_DEALS_PATH: RwLock<Option<PathBuf>> = RwLock::new(None);
@@ -48,6 +52,12 @@ pub fn init_swap_trade_backend(
 	let stored_swap_deal_path = Path::new(data_file_dir).join(SWAP_DEAL_SAVE_DIR);
 	fs::create_dir_all(&stored_swap_deal_path)
 		.expect("Could not create swap deal storage directory!");
+
+	let deleted_trades = stored_swap_deal_path.join(SWAP_DEAL_DELETED_DIR);
+	fs::create_dir_all(&deleted_trades).expect("Could not create swap deal storage directory!");
+
+	let deleted_mkts = stored_swap_deal_path.join(SWAP_DEAL_MKT_DELETED_DIR);
+	fs::create_dir_all(&deleted_mkts).expect("Could not create swap deal storage directory!");
 
 	TRADE_DEALS_PATH.write().replace(stored_swap_deal_path);
 	if electrumx_config_uri.is_some() {
@@ -147,10 +157,20 @@ pub fn delete_swap_trade(
 		.clone()
 		.unwrap()
 		.join(format!("{}.swap", swap_id));
+
+	let del_dir = if swap.tag.is_some()
+		&& (swap.state.is_initial_state() || swap.state.is_cancelled_no_refund())
+	{
+		SWAP_DEAL_MKT_DELETED_DIR
+	} else {
+		SWAP_DEAL_DELETED_DIR
+	};
+
 	let deleted_path = TRADE_DEALS_PATH
 		.read()
 		.clone()
 		.unwrap()
+		.join(del_dir)
 		.join(format!("{}.swap.del", swap_id));
 
 	fs::rename(target_path, deleted_path).map_err(|e| {

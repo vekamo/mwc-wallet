@@ -3376,12 +3376,25 @@ where
 			.into());
 		}
 
+		let mkt_message =
+			serde_json::from_str::<serde_json::Value>(&publish_message).map_err(|e| {
+				ErrorKind::GenericError(format!(
+					"Unable to parse the message {}, {}",
+					publish_message, e
+				))
+			})?;
+		let offer_id = mkt_message["id"].as_str().ok_or(ErrorKind::GenericError(
+			"Not found expected offer id".to_string(),
+		))?;
+
 		let uuid = libp2p_messaging::add_broadcasting_messages(
 			&publish_topic,
 			&publish_message,
 			publish_interval,
 			context.unwrap(),
 		)?;
+
+		owner_swap::add_published_offer(offer_id.to_string(), uuid);
 
 		if args.json {
 			json_res.insert(
@@ -3404,6 +3417,7 @@ where
 				.into())
 			}
 		};
+		owner_swap::remove_published_offer(&uuid);
 		if libp2p_messaging::remove_broadcasting_message(&uuid) {
 			if args.json {
 				json_res.insert(
@@ -3465,6 +3479,12 @@ where
 			tip_height,
 			args.check_integrity_retain,
 		);
+
+		if args.check_integrity_retain {
+			for msg in &expired_msgs {
+				owner_swap::remove_published_offer(&msg.uuid);
+			}
+		}
 
 		if args.json {
 			json_res.insert(
