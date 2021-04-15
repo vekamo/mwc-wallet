@@ -354,5 +354,6 @@
   "secondary_fee": 1.4,
   "electrum_node_uri1": null,
   "electrum_node_uri2": null,
-  "tag": null
+  "tag": null,
+  "other_lock_first_done": false
 }
