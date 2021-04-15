@@ -22,7 +22,7 @@ use crossbeam_utils::thread::scope;
 use futures::stream::FuturesUnordered;
 use futures::TryStreamExt;
 use std::collections::HashMap;
-use std::{env, thread};
+use std::env;
 use tokio::runtime::Builder;
 
 use crate::client_utils::Client;
@@ -42,11 +42,6 @@ const CACHE_VALID_TIME_MS: u128 = 5000; // 2 seconds for cache should be enough 
 
 const NODE_CALL_RETRY: i32 = 2; // it is total 3 attempts  to get the data
 const NODE_VERSION_CALL_RETRY: i32 = 7; // it is total 3 attempts  to get the data
-lazy_static! {
-	// We used delays, 5000, 3000, 1000.  It is very slow and really doesn't make sense with connect,
-	// read, write timouts of 20 seconds. Keeping non zero sleeps just in case of internal glitch
-	static ref NODE_CALL_DELAY: Vec<u64> = vec![1000, 1000];
-}
 
 // cashed values are stored by the key K
 #[derive(Clone)]
@@ -138,7 +133,6 @@ impl HTTPNodeClient {
 			Err(e) => {
 				if counter>0 {
 					debug!("Retrying to call Node API method {}: {}", method, e);
-					thread::sleep(Duration::from_millis(NODE_CALL_DELAY[(counter-1) as usize]));
 					//fail over use the next node.
 					self.increase_index();
 					return self.send_json_request(method, params, counter-1);
@@ -152,7 +146,6 @@ impl HTTPNodeClient {
 				Err(e) => {
 					if counter>0 {
 						debug!("Retrying to call Node API method {}: {}", method, e);
-						thread::sleep(Duration::from_millis(NODE_CALL_DELAY[(counter-1) as usize]));
 						//fail over use the next node.
 						self.increase_index();
 						return self.send_json_request(method, params, counter-1);
@@ -180,7 +173,6 @@ impl HTTPNodeClient {
 				// Do retry
 				if counter>0 {
 					debug!("Retry to call connected peers API {}, {}", url, e);
-					thread::sleep(Duration::from_millis(NODE_CALL_DELAY[(counter-1) as usize]));
 					self.increase_index();
 					return self.get_connected_peer_info_impls(counter-1);
 				}
@@ -211,7 +203,6 @@ impl HTTPNodeClient {
 			Err(e) => {
 				if counter>0 {
 					debug!("Retry to call API get_kernel, {}", e);
-					thread::sleep(Duration::from_millis(NODE_CALL_DELAY[(counter-1) as usize]));
 					self.increase_index();
 					return self.get_kernel_impl(excess, min_height, max_height, counter-1);
 				}
@@ -325,7 +316,6 @@ impl HTTPNodeClient {
 						Err(e) => {
 							if counter>0 {
 								debug!("Retry to call API get_outputs, {}", e);
-								thread::sleep(Duration::from_millis(NODE_CALL_DELAY[(counter-1) as usize]));
 								self.increase_index();
 								return self.get_outputs_from_node_impl(wallet_outputs,counter-1);
 							}
@@ -341,7 +331,6 @@ impl HTTPNodeClient {
 			Err(e) => {
 				if counter>0 {
 					debug!("Retry to call API get_outputs, {}", e);
-					thread::sleep(Duration::from_millis(NODE_CALL_DELAY[(counter-1) as usize]));
 					self.increase_index();
 					return self.get_outputs_from_node_impl(wallet_outputs,counter-1);
 				}
