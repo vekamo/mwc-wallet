@@ -44,17 +44,19 @@ data-encoding = "2"
 regex = "1.3"
 timer = "0.2"
 sysinfo = "0.9"
+libp2p = { git = "https://github.com/mwcproject/rust-libp2p", branch = "master", default-features = false, features = [ "noise", "yamux", "mplex", "dns", "tcp-tokio", "ping", "gossipsub"] }
+#libp2p = { path = "../../rust-libp2p", default-features = false, features = [ "noise", "yamux", "mplex", "dns", "tcp-tokio", "ping", "gossipsub"] }
 
 grin_wallet_util = { path = "../util", version = "4.1.0" }
 grin_wallet_config = { path = "../config", version = "4.1.0" }
 grin_wallet_libwallet = { path = "../libwallet", version = "4.1.0" }
 
 # Release
-grin_p2p = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
-grin_core = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
-grin_api = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
-grin_util = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2"  }
-grin_keychain = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
+#grin_p2p = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
+#grin_core = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
+#grin_api = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
+#grin_util = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2"  }
+#grin_keychain = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
 
 # For bleeding edge
 #grin_p2p = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
@@ -64,11 +66,11 @@ grin_keychain = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" 
 #grin_keychain = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
 
 # For local testing
-#grin_p2p = { path = "../../mwc-node/p2p"}
-#grin_core = { path = "../../mwc-node/core"}
-#grin_api = { path = "../../mwc-node/api"}
-#grin_util = { path = "../../mwc-node/util"}
-#grin_keychain = { path = "../../mwc-node/keychain"}
+grin_p2p = { path = "../../mwc-node/p2p"}
+grin_core = { path = "../../mwc-node/core"}
+grin_api = { path = "../../mwc-node/api"}
+grin_util = { path = "../../mwc-node/util"}
+grin_keychain = { path = "../../mwc-node/keychain"}
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 hyper-rustls = { version = "0.21", default-features = false}

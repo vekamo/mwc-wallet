@@ -51,6 +51,14 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
+		"libp2p_listen_port".to_string(),
+		"
+#socks port for wallet libp2p listener. Note, libp2p activated with TOR listener
+"
+		.to_string(),
+	);
+
+	retval.insert(
 		"owner_api_listen_port".to_string(),
 		"
 #port for wallet owner api
@@ -119,6 +127,15 @@ fn comments() -> HashMap<String, String> {
 # communication with message queue server.
 "
 		.to_string(),
+	);
+
+	retval.insert(
+		"base_fee".to_string(),
+		"
+# Base fee for the transactions. Please note that fee can't be lower than fee at miner nodes, otherwise your transactions will be rejected.
+# If you are running fresh wallet, there is no needs to adjust this value.
+"
+			.to_string(),
 	);
 
 	retval.insert(

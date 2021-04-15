@@ -3383,7 +3383,8 @@ pub fn run_doctest_owner(
 				true,
 				false,
 			)
-			.unwrap();
+			.unwrap()
+			.0;
 			w2.close().unwrap();
 		}
 		// Spit out slate for input to finalize_tx
@@ -3485,7 +3486,7 @@ macro_rules! doctest_helper_json_rpc_owner_assert_response {
 		// disable for now on windows
 		// TODO: Fix properly
 		#[cfg(not(target_os = "windows"))]
-			{
+		{
 			use grin_wallet_api::run_doctest_owner;
 			use serde_json;
 			use serde_json::Value;
@@ -3511,7 +3512,7 @@ macro_rules! doctest_helper_json_rpc_owner_assert_response {
 				$finalize_tx,
 				$payment_proof,
 				$compact_slate,
-				)
+			)
 			.unwrap()
 			.unwrap();
 
@@ -3521,8 +3522,8 @@ macro_rules! doctest_helper_json_rpc_owner_assert_response {
 					serde_json::to_string_pretty(&response).unwrap(),
 					serde_json::to_string_pretty(&expected_response).unwrap()
 				);
-				}
 			}
+		}
 	};
 }
 

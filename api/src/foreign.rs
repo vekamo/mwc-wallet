@@ -412,7 +412,7 @@ where
 			)?;
 		}
 
-		foreign::receive_tx(
+		let (slate, _context) = foreign::receive_tx(
 			&mut **w,
 			(&self.keychain_mask).as_ref(),
 			slate,
@@ -423,7 +423,8 @@ where
 			message,
 			self.doctest_mode,
 			true,
-		)
+		)?;
+		Ok(slate)
 	}
 
 	/// Finalizes an invoice transaction initiated by this wallet's Owner api.
@@ -500,6 +501,16 @@ where
 		)
 	}
 
+	// Processing marketplace message. Currently we can notify QT wallet that offer is accepted.
+	// And we can notify that offers are dropped.
+	pub fn marketplace_message(&self, message: &String) -> Result<String, Error> {
+		foreign::marketplace_message(
+			self.wallet_inst.clone(),
+			(&self.keychain_mask).as_ref(),
+			message,
+		)
+	}
+
 	// Utility method, not expected to be called from Foreign API.
 	pub fn decrypt_slate(
 		&self,
@@ -566,7 +577,7 @@ macro_rules! doctest_helper_setup_doc_env_foreign {
 
 		grin_wallet_util::grin_core::global::set_local_chain_type(
 			grin_wallet_util::grin_core::global::ChainTypes::AutomatedTesting,
-			);
+		);
 
 		let dir = tempdir().map_err(|e| format!("{:#?}", e)).unwrap();
 		let dir = dir
@@ -582,7 +593,7 @@ macro_rules! doctest_helper_setup_doc_env_foreign {
 		let node_client = HTTPNodeClient::new(node_list, None).unwrap();
 		let mut wallet = Box::new(
 			DefaultWalletImpl::<'static, HTTPNodeClient>::new(node_client.clone()).unwrap(),
-			)
+		)
 			as Box<
 				WalletInst<
 					'static,
@@ -590,7 +601,7 @@ macro_rules! doctest_helper_setup_doc_env_foreign {
 					HTTPNodeClient,
 					ExtKeychain,
 				>,
-				>;
+			>;
 		let lc = wallet.lc_provider().unwrap();
 		let _ = lc.set_top_level_directory(&wallet_config.data_file_dir);
 		lc.open_wallet(None, pw, false, false, None);

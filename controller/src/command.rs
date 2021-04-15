@@ -28,17 +28,29 @@ use crate::util::{Mutex, ZeroingString};
 use crate::{controller, display};
 use chrono::Utc;
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
-use grin_wallet_impls::adapters::{create_swap_message_sender, validate_tor_address};
+use grin_wallet_impls::adapters::{
+	create_swap_message_sender, validate_tor_address, MarketplaceMessageSender,
+};
+use grin_wallet_impls::tor;
+use grin_wallet_impls::{libp2p_messaging, HttpDataSender};
 use grin_wallet_impls::{Address, MWCMQSAddress, Publisher};
-use grin_wallet_libwallet::api_impl::owner_swap;
+use grin_wallet_libwallet::api_impl::{owner, owner_libp2p, owner_swap};
+use grin_wallet_libwallet::internal::selection;
 use grin_wallet_libwallet::proof::proofaddress::{self, ProvableAddress};
 use grin_wallet_libwallet::proof::tx_proof::TxProof;
 use grin_wallet_libwallet::slatepack::SlatePurpose;
-use grin_wallet_libwallet::swap::message;
+use grin_wallet_libwallet::swap::fsm::state::StateId;
 use grin_wallet_libwallet::swap::trades;
 use grin_wallet_libwallet::swap::types::Action;
+use grin_wallet_libwallet::swap::{message, Swap};
 use grin_wallet_libwallet::{Slate, TxLogEntry, WalletInst};
+use grin_wallet_util::grin_core::consensus::GRIN_BASE;
+use grin_wallet_util::grin_core::core::amount_to_hr_string;
+use grin_wallet_util::grin_p2p::{libp2p_connection, PeerAddr};
 use serde_json as json;
+use serde_json::json;
+use serde_json::{Map as JsonMap, Value as JsonValue};
+use std::collections::HashSet;
 use std::fs::File;
 use std::io;
 use std::io::{Read, Write};
@@ -168,6 +180,8 @@ where
 						&config.api_listen_addr(),
 						g_args.tls_conf.clone(),
 						tor_config.use_tor_listener,
+						&tor_config.socks_proxy_addr,
+						&config.libp2p_listen_port,
 					);
 					if let Err(e) = res {
 						error!("Error starting http listener: {}", e);
@@ -316,14 +330,15 @@ pub struct SendArgs {
 	pub outputs: Option<Vec<String>>, // Outputs to use. If None, all outputs can be used
 	pub slatepack_recipient: Option<ProvableAddress>, // Destination for slatepack. The address will be the same as for payment_proof_address. The role is different.
 	pub late_lock: bool,
+	pub min_fee: Option<u64>,
 }
 
 pub fn send<L, C, K>(
 	owner_api: &mut Owner<L, C, K>,
 	_config: &WalletConfig,
 	keychain_mask: Option<&SecretKey>,
-	api_listen_addr: String,
-	tls_conf: Option<TLSConfig>,
+	_api_listen_addr: String,
+	_tls_conf: Option<TLSConfig>,
 	tor_config: Option<TorConfig>,
 	mqs_config: Option<MQSConfig>,
 	args: SendArgs,
@@ -351,6 +366,7 @@ where
 					minimum_confirmations_change_outputs: args.minimum_confirmations_change_outputs,
 					address: args.address.clone(),
 					outputs: args.outputs.clone(),
+					min_fee: args.min_fee,
 					..Default::default()
 				};
 				let slate = api.init_send_tx(m, &init_args, 1)?;
@@ -375,6 +391,7 @@ where
 				minimum_confirmations_change_outputs: args.minimum_confirmations_change_outputs,
 				outputs: args.outputs.clone(),
 				late_lock: Some(args.late_lock),
+				min_fee: args.min_fee,
 				..Default::default()
 			};
 
@@ -403,31 +420,6 @@ where
 							false,
 							//None,
 						)?;
-						thread::sleep(Duration::from_millis(2000));
-					}
-				}
-				"http" => {
-					if !controller::is_foreign_api_running() {
-						let tor_config = tor_config.clone().ok_or(ErrorKind::GenericError(
-							"Tor configuration is not defined".to_string(),
-						))?;
-						let wallet_inst2 = wallet_inst.clone();
-						let km = keychain_mask.map(|k| k.clone());
-
-						let _api_thread = thread::Builder::new()
-							.name("wallet-http-listener".to_string())
-							.spawn(move || {
-								let res = controller::foreign_listener(
-									wallet_inst2,
-									Arc::new(Mutex::new(km)),
-									&api_listen_addr,
-									tls_conf,
-									tor_config.use_tor_listener,
-								);
-								if let Err(e) = res {
-									error!("Error starting http listener: {}", e);
-								}
-							});
 						thread::sleep(Duration::from_millis(2000));
 					}
 				}
@@ -1708,7 +1700,7 @@ pub struct SwapArgs {
 	/// Swap ID that will are working with
 	pub swap_id: Option<String>,
 	/// Action to process. Value must match expected
-	pub adjust: Option<String>,
+	pub adjust: Vec<String>,
 	/// Transport that can be used for interaction
 	pub method: Option<String>,
 	/// Destination for messages that needed to be send
@@ -1733,6 +1725,70 @@ pub struct SwapArgs {
 	pub electrum_node_uri2: Option<String>,
 	/// Need to wait for the first backup.
 	pub wait_for_backup1: bool,
+	/// Assign tag to this trade
+	pub tag: Option<String>,
+}
+
+// Integrity operation
+#[derive(PartialEq)]
+pub enum IntegritySubcommand {
+	Check,
+	Create,
+	Withdraw,
+}
+
+/// Arguments for the integrity command
+pub struct IntegrityArgs {
+	/// What we want to do with integrity kernels
+	pub subcommand: IntegritySubcommand,
+	/// Account name for Create and Withdraw.
+	pub account: Option<String>,
+	/// How much MWC to reserve in case if there are not enough funds.
+	pub reserve: Option<u64>,
+	/// How much fees to pay
+	pub fee: Vec<u64>,
+	/// Print output in Json format
+	pub json: bool,
+}
+
+/// Arguments for the messaging command
+pub struct MessagingArgs {
+	/// Show status of the messaging pool
+	pub show_status: bool,
+	/// Topic to add
+	pub add_topic: Option<String>,
+	/// The integrity fee to pay or filter
+	pub fee: Option<u64>,
+	/// The integrity fee transaction Uuid
+	pub fee_uuid: Option<Uuid>,
+	/// Topic to remove from listening
+	pub remove_topic: Option<String>,
+	/// Message to start publishing
+	pub publish_message: Option<String>,
+	/// Topic to start publishing the message
+	pub publish_topic: Option<String>,
+	/// Message publishing interval in second
+	pub publish_interval: Option<u32>,
+	/// Withdraw publishing of the message
+	pub withdraw_message_id: Option<String>,
+	/// Print new messages. If parameter is true - messages will be deleted form the buffer
+	pub receive_messages: Option<bool>,
+	/// Check if integrity message contexts are expired
+	pub check_integrity_expiration: bool,
+	/// Retain expired messages
+	pub check_integrity_retain: bool,
+	/// Print output in Json format
+	pub json: bool,
+}
+
+/// Arguments for send marketplace message
+pub struct SendMarketplaceMessageArgs {
+	/// marketplace command
+	pub command: String,
+	/// Offer id
+	pub offer_id: String,
+	/// wallet address to send the message
+	pub tor_address: String,
 }
 
 // For Json we can't use int 64, we have to convert all of them to Strings
@@ -1754,12 +1810,49 @@ pub struct SwapJournalRecordString {
 	pub message: String,
 }
 
+fn notify_about_cancelled_swaps<L, C, K>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
+	tor_config: TorConfig,
+	cancelled_swaps: Vec<Swap>,
+) where
+	L: WalletLCProvider<'static, C, K> + 'static,
+	C: NodeClient + 'static,
+	K: keychain::Keychain + 'static,
+{
+	if !cancelled_swaps.is_empty() {
+		// Notify peers about that async is fine
+		let keychain_mask = keychain_mask.map(|s| s.clone());
+		let _ = thread::Builder::new()
+			.name("cancelled_swaps_notification".to_string())
+			.spawn(move || {
+				for swap in cancelled_swaps {
+					if let Err(e) = send_marketplace_message(
+						wallet_inst.clone(),
+						keychain_mask.as_ref(),
+						&tor_config,
+						SendMarketplaceMessageArgs {
+							command: "fail_bidding".to_string(),
+							offer_id: swap.tag.clone().unwrap_or("????".to_string()),
+							tor_address: swap.communication_address.clone(),
+						},
+					) {
+						error!(
+							"Unable to send fail_bidding message to the wallet {}, {}",
+							swap.communication_address, e
+						);
+					}
+				}
+			});
+	}
+}
+
 pub fn swap<L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	api_listen_addr: String,
-	mqs_config: Option<MQSConfig>,
-	tor_config: Option<TorConfig>,
+	mqs_config: MQSConfig,
+	tor_config: TorConfig,
 	tls_conf: Option<TLSConfig>,
 	args: SwapArgs,
 	cli_mode: bool,
@@ -1776,12 +1869,19 @@ where
 	match args.subcommand {
 		SwapSubcommand::List | SwapSubcommand::ListAndCheck => {
 			let result = owner_swap::swap_list(
-				wallet_inst,
+				wallet_inst.clone(),
 				keychain_mask,
 				args.subcommand == SwapSubcommand::ListAndCheck,
 			);
 			match result {
-				Ok(list) => {
+				Ok((list, cancelled_swaps)) => {
+					notify_about_cancelled_swaps(
+						wallet_inst.clone(),
+						keychain_mask,
+						tor_config.clone(),
+						cancelled_swaps,
+					);
+
 					if args.json_format {
 						let mut res = Vec::new();
 
@@ -1793,6 +1893,7 @@ where
 								"secondary_amount" : swap_info.secondary_amount,
 								"secondary_currency" : swap_info.secondary_currency,
 								"swap_id": swap_info.swap_id,
+								"tag" : swap_info.tag.clone().unwrap_or("".to_string()),
 								"state" : swap_info.state.to_string(),
 								"state_cmd" : swap_info.state.to_cmd_str(),
 								"action" : swap_info.action.unwrap_or(Action::None).to_string(),
@@ -1846,10 +1947,6 @@ where
 				"Not found expected 'swap_id' argument".to_string(),
 			))?;
 
-			let adjast_cmd = args.adjust.ok_or(ErrorKind::ArgumentError(
-				"Not found expected 'adjust' argument".to_string(),
-			))?;
-
 			// Checking parameters here. We can't do that at libwallet side
 			if let Some(method) = args.method.clone() {
 				let destination = args.destination.clone().ok_or(ErrorKind::ArgumentError(
@@ -1887,34 +1984,41 @@ where
 				secondary_address = args.secondary_address.clone();
 			}
 
-			let result = owner_swap::swap_adjust(
-				wallet_inst,
-				keychain_mask,
-				&swap_id,
-				&adjast_cmd,
-				args.method.clone(),
-				args.destination.clone(),
-				secondary_address,
-				args.secondary_fee,
-				args.electrum_node_uri1,
-				args.electrum_node_uri2,
-			);
-			match result {
-				Ok((state, _action)) => {
-					println!(
-						"Swap trade {} was successfully adjusted. New state: {}",
-						swap_id, state
-					);
-					Ok(())
-				}
-				Err(e) => {
-					error!("Unable to adjust the Swap {}: {}", swap_id, e);
-					Err(
-						ErrorKind::LibWallet(format!("Unable to adjust Swap {}: {}", swap_id, e))
-							.into(),
-					)
+			let mut res_state = StateId::BuyerCancelled;
+			for adjust_cmd in args.adjust {
+				let result = owner_swap::swap_adjust(
+					wallet_inst.clone(),
+					keychain_mask,
+					&swap_id,
+					&adjust_cmd,
+					args.method.clone(),
+					args.destination.clone(),
+					secondary_address.clone(),
+					args.secondary_fee,
+					args.electrum_node_uri1.clone(),
+					args.electrum_node_uri2.clone(),
+					args.tag.clone(),
+				);
+				match result {
+					Ok((state, _action)) => {
+						res_state = state;
+					}
+					Err(e) => {
+						error!("Unable to adjust the Swap {}: {}", swap_id, e);
+						return Err(ErrorKind::LibWallet(format!(
+							"Unable to adjust Swap {}: {}",
+							swap_id, e
+						))
+						.into());
+					}
 				}
 			}
+
+			println!(
+				"Swap trade {} was successfully adjusted. New state: {}",
+				swap_id, res_state
+			);
+			Ok(())
 		}
 		SwapSubcommand::Check => {
 			let swap_id = args.swap_id.ok_or(ErrorKind::ArgumentError(
@@ -1945,6 +2049,7 @@ where
 
 								let item = json::json!({
 									"swapId" : swap.id.to_string(),
+									"tag": swap.tag.clone().unwrap_or("".to_string()),
 									"isSeller" : swap.is_seller(),
 									"mwcAmount": core::amount_to_hr_string(swap.primary_amount, true),
 									"secondaryCurrency" : swap.secondary_currency.to_string(),
@@ -1978,15 +2083,29 @@ where
 						}
 					};
 
-					let (_status, action, time_limit, roadmap, journal_records, last_error) =
-						owner_swap::update_swap_status_action(
-							wallet_inst.clone(),
-							keychain_mask,
-							&swap_id,
-							args.electrum_node_uri1,
-							args.electrum_node_uri2,
-							args.wait_for_backup1,
-						)?;
+					let (
+						_status,
+						action,
+						time_limit,
+						roadmap,
+						journal_records,
+						last_error,
+						cancelled_swaps,
+					) = owner_swap::update_swap_status_action(
+						wallet_inst.clone(),
+						keychain_mask,
+						&swap_id,
+						args.electrum_node_uri1,
+						args.electrum_node_uri2,
+						args.wait_for_backup1,
+					)?;
+
+					notify_about_cancelled_swaps(
+						wallet_inst.clone(),
+						keychain_mask,
+						tor_config.clone(),
+						cancelled_swaps,
+					);
 
 					let mwc_lock_time = if conf_status.mwc_tip < swap.refund_slate.lock_height {
 						Utc::now().timestamp() as u64
@@ -2080,6 +2199,7 @@ where
 			let apisecret = args.apisecret.clone();
 			let swap_id2 = swap_id.clone();
 			let wallet_inst2 = wallet_inst.clone();
+			let tor_config2 = tor_config.clone();
 			let message_sender = move |swap_message: message::Message,
 			                           method: String,
 			                           dest: String|
@@ -2094,7 +2214,7 @@ where
 						if grin_wallet_impls::adapters::get_mwcmqs_brocker().is_none() {
 							let _ = controller::start_mwcmqs_listener(
 								wallet_inst2,
-								mqs_config.expect("No MQS config found!").clone(),
+								mqs_config.clone(),
 								false,
 								Arc::new(Mutex::new(km)),
 								true,
@@ -2123,11 +2243,7 @@ where
 					}
 					"tor" => {
 						if !controller::is_foreign_api_running() {
-							let tor_config = tor_config.clone().ok_or(
-								crate::libwallet::ErrorKind::GenericError(
-									"Tor configuration is not defined".to_string(),
-								),
-							)?;
+							let tor_config = tor_config2.clone();
 							let _api_thread = thread::Builder::new()
 								.name("wallet-http-listener".to_string())
 								.spawn(move || {
@@ -2137,6 +2253,8 @@ where
 										&api_listen_addr,
 										tls_conf,
 										tor_config.use_tor_listener,
+										&tor_config.socks_proxy_addr,
+										&None,
 									);
 									if let Err(e) = res {
 										error!("Error starting http listener: {}", e);
@@ -2144,7 +2262,7 @@ where
 								});
 							thread::sleep(Duration::from_millis(2000));
 						}
-						from_address = controller::get_current_tor_address().ok_or(
+						from_address = tor::status::get_tor_address().ok_or(
 							crate::libwallet::ErrorKind::GenericError(
 								"Tor is not running".to_string(),
 							),
@@ -2178,7 +2296,7 @@ where
 					method.as_str(),
 					dest.as_str(),
 					&apisecret,
-					tor_config,
+					&tor_config2,
 				)
 				.map_err(|e| {
 					crate::libwallet::ErrorKind::SwapError(format!(
@@ -2210,7 +2328,7 @@ where
 			};
 
 			let result = owner_swap::swap_process(
-				wallet_inst,
+				wallet_inst.clone(),
 				keychain_mask,
 				&swap_id,
 				message_sender,
@@ -2224,7 +2342,15 @@ where
 			);
 
 			match result {
-				Ok(_) => Ok(()),
+				Ok((_, cancelled_swaps)) => {
+					notify_about_cancelled_swaps(
+						wallet_inst,
+						keychain_mask,
+						tor_config.clone(),
+						cancelled_swaps,
+					);
+					Ok(())
+				}
 				Err(e) => {
 					error!("Unable to process Swap {}: {}", swap_id, e);
 					Err(
@@ -2267,7 +2393,7 @@ where
 						// Startting MQS
 						let _ = controller::start_mwcmqs_listener(
 							wallet_inst,
-							mqs_config.expect("No MQS config found!").clone(),
+							mqs_config.clone(),
 							false,
 							Arc::new(Mutex::new(km)),
 							true,
@@ -2284,9 +2410,7 @@ where
 						}
 
 						// Starting tor
-						let tor_config = tor_config.clone().ok_or(ErrorKind::GenericError(
-							"Tor configuration is not defined".to_string(),
-						))?;
+						let tor_config = tor_config.clone();
 						let _api_thread = thread::Builder::new()
 							.name("wallet-http-listener".to_string())
 							.spawn(move || {
@@ -2296,6 +2420,8 @@ where
 									&api_listen_addr,
 									tls_conf,
 									tor_config.use_tor_listener,
+									&tor_config.socks_proxy_addr,
+									&None,
 								);
 								if let Err(e) = res {
 									error!("Error starting http listener: {}", e);
@@ -2352,7 +2478,7 @@ where
 						)
 						.into());
 					}
-					from_address = controller::get_current_tor_address()
+					from_address = tor::status::get_tor_address()
 						.ok_or(ErrorKind::GenericError("Tor is not running".to_string()))?;
 				}
 				_ => {
@@ -2376,7 +2502,7 @@ where
 					method.as_str(),
 					destination.as_str(),
 					&apisecret,
-					tor_config,
+					&tor_config,
 				)
 				.map_err(|e| {
 					crate::libwallet::ErrorKind::SwapError(format!(
@@ -2408,15 +2534,27 @@ where
 					args.electrum_node_uri1.clone(),
 					args.electrum_node_uri2.clone(),
 				)?;
-				let (state, action, time_limit, roadmap, journal_records, _last_error) =
-					owner_swap::update_swap_status_action(
-						wallet_inst2.clone(),
-						keychain_mask,
-						&swap_id,
-						args.electrum_node_uri1,
-						args.electrum_node_uri2,
-						args.wait_for_backup1,
-					)?;
+				let (
+					state,
+					action,
+					time_limit,
+					roadmap,
+					journal_records,
+					_last_error,
+					cancelled_swaps,
+				) = owner_swap::update_swap_status_action(
+					wallet_inst2.clone(),
+					keychain_mask,
+					&swap_id,
+					args.electrum_node_uri1,
+					args.electrum_node_uri2,
+					args.wait_for_backup1,
+				)?;
+
+				// cli is not supposed tto handle marketplace workflow. Just printing an error. We don't sending notifications
+				if !cancelled_swaps.is_empty() {
+					error!("Cli can be used for marketplace swap trades and swap tags. Some swaps was cancelled because of that. Please review your swap statuses.")
+				}
 
 				// Autoswap has to be sure that ALL parameters are defined. There are multiple steps and potentioly all of them can be used.
 				// We are checking them here because the swap object is known, so the second currency is known. And we can validate the data
@@ -2492,6 +2630,7 @@ where
 							roadmap,
 							mut journal_records,
 							mut last_error,
+							cancelled_swaps,
 						) = match owner_swap::update_swap_status_action(
 							wallet_inst2.clone(),
 							km2.as_ref(),
@@ -2506,6 +2645,10 @@ where
 								continue;
 							}
 						};
+
+						if !cancelled_swaps.is_empty() {
+							error!("Cli can be used for marketplace swap trades and swap tags. Some swaps was cancelled because of that. Please review your swap statuses.")
+						}
 
 						// If actin require execution - it must be executed
 						let mut was_executed = false;
@@ -2522,7 +2665,11 @@ where
 								None, None, // URIs was already updated before. No need to update the same.
 								wait_for_backup1,
 							) {
-								Ok(res) => {
+								Ok( (res, cancelled_swaps)) => {
+									if !cancelled_swaps.is_empty() {
+										error!("Cli can be used for marketplace swap trades and swap tags. Some swaps was cancelled because of that. Please review your swap statuses.")
+									}
+
 									curr_state = res.next_state_id;
 									last_error = res.last_error;
 									if let Some(a) = res.action {
@@ -2725,4 +2872,695 @@ where
 			Ok(())
 		}
 	}
+}
+
+/// integrity fee related operations
+pub fn integrity<L, C, K>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
+	args: IntegrityArgs,
+) -> Result<(), Error>
+where
+	L: WalletLCProvider<'static, C, K> + 'static,
+	C: NodeClient + 'static,
+	K: keychain::Keychain + 'static,
+{
+	// Let's do refresh first
+	let _ = owner::perform_refresh_from_node(wallet_inst.clone(), keychain_mask, &None)?;
+
+	let mut json_res = JsonMap::new();
+
+	match args.subcommand {
+		IntegritySubcommand::Check => {
+			let (_account, outputs, _tip_height, fee_transaction) =
+				owner_libp2p::get_integral_balance(wallet_inst.clone(), keychain_mask)?;
+
+			let (balance_str, integrity_balance) = if !outputs.is_empty() {
+				let integrity_balance: u64 = outputs.iter().map(|o| o.output.value).sum();
+				(
+					format!(
+						"Integrity balance is {} MWC.",
+						amount_to_hr_string(integrity_balance, true)
+					),
+					integrity_balance,
+				)
+			} else {
+				("Integrity balance is empty.".to_string(), 0)
+			};
+			json_res.insert(
+				"balance".to_string(),
+				JsonValue::from(integrity_balance.to_string()),
+			);
+
+			let fee_str = if fee_transaction.is_empty() {
+				"Fee is not paid.".to_string()
+			} else {
+				let mut res_str = String::new();
+				for (ic, conf) in &fee_transaction {
+					if !res_str.is_empty() {
+						res_str += ", ";
+					}
+					res_str += &format!(
+						"Fee {} MWC is active until block {}",
+						amount_to_hr_string(ic.fee, true),
+						ic.expiration_height,
+					);
+					if !conf {
+						res_str += " (not confirmed)"
+					}
+				}
+				res_str
+			};
+
+			if args.json {
+				let fee_tx: Vec<JsonValue> = fee_transaction
+					.iter()
+					.map(|(ic, conf)| {
+						let mut res = JsonMap::new();
+						res.insert("uuid".to_string(), JsonValue::from(ic.tx_uuid.to_string()));
+						res.insert("fee".to_string(), JsonValue::from(ic.fee.to_string()));
+						res.insert(
+							"expiration_height".to_string(),
+							JsonValue::from(ic.expiration_height),
+						);
+						res.insert("conf".to_string(), JsonValue::from(*conf));
+						JsonValue::from(res)
+					})
+					.collect();
+				json_res.insert("tx_fee".to_string(), JsonValue::from(fee_tx));
+			} else {
+				println!("{} {}", balance_str, fee_str);
+			}
+		}
+		IntegritySubcommand::Create => {
+			if args.fee.is_empty() {
+				return Err(ErrorKind::ArgumentError(
+					"Please specify comma separated integrity fee that you need to activate"
+						.to_string(),
+				)
+				.into());
+			}
+
+			let min_fee = args.fee.iter().min().unwrap_or(&0);
+			let min_integrity_fee =
+				selection::get_base_fee() * libp2p_connection::INTEGRITY_FEE_MIN_X;
+			if *min_fee < min_integrity_fee {
+				return Err(ErrorKind::ArgumentError(format!(
+					"The minimal accepted integrity fee is {} MWC",
+					amount_to_hr_string(min_integrity_fee, true)
+				))
+				.into());
+			}
+
+			let max_fee = args.fee.iter().max().unwrap_or(&0);
+			let reservation_amount = args
+				.reserve
+				.unwrap_or(std::cmp::max(GRIN_BASE, max_fee * 2));
+
+			let res = owner_libp2p::create_integral_balance(
+				wallet_inst.clone(),
+				keychain_mask,
+				reservation_amount, // 1 MWC is default reservation amount
+				&args.fee,
+				&args.account,
+			)?;
+
+			debug_assert!(args.fee.len() == res.len());
+
+			let mut report_str = String::new();
+			let mut fee_tx: Vec<JsonValue> = vec![];
+			for i in 0..args.fee.len() {
+				if !report_str.is_empty() {
+					report_str += ", ";
+				}
+
+				let mut tx_info = JsonMap::new();
+				let (ic, conf) = &res[i];
+				tx_info.insert(
+					"ask_fee".to_string(),
+					JsonValue::from(args.fee[i].to_string()),
+				);
+				match ic {
+					Some(ic) => {
+						tx_info.insert("uuid".to_string(), JsonValue::from(ic.tx_uuid.to_string()));
+						tx_info.insert("fee".to_string(), JsonValue::from(ic.fee.to_string()));
+						tx_info.insert(
+							"expiration_height".to_string(),
+							JsonValue::from(ic.expiration_height),
+						);
+						tx_info.insert("conf".to_string(), JsonValue::from(*conf));
+
+						report_str += &format!(
+							"Fee {} MWC is active until block {}",
+							amount_to_hr_string(ic.fee, true),
+							ic.expiration_height,
+						);
+						if !conf {
+							report_str += " (not confirmed)"
+						}
+					}
+					None => {
+						report_str += &format!(
+							"Fee {} MWC is pending",
+							amount_to_hr_string(args.fee[i], true)
+						);
+					}
+				}
+				fee_tx.push(JsonValue::from(tx_info));
+			}
+
+			if args.json {
+				json_res.insert("create_res".to_string(), JsonValue::from(fee_tx));
+			} else {
+				println!("{}", report_str);
+			}
+		}
+		IntegritySubcommand::Withdraw => {
+			let account = args.account.unwrap_or("default".to_string());
+			let withdraw_coins = owner_libp2p::withdraw_integral_balance(
+				wallet_inst.clone(),
+				keychain_mask,
+				&account,
+			)?;
+
+			if args.json {
+				json_res.insert(
+					"withdraw_coins".to_string(),
+					JsonValue::from(withdraw_coins),
+				);
+			} else {
+				if withdraw_coins > 0 {
+					println!(
+						"{} MWC was transferred to account {}",
+						amount_to_hr_string(withdraw_coins, true),
+						account
+					);
+				} else {
+					println!("There are no integrity funds to withdraw");
+				}
+			}
+		}
+	}
+
+	if args.json {
+		println!("JSON: {}", JsonValue::from(json_res));
+	}
+
+	Ok(())
+}
+
+/// integrity fee related operations
+pub fn messaging<L, C, K>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
+	args: MessagingArgs,
+) -> Result<(), Error>
+where
+	L: WalletLCProvider<'static, C, K> + 'static,
+	C: NodeClient + 'static,
+	K: keychain::Keychain + 'static,
+{
+	let mut json_res = JsonMap::new();
+
+	if args.show_status {
+		// Printing the status...
+		if !libp2p_connection::get_libp2p_running() {
+			if args.json {
+				json_res.insert("gossippub_peers".to_string(), JsonValue::Null);
+			} else {
+				println!("gossippub is not running");
+			}
+		} else {
+			let peers = libp2p_connection::get_libp2p_connections();
+			if args.json {
+				json_res.insert(
+					"gossippub_peers".to_string(),
+					JsonValue::from(
+						peers
+							.iter()
+							.map(|p| json!( { "peer": p.get_address().unwrap_or("".to_string()) }))
+							.collect::<Vec<JsonValue>>(),
+					),
+				);
+			} else {
+				println!(
+					"gossippub is running, peers: {}",
+					peers
+						.iter()
+						.map(|p| p.to_string())
+						.collect::<Vec<String>>()
+						.join(", ")
+				);
+			}
+			if peers.len() == 0 {
+				// let's add peer is possible
+				let mut w_lock = wallet_inst.lock();
+				let w = w_lock.lc_provider()?.wallet_inst()?;
+				match w.w2n_client().get_libp2p_peers() {
+					Ok(libp2p_peers) => {
+						for addr in libp2p_peers.libp2p_peers {
+							libp2p_connection::add_new_peer(&PeerAddr::Onion(addr.clone()))
+								.map_err(|e| {
+									ErrorKind::GenericError(format!(
+										"Failed to add libp2p peer, {}",
+										e
+									))
+								})?;
+							if !args.json {
+								println!("Joining the node peer at {}", addr);
+							}
+						}
+						// Use all peers. Faster we join is better
+						for addr in libp2p_peers.node_peers {
+							libp2p_connection::add_new_peer(&PeerAddr::Onion(addr.clone()))
+								.map_err(|e| {
+									ErrorKind::GenericError(format!(
+										"Failed to add libp2p peer, {}",
+										e
+									))
+								})?;
+							if !args.json {
+								println!("Joining the node peer at {}", addr);
+							}
+						}
+					}
+					Err(e) => {
+						println!(
+							"ERROR: Unable to contact the mwc node to get address to join, {}",
+							e
+						);
+					}
+				}
+				// Adding seed nodes. Those onion addresses must match what we have for seeds.
+				// Please note, it is a secondary source, the primary source is the wallet's node
+				if global::is_mainnet() {
+					libp2p_connection::add_new_peer(&PeerAddr::Onion(
+						"bsvrlu2vab3frt24bqwkfo5kqm35v2pmlv3dvqg5bgc72a3cwyizuyqd.onion"
+							.to_string(),
+					))
+					.map_err(|e| {
+						ErrorKind::GenericError(format!("Failed to add libp2p peer, {}", e))
+					})?;
+					libp2p_connection::add_new_peer(&PeerAddr::Onion(
+						"r6dkxkiyg5grfhyftj3cusxvxm34e63lg5ed2zy4zbrwh4pwrcmvmpid.onion"
+							.to_string(),
+					))
+					.map_err(|e| {
+						ErrorKind::GenericError(format!("Failed to add libp2p peer, {}", e))
+					})?;
+				} else {
+					libp2p_connection::add_new_peer(&PeerAddr::Onion(
+						"nvo4xrfnn46vhaocnswea564bnmbgfjib7fqpa2my3e3ren4iujnzeyd.onion"
+							.to_string(),
+					))
+					.map_err(|e| {
+						ErrorKind::GenericError(format!("Failed to add libp2p peer, {}", e))
+					})?;
+					libp2p_connection::add_new_peer(&PeerAddr::Onion(
+						"627qgblkpc4ayr5fe6tfg6ryhev7kmjhge2ualab7ajxk5gbs3v7bmqd.onion"
+							.to_string(),
+					))
+					.map_err(|e| {
+						ErrorKind::GenericError(format!("Failed to add libp2p peer, {}", e))
+					})?;
+				}
+			}
+		}
+
+		let cur_time = Utc::now().timestamp();
+		if args.json {
+			json_res.insert(
+				"topics".to_string(),
+				JsonValue::from(
+					libp2p_messaging::get_topics()
+						.iter()
+						.map(|t| JsonValue::from(t.0.clone()))
+						.collect::<Vec<JsonValue>>(),
+				),
+			);
+			json_res.insert(
+				"broadcasting".to_string(),
+				JsonValue::from(
+					libp2p_messaging::get_broadcasting_messages()
+						.iter()
+						.map(|msg| {
+							json!( {
+							"uuid" : msg.uuid.to_string(),
+							"fee" : msg.integrity_ctx.fee.to_string(),
+							"broadcasting_interval" : msg.broadcasting_interval,
+							"published_time" : cur_time-msg.last_time_published,
+							"message" : msg.message,
+							})
+						})
+						.collect::<Vec<JsonValue>>(),
+				),
+			);
+			json_res.insert(
+				"received_messages".to_string(),
+				JsonValue::from(libp2p_messaging::get_received_messages_num()),
+			);
+		} else {
+			let listening_topics = libp2p_messaging::get_topics();
+			let mut topics_str = listening_topics
+				.iter()
+				.map(|t| t.0.clone())
+				.collect::<Vec<String>>()
+				.join(", ");
+			if topics_str.is_empty() {
+				topics_str = "None".to_string();
+			}
+			println!("Topics: {}", topics_str);
+
+			let active_messages = libp2p_messaging::get_broadcasting_messages();
+			println!("Broadcasting messages: {}", active_messages.len());
+			for msg in &active_messages {
+				println!(
+					"  UUID: {}, Fee: {} MWC, Interval {} sec, Published {}, Message: {}",
+					msg.uuid,
+					amount_to_hr_string(msg.integrity_ctx.fee, true),
+					msg.broadcasting_interval,
+					cur_time - msg.last_time_published,
+					msg.message
+				);
+			}
+
+			println!(
+				"Received messages: {}",
+				libp2p_messaging::get_received_messages_num()
+			)
+		}
+	}
+
+	// Adding topics
+	if args.add_topic.is_some() {
+		let new_topic = args.add_topic.clone().unwrap();
+		if libp2p_messaging::add_topic(&new_topic, args.fee.clone().unwrap_or(0)) {
+			if args.json {
+				json_res.insert("add_topic".to_string(), JsonValue::from(new_topic));
+			} else {
+				println!("You are subscribed to a new topic {}", new_topic);
+			}
+		} else {
+			if args.json {
+				json_res.insert("new_topic".to_string(), json!(null));
+			} else {
+				println!("Wallet is already subscribed to a new topic {}", new_topic);
+			}
+		}
+	}
+
+	if args.remove_topic.is_some() {
+		let remove_topic = args.remove_topic.clone().unwrap();
+		if libp2p_messaging::remove_topic(&remove_topic) {
+			if args.json {
+				json_res.insert("remove_topic".to_string(), JsonValue::from(remove_topic));
+			} else {
+				println!("You are unsubscribed from the topic {}", remove_topic);
+			}
+		} else {
+			if args.json {
+				json_res.insert("remove_topic".to_string(), json!(null));
+			} else {
+				println!("Wallet is not subscribed to the topic {}", remove_topic);
+			}
+		}
+	}
+
+	if args.publish_message.is_some() {
+		let publish_message = args.publish_message.unwrap();
+		let publish_topic = args.publish_topic.ok_or(ErrorKind::ArgumentError(
+			"Please specify publish topic".to_string(),
+		))?;
+		let publish_interval = args.publish_interval.ok_or(ErrorKind::ArgumentError(
+			"Please specify message publishing interval value".to_string(),
+		))?;
+		if publish_interval < 60 {
+			return Err(ErrorKind::ArgumentError(
+				"Message publishing interval minimal value is 60 seconds".to_string(),
+			)
+			.into());
+		}
+		let min_fee = selection::get_base_fee() * libp2p_connection::INTEGRITY_FEE_MIN_X;
+		let fee = args.fee.unwrap_or(min_fee);
+		if fee < min_fee {
+			return Err(ErrorKind::ArgumentError(format!(
+				"Please specify fee higher than minimal integrity fee {}",
+				amount_to_hr_string(min_fee, true)
+			))
+			.into());
+		}
+
+		// Let's check if message already running, so we can reuse integrity context
+		let running_messages = libp2p_messaging::get_broadcasting_messages();
+		let mut context = match running_messages
+			.iter()
+			.filter(|m| m.message == publish_message)
+			.next()
+		{
+			Some(msg) => Some(msg.integrity_ctx.clone()),
+			None => None,
+		};
+
+		if context.is_some() {
+			if args.fee_uuid.is_some() {
+				if context.as_ref().unwrap().tx_uuid != *args.fee_uuid.as_ref().unwrap() {
+					context = None;
+				}
+			} else {
+				if context.as_ref().unwrap().fee < fee {
+					// We need higher fee, we can't reuse it...
+					context = None;
+				}
+			}
+		}
+
+		if context.is_none() {
+			let used_ctx_uuid: HashSet<Uuid> = running_messages
+				.iter()
+				.map(|msg| msg.integrity_ctx.tx_uuid.clone())
+				.collect();
+			// Let's try to find the Context with fees.
+			let (_account, _outputs, _tip_height, fee_transaction) =
+				owner_libp2p::get_integral_balance(wallet_inst.clone(), keychain_mask)?;
+
+			context = if args.fee_uuid.is_some() {
+				let fee_uuid = args.fee_uuid.clone().unwrap();
+				if used_ctx_uuid.contains(&fee_uuid) {
+					return Err(ErrorKind::GenericError(
+						"Fee uuid {} if already used for another transaction".to_string(),
+					)
+					.into());
+				}
+				fee_transaction
+					.iter()
+					.filter(|(ctx, conf)| {
+						*conf && !used_ctx_uuid.contains(&ctx.tx_uuid) && ctx.tx_uuid == fee_uuid
+					})
+					.map(|(ctx, _conf)| ctx.clone())
+					.next()
+			} else {
+				fee_transaction
+					.iter()
+					.filter(|(ctx, conf)| {
+						*conf && !used_ctx_uuid.contains(&ctx.tx_uuid) && ctx.fee >= fee
+					})
+					.map(|(ctx, _conf)| ctx.clone())
+					.next()
+			};
+		}
+
+		if context.is_none() {
+			return Err(ErrorKind::GenericError(
+				"Not found integrity context with paid fee".to_string(),
+			)
+			.into());
+		}
+
+		let mkt_message =
+			serde_json::from_str::<serde_json::Value>(&publish_message).map_err(|e| {
+				ErrorKind::GenericError(format!(
+					"Unable to parse the message {}, {}",
+					publish_message, e
+				))
+			})?;
+		let offer_id = mkt_message["id"].as_str().ok_or(ErrorKind::GenericError(
+			"Not found expected offer id".to_string(),
+		))?;
+
+		let uuid = libp2p_messaging::add_broadcasting_messages(
+			&publish_topic,
+			&publish_message,
+			publish_interval,
+			context.unwrap(),
+		)?;
+
+		owner_swap::add_published_offer(offer_id.to_string(), uuid);
+
+		if args.json {
+			json_res.insert(
+				"published_message".to_string(),
+				JsonValue::from(uuid.to_string()),
+			);
+		} else {
+			println!("The messages is published. ID {}", uuid);
+		}
+	}
+
+	if let Some(withdraw_message_id) = args.withdraw_message_id {
+		let uuid = match Uuid::parse_str(&withdraw_message_id) {
+			Ok(uuid) => uuid,
+			Err(e) => {
+				return Err(ErrorKind::ArgumentError(format!(
+					"Unable to parse withdraw_message_id UUID value, {}",
+					e
+				))
+				.into())
+			}
+		};
+		owner_swap::remove_published_offer(&uuid);
+		if libp2p_messaging::remove_broadcasting_message(&uuid) {
+			if args.json {
+				json_res.insert(
+					"remove_message".to_string(),
+					JsonValue::from(uuid.to_string()),
+				);
+			} else {
+				println!("Message {} is removed", uuid);
+			}
+		} else {
+			if args.json {
+				json_res.insert("remove_message".to_string(), json!(null));
+			} else {
+				println!("Not found message {}", uuid);
+			}
+		}
+	}
+
+	if let Some(remove) = args.receive_messages {
+		let messages = libp2p_messaging::get_received_messages(remove);
+		if args.json {
+			json_res.insert(
+				"receive_messages".to_string(),
+				JsonValue::from(
+					messages
+						.iter()
+						.map(|msg| {
+							json!({ "topic": msg.topic.to_string(),
+								"fee": msg.fee.to_string(),
+								"message": msg.message,
+								"wallet" : msg.peer_id.get_address().unwrap_or("".to_string()),
+							})
+						})
+						.collect::<Vec<JsonValue>>(),
+				),
+			);
+		} else {
+			println!("There are {} messages in receive buffer.", messages.len());
+			for m in &messages {
+				println!(
+					"  wallet: {}, topic: {}, fee: {}, message: {}",
+					m.peer_id.get_address().unwrap_or("".to_string()),
+					m.topic,
+					amount_to_hr_string(m.fee, true),
+					m.message
+				);
+			}
+		}
+	}
+
+	if args.check_integrity_expiration {
+		let tip_height = {
+			let mut w_lock = wallet_inst.lock();
+			let w = w_lock.lc_provider()?.wallet_inst()?;
+			w.w2n_client().get_chain_tip()?.0
+		};
+
+		let expired_msgs = libp2p_messaging::check_integrity_context_expiration(
+			tip_height,
+			args.check_integrity_retain,
+		);
+
+		if args.check_integrity_retain {
+			for msg in &expired_msgs {
+				owner_swap::remove_published_offer(&msg.uuid);
+			}
+		}
+
+		if args.json {
+			json_res.insert(
+				"expired_msgs".to_string(),
+				JsonValue::from(
+					expired_msgs
+						.iter()
+						.map(|msg| {
+							json!({ "uuid": msg.uuid.to_string(),
+								"topic": msg.topic.to_string(),
+								"message": msg.message
+							})
+						})
+						.collect::<Vec<JsonValue>>(),
+				),
+			);
+		} else {
+			println!("You have {} expired messages", expired_msgs.len());
+			for m in &expired_msgs {
+				println!(
+					"  UUID: {}, Topic: {}, Message: {}",
+					m.uuid, m.topic, m.message
+				);
+			}
+		}
+	}
+
+	if args.json {
+		println!("JSON: {}", JsonValue::from(json_res));
+	}
+
+	Ok(())
+}
+
+/// integrity fee related operations
+pub fn send_marketplace_message<L, C, K>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
+	tor_config: &TorConfig,
+	args: SendMarketplaceMessageArgs,
+) -> Result<(), Error>
+where
+	L: WalletLCProvider<'static, C, K> + 'static,
+	C: NodeClient + 'static,
+	K: keychain::Keychain + 'static,
+{
+	if !controller::is_foreign_api_running() {
+		return Err(ErrorKind::GenericError(
+			"TOR is not running. Please start tor listener for your wallet".to_string(),
+		)
+		.into());
+	}
+
+	let dest = validate_tor_address(&args.tor_address)?;
+
+	let sender = HttpDataSender::with_socks_proxy(
+		&dest,
+		None, // It is foreign API, no secret
+		&tor_config.socks_proxy_addr,
+		Some(tor_config.send_config_dir.clone()),
+		tor_config.socks_running,
+	)
+	.map_err(|e| ErrorKind::GenericError(format!("Unable to create HTTP client to send, {}", e)))?;
+
+	let tor_pk = owner::get_wallet_public_address(wallet_inst.clone(), keychain_mask)?;
+	let tor_addr = ProvableAddress::from_tor_pub_key(&tor_pk);
+
+	let this_tor_address = tor_addr.to_string();
+
+	let message = json!({
+		"command": args.command,
+		"from": this_tor_address,
+		"offer_id": args.offer_id,
+	});
+
+	let response = sender.send_swap_marketplace_message(&message.to_string())?;
+	println!("JSON: {}", response);
+	Ok(())
 }

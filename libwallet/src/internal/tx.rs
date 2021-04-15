@@ -101,6 +101,7 @@ where
 pub fn estimate_send_tx<'a, T: ?Sized, C, K>(
 	wallet: &mut T,
 	amount: u64,
+	min_fee: &Option<u64>,
 	minimum_confirmations: u64,
 	max_outputs: usize,
 	num_change_outputs: usize,
@@ -136,6 +137,7 @@ where
 	let (_coins, total, _amount, fee) = selection::select_coins_and_fee(
 		wallet,
 		amount,
+		min_fee,
 		current_height,
 		minimum_confirmations,
 		max_outputs,
@@ -156,6 +158,7 @@ pub fn add_inputs_to_slate<'a, T: ?Sized, C, K>(
 	wallet: &mut T,
 	keychain_mask: Option<&SecretKey>,
 	slate: &mut Slate,
+	min_fee: &Option<u64>,
 	minimum_confirmations: u64,
 	max_outputs: usize,
 	num_change_outputs: usize,
@@ -189,6 +192,7 @@ where
 		&keychain,
 		keychain_mask,
 		slate,
+		min_fee,
 		minimum_confirmations,
 		max_outputs,
 		num_change_outputs,
@@ -327,6 +331,7 @@ where
 	let (_coins, _total, _amount, fee) = selection::select_coins_and_fee(
 		wallet,
 		init_tx_args.amount,
+		&init_tx_args.min_fee,
 		current_height,
 		init_tx_args.minimum_confirmations,
 		init_tx_args.max_outputs as usize,

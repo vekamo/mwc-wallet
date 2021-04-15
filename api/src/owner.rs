@@ -2366,7 +2366,7 @@ where
 		&self,
 		keychain_mask: Option<&SecretKey>,
 		do_check: bool,
-	) -> Result<Vec<owner_swap::SwapListInfo>, Error> {
+	) -> Result<(Vec<owner_swap::SwapListInfo>, Vec<Swap>), Error> {
 		owner_swap::swap_list(self.wallet_inst.clone(), keychain_mask, do_check)
 	}
 
@@ -2400,6 +2400,7 @@ where
 		secondary_fee: Option<f32>,
 		electrum_node_uri1: Option<String>,
 		electrum_node_uri2: Option<String>,
+		tag: Option<String>,
 	) -> Result<(StateId, Action), Error> {
 		owner_swap::swap_adjust(
 			self.wallet_inst.clone(),
@@ -2412,6 +2413,7 @@ where
 			secondary_fee,
 			electrum_node_uri1,
 			electrum_node_uri2,
+			tag,
 		)
 	}
 
@@ -2425,7 +2427,7 @@ where
 	}
 
 	/// Refresh and get a status and current expected action for the swap.
-	/// return: <state>, <Action>, <time limit>, <Readmap lines>, <Journal records>
+	/// return: <state>, <Action>, <time limit>, <Roadmap lines>, <Journal records>, <last error> , <mkt place cancelled trades>
 	/// time limit shows when this action will be expired
 	pub fn update_swap_status_action(
 		&self,
@@ -2441,6 +2443,7 @@ where
 			Vec<StateEtaInfo>,
 			Vec<SwapJournalRecord>,
 			Option<String>,
+			Vec<Swap>,
 		),
 		Error,
 	> {
@@ -2482,7 +2485,7 @@ where
 		secondary_address: Option<String>,
 		electrum_node_uri1: Option<String>,
 		electrum_node_uri2: Option<String>,
-	) -> Result<StateProcessRespond, Error>
+	) -> Result<(StateProcessRespond, Vec<Swap>), Error>
 	where
 		F: FnOnce(Message, String, String) -> Result<(bool, String), crate::libwallet::Error>
 			+ 'static,
@@ -2605,7 +2608,7 @@ macro_rules! doctest_helper_setup_doc_env {
 
 		grin_wallet_util::grin_core::global::set_local_chain_type(
 			grin_wallet_util::grin_core::global::ChainTypes::AutomatedTesting,
-			);
+		);
 
 		let dir = tempdir().map_err(|e| format!("{:#?}", e)).unwrap();
 		let dir = dir
@@ -2621,7 +2624,7 @@ macro_rules! doctest_helper_setup_doc_env {
 		let node_client = HTTPNodeClient::new(node_list, None).unwrap();
 		let mut wallet = Box::new(
 			DefaultWalletImpl::<'static, HTTPNodeClient>::new(node_client.clone()).unwrap(),
-			)
+		)
 			as Box<
 				WalletInst<
 					'static,
@@ -2629,7 +2632,7 @@ macro_rules! doctest_helper_setup_doc_env {
 					HTTPNodeClient,
 					ExtKeychain,
 				>,
-				>;
+			>;
 		let lc = wallet.lc_provider().unwrap();
 		let _ = lc.set_top_level_directory(&wallet_config.data_file_dir);
 		lc.open_wallet(None, pw, false, false, None);

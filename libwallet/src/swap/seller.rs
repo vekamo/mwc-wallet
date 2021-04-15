@@ -61,6 +61,8 @@ impl SellApi {
 		buyer_destination_address: String,
 		electrum_node_uri1: Option<String>,
 		electrum_node_uri2: Option<String>,
+		dry_run: bool,
+		tag: Option<String>,
 	) -> Result<Swap, ErrorKind> {
 		#[cfg(test)]
 		let test_mode = is_test_mode();
@@ -133,6 +135,8 @@ impl SellApi {
 			last_process_error: None,
 			last_check_error: None,
 			wait_for_backup1: false,
+			tag,
+			other_lock_first_done: false,
 		};
 
 		swap.add_journal_message("Swap offer created".to_string());
@@ -159,11 +163,13 @@ impl SellApi {
 			refund_slate.id = Uuid::parse_str("703fac15-913c-4e66-a7c2-5f648ca4ca7d").unwrap();
 		}
 		refund_slate.fee = tx_fee(1, 1, 1, None);
-		if primary_amount <= refund_slate.fee {
-			return Err(ErrorKind::Generic(
-				"MWC amount to trade is too low, it doesn't cover the fees".to_string(),
-			)
-			.into());
+		if !(dry_run && primary_amount == 0) {
+			if primary_amount <= refund_slate.fee {
+				return Err(ErrorKind::Generic(
+					"MWC amount to trade is too low, it doesn't cover the fees".to_string(),
+				)
+				.into());
+			}
 		}
 
 		refund_slate.height = height;
@@ -197,21 +203,28 @@ impl SellApi {
 		}
 
 		// TODO: no change output if amounts match up exactly
-		if sum_in <= primary_amount + lock_slate.fee {
-			return Err(ErrorKind::InsufficientFunds(
-				primary_amount + lock_slate.fee + 1,
-				sum_in,
-			));
-		}
-		let change = sum_in - primary_amount - lock_slate.fee;
+		let change = if !(dry_run && primary_amount == 0) {
+			if sum_in <= primary_amount + lock_slate.fee {
+				return Err(ErrorKind::InsufficientFunds(
+					primary_amount + lock_slate.fee + 1,
+					sum_in,
+				));
+			}
+			// change
+			sum_in - primary_amount - lock_slate.fee
+		} else {
+			0
+		};
 
 		secondary_currency.validate_address(&secondary_redeem_address)?;
 		swap.role = Role::Seller(secondary_redeem_address, change);
 
-		Self::build_multisig(keychain, &mut swap, context)?;
-		Self::build_lock_slate(keychain, &mut swap, context)?;
-		Self::build_refund_slate(keychain, &mut swap, context)?;
-		Self::build_redeem_participant(keychain, &mut swap, context)?;
+		if !dry_run {
+			Self::build_multisig(keychain, &mut swap, context)?;
+			Self::build_lock_slate(keychain, &mut swap, context)?;
+			Self::build_refund_slate(keychain, &mut swap, context)?;
+			Self::build_redeem_participant(keychain, &mut swap, context)?;
+		}
 
 		Ok(swap)
 	}

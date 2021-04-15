@@ -70,6 +70,8 @@ pub trait SwapApi<K: Keychain>: Sync + Send {
 		buyer_destination_address: String,
 		electrum_node_uri1: Option<String>,
 		electrum_node_uri2: Option<String>,
+		dry_run: bool,
+		tag: Option<String>,
 	) -> Result<Swap, ErrorKind>;
 
 	/// get state machine fro this trade.

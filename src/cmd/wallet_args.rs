@@ -47,6 +47,7 @@ use linefeed::{Interface, ReadResult};
 use rpassword;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use uuid::Uuid;
 
 // define what to do on argument error
 macro_rules! arg_parse {
@@ -55,8 +56,8 @@ macro_rules! arg_parse {
 			Ok(res) => res,
 			Err(e) => {
 				return Err(ErrorKind::ArgumentError(format!("{}", e)).into());
-				}
 			}
+		}
 	};
 }
 /// Simple error definition, just so we can return errors from all commands
@@ -389,6 +390,10 @@ pub fn parse_listen_args(
 	if let Some(port) = args.value_of("port") {
 		config.api_listen_port = port.parse().unwrap();
 	}
+	if let Some(port) = args.value_of("libp2p_port") {
+		config.libp2p_listen_port = Some(port.parse().unwrap());
+	}
+
 	let method = parse_required(args, "method")?;
 	if args.is_present("no_tor") {
 		tor_config.use_tor_listener = false;
@@ -586,6 +591,19 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 		None => None,
 	};
 
+	let min_fee = match args.value_of("min_fee") {
+		Some(min_fee) => match core::core::amount_from_hr_string(min_fee) {
+			Ok(min_fee) => Some(min_fee),
+			Err(e) => {
+				return Err(ParseError::ArgumentError(format!(
+					"Could not parse minimal fee as a number, {}",
+					e
+				)))
+			}
+		},
+		None => None,
+	};
+
 	if minimum_confirmations_change_outputs_is_present && !exclude_change_outputs {
 		Err(ArgumentError("minimum_confirmations_change_outputs may only be specified if exclude_change_outputs is set".to_string()))
 	} else {
@@ -610,6 +628,7 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 			outputs,
 			slatepack_recipient,
 			late_lock,
+			min_fee,
 		})
 	}
 }
@@ -1057,6 +1076,9 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 
 	Ok(SwapStartArgs {
 		mwc_amount,
+		outputs: args
+			.value_of("outputs")
+			.map(|s| s.split(",").map(|s| s.to_string()).collect::<Vec<String>>()),
 		secondary_currency: secondary_currency.to_string(),
 		secondary_amount: btc_amount.to_string(),
 		secondary_redeem_address: btc_address.to_string(),
@@ -1072,12 +1094,16 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 		electrum_node_uri1,
 		electrum_node_uri2,
 		dry_run,
+		tag: args.value_of("tag").map(|s| s.to_string()),
 	})
 }
 
 pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseError> {
 	let swap_id = args.value_of("swap_id").map(|s| String::from(s));
-	let adjust = args.value_of("adjust").map(|s| String::from(s));
+	let adjust = args
+		.value_of("adjust")
+		.map(|s| s.split(",").map(|s| String::from(s)).collect())
+		.unwrap_or(vec![]);
 	let method = args.value_of("method").map(|s| String::from(s));
 	let mut destination = args.value_of("dest").map(|s| String::from(s));
 	let apisecret = args.value_of("apisecret").map(|s| String::from(s));
@@ -1112,7 +1138,7 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 	} else if args.is_present("trade_import") {
 		destination = args.value_of("trade_import").map(|s| String::from(s));
 		command::SwapSubcommand::TradeImport
-	} else if adjust.is_some() {
+	} else if !adjust.is_empty() {
 		command::SwapSubcommand::Adjust
 	} else if args.is_present("autoswap") {
 		command::SwapSubcommand::Autoswap
@@ -1143,6 +1169,94 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		electrum_node_uri1,
 		electrum_node_uri2,
 		wait_for_backup1: false, // waiting is a primary usage for qt wallet. We are not documented that properly to make available for all users.
+		tag: args.value_of("tag").map(|s| String::from(s)),
+	})
+}
+
+pub fn parse_integrity_args(args: &ArgMatches) -> Result<command::IntegrityArgs, ParseError> {
+	let mut fee = vec![];
+	let subcommand = if args.is_present("check") {
+		command::IntegritySubcommand::Check
+	} else if args.is_present("fee") {
+		let fee_str = parse_required(args, "fee")?.split(",");
+		for fs in fee_str {
+			let fee_amount = core::core::amount_from_hr_string(fs).map_err(|e| {
+				ParseError::ArgumentError(format!("Unable to parse create fee amount, {}", e))
+			})?;
+			fee.push(fee_amount);
+		}
+		command::IntegritySubcommand::Create
+	} else if args.is_present("withdraw") {
+		command::IntegritySubcommand::Withdraw
+	} else {
+		return Err(ParseError::ArgumentError(
+			"Expected check, create or withdraw parameter".to_string(),
+		));
+	};
+
+	let reserve = match args.value_of("reserve") {
+		Some(str) => Some(core::core::amount_from_hr_string(str).map_err(|e| {
+			ParseError::ArgumentError(format!("Unable to parse reserve MWC value, {}", e))
+		})?),
+		None => None,
+	};
+	let account = args.value_of("account").map(|s| String::from(s));
+
+	Ok(command::IntegrityArgs {
+		subcommand,
+		account,
+		reserve,
+		fee,
+		json: args.is_present("json"),
+	})
+}
+
+pub fn parse_messaging_args(args: &ArgMatches) -> Result<command::MessagingArgs, ParseError> {
+	let fee = match args.value_of("fee") {
+		Some(s) => Some(core::core::amount_from_hr_string(s).map_err(|e| {
+			ParseError::ArgumentError(format!("Unable to parse create fee amount, {}", e))
+		})?),
+		None => None,
+	};
+
+	let fee_uuid = match args.value_of("fee_uuid") {
+		Some(s) => Some(Uuid::parse_str(s).map_err(|e| {
+			ParseError::ArgumentError(format!("Unable to parse fee_uuid value, {}", e))
+		})?),
+		None => None,
+	};
+
+	let publish_interval = match args.value_of("publish_interval") {
+		Some(s) => Some(s.parse::<u32>().map_err(|e| {
+			ParseError::ArgumentError(format!("Unable to parse interval value, {}", e))
+		})?),
+		None => None,
+	};
+
+	Ok(command::MessagingArgs {
+		show_status: args.is_present("status"),
+		add_topic: args.value_of("add_topic").map(|s| String::from(s)),
+		fee,
+		fee_uuid,
+		remove_topic: args.value_of("remove_topic").map(|s| String::from(s)),
+		publish_message: args.value_of("publish_message").map(|s| String::from(s)),
+		publish_topic: args.value_of("publish_topic").map(|s| String::from(s)),
+		publish_interval,
+		withdraw_message_id: args.value_of("message_uuid").map(|s| String::from(s)),
+		receive_messages: args.value_of("delete_messages").map(|s| s == "yes"),
+		check_integrity_expiration: args.is_present("check_integrity"),
+		check_integrity_retain: args.is_present("check_integrity_retain"),
+		json: args.is_present("json"),
+	})
+}
+
+pub fn parse_send_marketplace_message(
+	args: &ArgMatches,
+) -> Result<command::SendMarketplaceMessageArgs, ParseError> {
+	Ok(command::SendMarketplaceMessageArgs {
+		command: parse_required(args, "command")?.to_string(),
+		offer_id: parse_required(args, "offer_id")?.to_string(),
+		tor_address: parse_required(args, "tor_address")?.to_string(),
 	})
 }
 
@@ -1546,12 +1660,24 @@ where
 				owner_api.wallet_inst.clone(),
 				km,
 				wallet_config.api_listen_addr(),
-				Some(mqs_config.clone()),
-				Some(tor_config.clone()),
+				mqs_config.clone(),
+				tor_config.clone(),
 				global_wallet_args.tls_conf.clone(),
 				a,
 				cli_mode,
 			)
+		}
+		("integrity", Some(args)) => {
+			let a = arg_parse!(parse_integrity_args(&args));
+			command::integrity(owner_api.wallet_inst.clone(), km, a)
+		}
+		("messaging", Some(args)) => {
+			let a = arg_parse!(parse_messaging_args(&args));
+			command::messaging(owner_api.wallet_inst.clone(), km, a)
+		}
+		("send_marketplace_message", Some(args)) => {
+			let a = arg_parse!(parse_send_marketplace_message(&args));
+			command::send_marketplace_message(owner_api.wallet_inst.clone(), km, tor_config, a)
 		}
 		(cmd, _) => {
 			return Err(ErrorKind::ArgumentError(format!(

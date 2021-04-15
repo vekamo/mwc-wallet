@@ -29,10 +29,11 @@ use crate::grin_util::secp::{self, pedersen, Secp256k1};
 use crate::grin_util::ZeroingString;
 use crate::proof::proofaddress::ProvableAddress;
 use crate::slate::ParticipantMessages;
-use crate::InitTxArgs;
 use crate::Slate;
+use crate::{InitTxArgs, IntegrityContext};
 use chrono::prelude::*;
 use grin_util::ToHex;
+use grin_wallet_util::grin_api::Libp2pPeers;
 use grin_wallet_util::grin_core::core::Committed;
 use rand::rngs::mock::StepRng;
 use rand::thread_rng;
@@ -348,6 +349,16 @@ where
 
 	/// Write the wallet data to backend file
 	fn commit(&self) -> Result<(), Error>;
+
+	/// Save integrity transaction private context.
+	fn save_integrity_context(
+		&mut self,
+		slate_id: &[u8],
+		ctx: &IntegrityContext,
+	) -> Result<(), Error>;
+
+	/// Read integrity transaction private context.
+	fn load_integrity_context(&mut self, slate_id: &[u8]) -> Result<IntegrityContext, Error>;
 }
 
 /// Encapsulate all wallet-node communication functions. No functions within libwallet
@@ -449,6 +460,9 @@ pub trait NodeClient: Send + Sync + Clone {
 		end_height: u64,
 		threads_number: usize,
 	) -> Result<Vec<grin_api::BlockPrintable>, Error>;
+
+	/// Get Node Tor address
+	fn get_libp2p_peers(&self) -> Result<Libp2pPeers, Error>;
 }
 
 /// Node version info

@@ -38,6 +38,7 @@ use crate::util::{Mutex, RwLock};
 use grin_core::core::hash::Hashed;
 use grin_core::core::BlockHeader;
 use grin_util::ToHex;
+use grin_wallet_util::grin_api::Libp2pPeers;
 use serde_json;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -240,7 +241,7 @@ where
 						body: serde_json::to_string(&format!("Error: {}", e)).unwrap(),
 					})
 				}
-				Ok(s) => s,
+				Ok((s, _context)) => s,
 			}
 		};
 
@@ -779,6 +780,13 @@ impl NodeClient for LocalWalletClient {
 		let m = r.recv().unwrap();
 		let o: Vec<api::BlockPrintable> = serde_json::from_str(&m.body).unwrap();
 		Ok(o)
+	}
+
+	fn get_libp2p_peers(&self) -> Result<Libp2pPeers, libwallet::Error> {
+		Ok(Libp2pPeers {
+			libp2p_peers: vec![],
+			node_peers: vec![],
+		})
 	}
 }
 unsafe impl<'a, L, C, K> Send for WalletProxy<'a, L, C, K>

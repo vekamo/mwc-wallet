@@ -25,6 +25,7 @@ use crate::proof::proofaddress;
 use crate::proof::proofaddress::ProofAddressType;
 use crate::proof::proofaddress::ProvableAddress;
 use crate::slate_versions::SlateVersion;
+use crate::Context;
 use crate::{
 	BlockFees, CbData, Error, ErrorKind, NodeClient, Slate, SlatePurpose, TxLogEntryType,
 	VersionInfo, VersionedSlate, WalletBackend, WalletInst, WalletLCProvider,
@@ -117,7 +118,7 @@ pub fn receive_tx<'a, T: ?Sized, C, K>(
 	message: Option<String>,
 	use_test_rng: bool,
 	refresh_from_node: bool,
-) -> Result<Slate, Error>
+) -> Result<(Slate, Context), Error>
 where
 	T: WalletBackend<'a, C, K>,
 	C: NodeClient + 'a,
@@ -266,7 +267,7 @@ where
 		p.receiver_signature = Some(sig);
 	}
 
-	Ok(ret_slate)
+	Ok((ret_slate, context))
 }
 
 /// Receive an tx that this wallet has issued
@@ -336,6 +337,28 @@ where
 		))
 	})?;
 	Ok(())
+}
+
+/// Process swap marketplace message. Please note. Wallet does a minor role here,
+/// The marketplace workflow and managed by QT wallet.
+pub fn marketplace_message<'a, L, C, K>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
+	message: &String,
+) -> Result<String, Error>
+where
+	L: WalletLCProvider<'a, C, K>,
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
+{
+	let response =
+		owner_swap::marketplace_message(wallet_inst, keychain_mask, &message).map_err(|e| {
+			ErrorKind::SwapError(format!(
+				"Error occurred in receiving the swap message by TOR, {}",
+				e
+			))
+		})?;
+	Ok(response)
 }
 
 /// Utility method to decrypt the slate pack for receive operation.

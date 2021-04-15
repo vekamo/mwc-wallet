@@ -21,6 +21,7 @@ use ed25519_dalek::ExpandedSecretKey;
 use ed25519_dalek::PublicKey as DalekPublicKey;
 use ed25519_dalek::SecretKey as DalekSecretKey;
 
+use crate::tor;
 use std::convert::TryFrom;
 use std::fs::{self, File};
 use std::io::Write;
@@ -205,6 +206,7 @@ pub fn output_onion_service_config(
 pub fn output_torrc(
 	tor_config_directory: &str,
 	wallet_listener_addr: &str,
+	libp2p_listener_port: &Option<u16>,
 	socks_port: &str,
 	service_dirs: &[String],
 ) -> Result<(), Error> {
@@ -221,6 +223,12 @@ pub fn output_torrc(
 		props.add_item("HiddenServiceDir", &service_file_name);
 		props.add_item("HiddenServiceVersion", &format!("3"));
 		props.add_item("HiddenServicePort", &format!("80 {}", wallet_listener_addr));
+		match libp2p_listener_port {
+			Some(port) => {
+				props.add_item("HiddenServicePort", &format!("81 127.0.0.1:{}", port));
+			}
+			_ => (),
+		}
 	}
 
 	props.write_to_file(&torrc_file_path)?;
@@ -231,7 +239,9 @@ pub fn output_torrc(
 /// output entire tor config for a list of secret keys
 pub fn output_tor_listener_config(
 	tor_config_directory: &str,
+	socks_listener_addr: &str,
 	wallet_listener_addr: &str,
+	libp2p_listener_port: &Option<u16>,
 	listener_keys: &[SecretKey],
 ) -> Result<(), Error> {
 	let tor_data_dir = format!("{}{}{}", tor_config_directory, MAIN_SEPARATOR, TOR_DATA_DIR);
@@ -247,11 +257,18 @@ pub fn output_tor_listener_config(
 		service_dirs.push(service_dir.to_string());
 	}
 
+	let socks_listener_addr = if tor::status::get_tor_sender_running() {
+		"0"
+	} else {
+		socks_listener_addr
+	};
+
 	// hidden service listener doesn't need a socks port
 	output_torrc(
 		tor_config_directory,
 		wallet_listener_addr,
-		"0",
+		libp2p_listener_port,
+		socks_listener_addr,
 		&service_dirs,
 	)?;
 
@@ -267,7 +284,7 @@ pub fn output_tor_sender_config(
 	fs::create_dir_all(&tor_config_dir)
 		.map_err(|e| ErrorKind::IO(format!("Unable to create dir {}, {}", tor_config_dir, e)))?;
 
-	output_torrc(tor_config_dir, "", socks_listener_addr, &[])?;
+	output_torrc(tor_config_dir, "", &None, socks_listener_addr, &[])?;
 
 	Ok(())
 }
@@ -330,7 +347,7 @@ mod tests {
 		setup(test_dir);
 		let mut test_rng = StepRng::new(1_234_567_890_u64, 1);
 		let sec_key = secp::key::SecretKey::new(&mut test_rng);
-		output_tor_listener_config(test_dir, "127.0.0.1:3415", &[sec_key])?;
+		output_tor_listener_config(test_dir, "0", "127.0.0.1:3415", &None, &[sec_key])?;
 		clean_output_dir(test_dir);
 		Ok(())
 	}

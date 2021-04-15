@@ -122,6 +122,7 @@ mod tests {
 	use crate::swap::fsm::state;
 	use crate::swap::fsm::state::{Input, StateId, StateProcessRespond};
 	use crate::swap::message::{SecondaryUpdate, Update};
+	use grin_api::Libp2pPeers;
 	use grin_core::global;
 	use grin_core::global::ChainTypes;
 	use grin_wallet_util::grin_core::core::Committed;
@@ -425,6 +426,14 @@ mod tests {
 				.map(|(kernel, height)| (kernel.clone(), *height, 0));
 			Ok(res)
 		}
+
+		/// Get Node Tor address
+		fn get_libp2p_peers(&self) -> Result<Libp2pPeers, crate::Error> {
+			Ok(Libp2pPeers {
+				libp2p_peers: vec![],
+				node_peers: vec![],
+			})
+		}
 	}
 
 	#[test]
@@ -459,6 +468,8 @@ mod tests {
 				"file".to_string(),
 				"/tmp/del.me".to_string(),
 				None,
+				None,
+				false,
 				None,
 			)
 			.unwrap();
@@ -536,6 +547,8 @@ mod tests {
 				"file".to_string(),
 				"/tmp/del.me".to_string(),
 				None,
+				None,
+				false,
 				None,
 			)
 			.unwrap();
@@ -1457,7 +1470,7 @@ mod tests {
 			} else {
 				assert_eq!(trader.is_cancellable(), false);
 				let sr = trader.process(Input::Cancel);
-				assert!(sr.is_err(), true);
+				assert_eq!(sr.is_err(), true);
 			}
 			trader.pops();
 		}
@@ -1601,6 +1614,8 @@ mod tests {
 					"file".to_string(),
 					"/tmp/del.me".to_string(),
 					None,
+					None,
+					false,
 					None,
 				)
 				.unwrap();
@@ -5465,6 +5480,8 @@ mod tests {
 				"file".to_string(),
 				"/tmp/del.me".to_string(),
 				None,
+				None,
+				false,
 				None,
 			)
 			.unwrap();

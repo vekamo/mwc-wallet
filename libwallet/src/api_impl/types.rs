@@ -141,6 +141,8 @@ pub struct InitTxArgs {
 	/// because we don't want outputs to be reserved for a long time.
 	#[serde(default)]
 	pub late_lock: Option<bool>,
+	/// Minimal fee. Can be used to bump fee higher then usual value.
+	pub min_fee: Option<u64>,
 }
 
 /// Send TX API Args, for convenience functionality that inits the transaction and sends
@@ -186,6 +188,7 @@ impl Default for InitTxArgs {
 			late_lock: Some(false),
 			outputs: None,
 			slatepack_recipient: None,
+			min_fee: None,
 		}
 	}
 }
@@ -359,6 +362,8 @@ pub struct PaymentProof {
 pub struct SwapStartArgs {
 	/// MWC to send
 	pub mwc_amount: u64,
+	/// Outputs to trade
+	pub outputs: Option<Vec<String>>, // Outputs to select for this swap. Must be unlocked but can belong to other trades.
 	/// Secondary currency
 	pub secondary_currency: String,
 	/// BTC to recieve
@@ -389,4 +394,6 @@ pub struct SwapStartArgs {
 	pub electrum_node_uri2: Option<String>,
 	/// Dry run flag. Use true if you want to validate config
 	pub dry_run: bool,
+	/// Tag for this offer. Needed for swap marketplace related offers management
+	pub tag: Option<String>,
 }

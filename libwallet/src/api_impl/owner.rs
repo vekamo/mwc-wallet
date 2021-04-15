@@ -116,7 +116,8 @@ where
 	Ok(tor_pk)
 }
 
-fn perform_refresh_from_node<'a, L, C, K>(
+/// Refresh outputs/tx states of the wallet. Resync with a blockchain data
+pub fn perform_refresh_from_node<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	status_send_channel: &Option<Sender<StatusMessage>>,
@@ -434,6 +435,7 @@ where
 		let (total, fee) = tx::estimate_send_tx(
 			&mut *w,
 			args.amount,
+			&args.min_fee,
 			args.minimum_confirmations,
 			args.max_outputs as usize,
 			args.num_change_outputs as usize,
@@ -476,6 +478,7 @@ where
 			&mut *w,
 			keychain_mask,
 			&mut slate,
+			&args.min_fee,
 			args.minimum_confirmations,
 			args.max_outputs as usize,
 			args.num_change_outputs as usize,
@@ -676,6 +679,7 @@ where
 		&mut *w,
 		keychain_mask,
 		&mut ret_slate,
+		&args.min_fee,
 		args.minimum_confirmations,
 		args.max_outputs as usize,
 		args.num_change_outputs as usize,
@@ -812,7 +816,7 @@ where
 	check_ttl(w, &sl, refresh_from_node)?;
 	let mut context = w.get_private_context(keychain_mask, sl.id.as_bytes(), 0)?;
 	let keychain = w.keychain(keychain_mask)?;
-	let parent_key_id = w.parent_key_id();
+	let parent_key_id = context.parent_key_id.clone();
 
 	if let Some(args) = context.late_lock_args.take() {
 		// Transaction was late locked, select inputs+change now
@@ -832,6 +836,7 @@ where
 			&keychain,
 			keychain_mask,
 			&mut temp_sl,
+			&args.min_fee,
 			args.minimum_confirmations,
 			args.max_outputs as usize,
 			args.num_change_outputs as usize,

@@ -48,23 +48,24 @@ bch = { git = "https://github.com/mwcproject/rust-bch", branch = "master" }
 native-tls = "0.2"
 zcash_primitives = { version = "0.4.0", git = "https://github.com/mwcproject/librustzcash", branch = "master", features = ["transparent-inputs"] }
 #zcash_primitives = { path = "../../librustzcash/zcash_primitives", features = ["transparent-inputs"] }
-
 smaz = "0.1"
 bitstream-io = "0.9"
 bs58 = "0.3"
 curve25519-dalek = "2.1"
 crypto_box = "0.5"
 crc = "1.8"
+libp2p = { git = "https://github.com/mwcproject/rust-libp2p", branch = "master", default-features = false, features = [ "noise", "yamux", "mplex", "dns", "tcp-tokio", "ping", "gossipsub"] }
+#libp2p = { path = "../../rust-libp2p", default-features = false, features = [ "noise", "yamux", "mplex", "dns", "tcp-tokio", "ping", "gossipsub"] }
 
 grin_wallet_util = { path = "../util", version = "4.1.0" }
 grin_wallet_config = { path = "../config", version = "4.1.0" }
 
 # Release
-grin_api = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
-grin_p2p = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
-grin_core= { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
-grin_keychain = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
-grin_util = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
+#grin_api = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
+#grin_p2p = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
+#grin_core= { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
+#grin_keychain = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
+#grin_util = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
 
 # For bleeding edge
 #grin_api = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
@@ -74,11 +75,11 @@ grin_util = { git = "https://github.com/mwcproject/mwc-node", tag = "4.2.2" }
 #grin_util = { git = "https://github.com/mwcproject/mwc-node", branch = "master"  }
 
 # For local testing
-#grin_api = { path = "../../mwc-node/api"}
-#grin_p2p = { path = "../../mwc-node/p2p"}
-#grin_core= { path = "../../mwc-node/core"}
-#grin_keychain = { path = "../../mwc-node/keychain"}
-#grin_util = { path = "../../mwc-node/util"}
+grin_api = { path = "../../mwc-node/api"}
+grin_p2p = { path = "../../mwc-node/p2p"}
+grin_core= { path = "../../mwc-node/core"}
+grin_keychain = { path = "../../mwc-node/keychain"}
+grin_util = { path = "../../mwc-node/util"}
 
 [target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
 libc = { version = "0.2.69", default-features = false }

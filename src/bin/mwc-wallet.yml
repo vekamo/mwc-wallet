@@ -62,8 +62,13 @@ subcommands:
             short: l
             long: port
             takes_value: true
+        - libp2p_port:
+            help: Port on which to run the libp2p listener
+            short: p
+            long: libp2p_port
+            takes_value: true
         - method:
-            help: Which method to use for communication
+            help: Which method to use for communication. Please note, http can trigger tor and libp2p listeners if they are configured
             short: m
             long: method
             possible_values:
@@ -133,6 +138,10 @@ subcommands:
             short: o
             long: change_outputs
             default_value: "1"
+            takes_value: true
+        - min_fee:
+            help: Minimal fee value. By default wallet selecting the minimal fee accepted by the network. This value can increase the fee if needed.
+            long: min_fee
             takes_value: true
         - method:
             help: Method for sending this transaction
@@ -533,6 +542,11 @@ subcommands:
             short: w
             long: mwc_amount
             takes_value: true
+        - outputs:
+            help: Comma separated outputs to include into the Swap Trade. Outputs can belong to another trades
+            short: o
+            long: outputs
+            takes_value: true
         - minimum_confirmations:
             help: Minimum number of confirmations required for an output to be spendable
             short: c
@@ -621,6 +635,10 @@ subcommands:
             help: verify parameters, do not create a new swap trade
             long: dry_run
             takes_value: false
+        - tag:
+            help: Swap trade tag. This parameter is used by wap markeplace engine to manage the swap trades.
+            long: tag
+            takes_value: true
   - swap:
       about: Trade MWC with another currency via atomic swap
       args:
@@ -668,6 +686,7 @@ subcommands:
             long: adjust
             takes_value: true
             possible_values:
+              - tag
               - cancel
               - destination
               - secondary_address
@@ -762,5 +781,128 @@ subcommands:
             help: secondary private ElectrumX node URI. If never setup, community node will be used
             long: electrum_uri2
             takes_value: true
-
+        - tag:
+            help: Adjusted tag for the swap trade. Tags are used for managing swap marketplace trades
+            long: tag
+            takes_value: true
+  - integrity:
+      about: Manage integrity fees and funds.
+      args:
+        - check:
+            help: View paid integrity fees, view integrity account balance.
+            short: c
+            long: check
+            takes_value: false
+        - reserve:
+            help: In case of low balance, how much coins reserve for integrity fees. Default is 1 MWC
+            short: r
+            long: reserve
+            takes_value: true
+        - account:
+            help: Account name to withdraw funds for integrity fee reservation
+            short: a
+            long: account
+            takes_value: true
+        - fee:
+            help: Create integrity transaction to pay fees. Argument is comma separated fees (MWC). The minimal fee for network is 10X of basic fees. Currently it is 0.01 MWC
+            short: t
+            long: create
+            takes_value: true
+        - withdraw:
+            help: Withdraw the integrity funds back to regular wallet account
+            short: w
+            long: withdraw
+            takes_value: false
+        - json:
+            help: Print response in Json format
+            short: j
+            long: json
+            takes_value: false
+  - messaging:
+      about: Manage libp2p messaging routine.
+      args:
+        - status:
+            help: Show status of messaging - listening topics, minimal fee, broadcasting messages, number of received messages.
+            short: s
+            long: status
+            takes_value: false
+        - add_topic:
+            help: Add topic to listen. Messages must be in json format.
+            short: a
+            long: add_topic
+            takes_value: true
+        - fee:
+            help: Integrity fee. For topic and receive_message it is a minimal accepted fee. For publishing it is integrity fee to pay.
+            short: f
+            long: fee
+            takes_value: true
+        - fee_uuid:
+            help: Integrity fee transaction ID to use.
+            short: u
+            long: fee_uuid
+            takes_value: true
+        - remove_topic:
+            help: Stop listening on the topic.
+            short: r
+            long: remove_topic
+            takes_value: true
+        - publish_message:
+            help: Start broadcasting the message.
+            short: p
+            long: publish_message
+            takes_value: true
+        - publish_topic:
+            help: Topic for the broadcast message.
+            short: t
+            long: publish_topic
+            takes_value: true
+        - publish_interval:
+            help: Time interval for broadcasting (seconds). The minimal interval is 1 minute.
+            short: i
+            long: publish_interval
+            takes_value: true
+        - message_uuid:
+            help: Stop broadcast message.
+            short: w
+            long: withdraw_message
+            takes_value: true
+        - delete_messages:
+            help: Print messages that was received. Optionally messages can be deleted from the buffer. Note, last 1000 messages will be stored.
+            short: v
+            long: receive_messages
+            possible_values:
+              - yes
+              - no
+            takes_value: true
+        - check_integrity:
+            help: Check Integrity context expiration of broadcast messages. Need to be done at least every hour.
+            long: check_integrity
+            takes_value: false
+        - check_integrity_retain:
+            help: Delete messages with expired Integrity context.
+            long: check_integrity_retain
+            takes_value: false
+        - json:
+            help: Print response in Json format
+            short: j
+            long: json
+            takes_value: false
+  - send_marketplace_message:
+      about: Send marketplace related message to another wallet by tor address
+      args:
+        - command:
+            help: Command to perform. Current supported values 'check_offer', 'accept_offer' and 'fail_bidding'
+            short: c
+            long: command
+            takes_value: true
+        - offer_id:
+            help: Marketplace offer ID
+            short: o
+            long: offer_id
+            takes_value: true
+        - tor_address:
+            help: Another wallet tor address
+            short: a
+            long: tor_address
+            takes_value: true
 

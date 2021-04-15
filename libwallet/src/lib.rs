@@ -80,6 +80,7 @@ pub use crate::slate_versions::{
 };
 pub use api_impl::foreign;
 pub use api_impl::owner;
+pub use api_impl::owner_libp2p;
 pub use api_impl::owner_swap;
 pub use api_impl::owner_updater::StatusMessage;
 pub use api_impl::types::{
@@ -98,6 +99,8 @@ pub use types::{
 };
 
 pub use api_impl::foreign::{get_receive_account, set_receive_account};
+
+pub use api_impl::owner_libp2p::IntegrityContext;
 
 /// Helper for taking a lock on the wallet instance
 #[macro_export]

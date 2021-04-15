@@ -191,6 +191,28 @@ impl StateId {
 		}
 	}
 
+	/// Return true if trade is in initial state so it can be cancelled. Swap Marketplace feature.
+	pub fn is_initial_state(&self) -> bool {
+		match self {
+			StateId::SellerOfferCreated
+			| StateId::SellerSendingOffer
+			| StateId::SellerWaitingForAcceptanceMessage
+			| StateId::SellerWaitingForBuyerLock
+			| StateId::BuyerOfferCreated
+			| StateId::BuyerSendingAcceptOfferMessage
+			| StateId::BuyerWaitingForSellerToLock => true,
+			_ => false,
+		}
+	}
+
+	/// Return true if trade is in initial state so it can be cancelled. Swap Marketplace feature.
+	pub fn is_cancelled_no_refund(&self) -> bool {
+		match self {
+			StateId::SellerCancelled | StateId::BuyerCancelled => true,
+			_ => false,
+		}
+	}
+
 	/// Return state as a command. It is easier to parsing on the next lever (QT wallet)
 	pub fn to_cmd_str(&self) -> String {
 		let cmd_str = match &self {
