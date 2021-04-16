@@ -3358,7 +3358,7 @@ where
 				let fee_uuid = args.fee_uuid.clone().unwrap();
 				if used_ctx_uuid.contains(&fee_uuid) {
 					return Err(ErrorKind::GenericError(
-						"Fee uuid {} if already used for another transaction".to_string(),
+						format!("Fee uuid {} is already used for another transaction", fee_uuid),
 					)
 					.into());
 				}
