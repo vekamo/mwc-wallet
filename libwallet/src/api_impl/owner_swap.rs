@@ -785,15 +785,14 @@ where
 	let mut swaps_to_cancel: Vec<Swap> = vec![];
 
 	{
-		// Use the fake lock to get the swap list. Should be fine for our use case
-		let swap_lock = trades::get_swap_lock(&"cancel_trades_by_tag".to_string());
-		let _l = swap_lock.lock();
-
 		let exclude_swap_id = win_swap.id.to_string();
 		for sw_id in &swap_id {
 			if *sw_id == exclude_swap_id {
 				continue;
 			}
+
+			let swap_lock = trades::get_swap_lock(sw_id);
+			let _l = swap_lock.lock();
 
 			let (context, mut swap) = trades::get_swap_trade(sw_id.as_str(), &skey, &*swap_lock)?;
 

@@ -2493,6 +2493,7 @@ where
 			// Creating message delivery transport as a closure
 			let apisecret = args.apisecret.clone();
 			let swap_id2 = swap_id.clone();
+			let tor_config2 = tor_config.clone();
 			let message_sender = move |swap_message: message::Message,
 			                           method: String,
 			                           destination: String|
@@ -2502,7 +2503,7 @@ where
 					method.as_str(),
 					destination.as_str(),
 					&apisecret,
-					&tor_config,
+					&tor_config2,
 				)
 				.map_err(|e| {
 					crate::libwallet::ErrorKind::SwapError(format!(
@@ -2551,10 +2552,12 @@ where
 					args.wait_for_backup1,
 				)?;
 
-				// cli is not supposed tto handle marketplace workflow. Just printing an error. We don't sending notifications
-				if !cancelled_swaps.is_empty() {
-					error!("Cli can be used for marketplace swap trades and swap tags. Some swaps was cancelled because of that. Please review your swap statuses.")
-				}
+				notify_about_cancelled_swaps(
+					wallet_inst2.clone(),
+					keychain_mask,
+					tor_config.clone(),
+					cancelled_swaps,
+				);
 
 				// Autoswap has to be sure that ALL parameters are defined. There are multiple steps and potentioly all of them can be used.
 				// We are checking them here because the swap object is known, so the second currency is known. And we can validate the data
@@ -2616,6 +2619,8 @@ where
 			let stop_thread_clone = SWAP_THREADS_RUN.clone();
 			let json_format_clone = args.json_format.clone();
 			let wait_for_backup1 = args.wait_for_backup1;
+			let kc_mask = keychain_mask.map(|m| m.clone());
+			let tor_config2 = tor_config.clone();
 
 			debug!("Starting autoswap thread for swap id {}", swap_id);
 			let api_thread = thread::Builder::new()
@@ -2646,9 +2651,12 @@ where
 							}
 						};
 
-						if !cancelled_swaps.is_empty() {
-							error!("Cli can be used for marketplace swap trades and swap tags. Some swaps was cancelled because of that. Please review your swap statuses.")
-						}
+						notify_about_cancelled_swaps(
+							wallet_inst2.clone(),
+							kc_mask.as_ref(),
+							tor_config2.clone(),
+							cancelled_swaps,
+						);
 
 						// If actin require execution - it must be executed
 						let mut was_executed = false;
@@ -2666,9 +2674,12 @@ where
 								wait_for_backup1,
 							) {
 								Ok( (res, cancelled_swaps)) => {
-									if !cancelled_swaps.is_empty() {
-										error!("Cli can be used for marketplace swap trades and swap tags. Some swaps was cancelled because of that. Please review your swap statuses.")
-									}
+									notify_about_cancelled_swaps(
+										wallet_inst2.clone(),
+										kc_mask.as_ref(),
+										tor_config2.clone(),
+										cancelled_swaps,
+									);
 
 									curr_state = res.next_state_id;
 									last_error = res.last_error;

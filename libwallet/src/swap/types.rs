@@ -925,7 +925,7 @@ impl fmt::Display for Action {
 			Action::BuyerWaitingForRedeemMessage => {
 				"Waiting for Redeem response message from Seller".to_string()
 			}
-			Action::WaitingForTradeBackup => "Waiting when backup will be done".to_string(),
+			Action::WaitingForTradeBackup => "Backup trade data".to_string(),
 			Action::SellerPublishMwcLockTx => "Posting MWC lock transaction".to_string(),
 			Action::SellerPublishTxSecondaryRedeem { currency , address } => {
 				format!("Posting {} redeem transaction to {}", currency, address)
