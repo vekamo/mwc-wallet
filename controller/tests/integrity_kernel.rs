@@ -114,7 +114,7 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance[0].1, false);
 	assert_eq!(
 		integral_balance[0].0.clone().unwrap().expiration_height,
-		1445
+		1445+3
 	);
 
 	let (account, outputs, _height, integral_balance) =
@@ -124,7 +124,7 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance.len(), 1);
 	assert_eq!(integral_balance[0].0.fee, 30_000_000);
 	assert_eq!(integral_balance[0].1, false);
-	assert_eq!(integral_balance[0].0.expiration_height, 1445);
+	assert_eq!(integral_balance[0].0.expiration_height, 1445+3);
 
 	// Retry should do nothing because first transaction is not mined yet
 	let integral_balance = libwallet::owner_libp2p::create_integral_balance(
@@ -140,7 +140,7 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance[1].1, false);
 	assert_eq!(
 		integral_balance[1].0.clone().unwrap().expiration_height,
-		1445
+		1445+3
 	);
 	assert_eq!(integral_balance[0].0.is_some(), false);
 	assert_eq!(integral_balance[0].1, false);
@@ -156,7 +156,7 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance.len(), 1);
 	assert_eq!(integral_balance[0].0.fee, 30_000_000);
 	assert_eq!(integral_balance[0].1, false); // Now should be confirmed...
-	assert_eq!(integral_balance[0].0.expiration_height, 1446);
+	assert_eq!(integral_balance[0].0.expiration_height, 1446+3);
 
 	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), mask1, 2, false);
 	let _ = owner::perform_refresh_from_node(wallet1.clone(), mask1, &None)?;
@@ -181,13 +181,13 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance[1].1, true);
 	assert_eq!(
 		integral_balance[1].0.clone().unwrap().expiration_height,
-		1446
+		1446+3
 	);
 	assert_eq!(integral_balance[0].0.clone().unwrap().fee, 35_000_000);
 	assert_eq!(integral_balance[0].1, false);
 	assert_eq!(
 		integral_balance[0].0.clone().unwrap().expiration_height,
-		1449
+		1449+3
 	);
 
 	// Mine a block, the second transaction should be confirmed
@@ -201,10 +201,10 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance.len(), 2);
 	assert_eq!(integral_balance[0].0.fee, 30_000_000);
 	assert_eq!(integral_balance[0].1, true);
-	assert_eq!(integral_balance[0].0.expiration_height, 1446);
+	assert_eq!(integral_balance[0].0.expiration_height, 1446+3);
 	assert_eq!(integral_balance[1].0.fee, 35_000_000);
 	assert_eq!(integral_balance[1].1, true);
-	assert_eq!(integral_balance[1].0.expiration_height, 1450); // +1 because post in test environment mining another block.
+	assert_eq!(integral_balance[1].0.expiration_height, 1450+3); // +1 because post in test environment mining another block.
 
 	// Let's verify if Integrity context match the Tx Kernels.
 	let txs = {
