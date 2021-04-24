@@ -905,4 +905,5 @@ subcommands:
             short: a
             long: tor_address
             takes_value: true
-
+  - check_tor_connection:
+      about: check this wallet tor connection
