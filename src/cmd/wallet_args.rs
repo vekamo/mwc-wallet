@@ -1679,8 +1679,8 @@ where
 			let a = arg_parse!(parse_send_marketplace_message(&args));
 			command::send_marketplace_message(owner_api.wallet_inst.clone(), km, tor_config, a)
 		}
-		("check_tor_connection", _ ) => {
-			command::check_tor_connection(owner_api.wallet_inst.clone(), km, tor_config )
+		("check_tor_connection", _) => {
+			command::check_tor_connection(owner_api.wallet_inst.clone(), km, tor_config)
 		}
 		(cmd, _) => {
 			return Err(ErrorKind::ArgumentError(format!(

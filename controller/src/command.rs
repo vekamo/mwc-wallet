@@ -36,7 +36,7 @@ use grin_wallet_impls::{libp2p_messaging, HttpDataSender};
 use grin_wallet_impls::{Address, MWCMQSAddress, Publisher};
 use grin_wallet_libwallet::api_impl::{owner, owner_libp2p, owner_swap};
 use grin_wallet_libwallet::internal::selection;
-use grin_wallet_libwallet::proof::proofaddress::{self, ProvableAddress, ProofAddressType};
+use grin_wallet_libwallet::proof::proofaddress::{self, ProofAddressType, ProvableAddress};
 use grin_wallet_libwallet::proof::tx_proof::TxProof;
 use grin_wallet_libwallet::slatepack::SlatePurpose;
 use grin_wallet_libwallet::swap::fsm::state::StateId;
@@ -3357,9 +3357,10 @@ where
 			context = if args.fee_uuid.is_some() {
 				let fee_uuid = args.fee_uuid.clone().unwrap();
 				if used_ctx_uuid.contains(&fee_uuid) {
-					return Err(ErrorKind::GenericError(
-						format!("Fee uuid {} is already used for another transaction", fee_uuid),
-					)
+					return Err(ErrorKind::GenericError(format!(
+						"Fee uuid {} is already used for another transaction",
+						fee_uuid
+					))
 					.into());
 				}
 				fee_transaction
@@ -3581,16 +3582,16 @@ pub fn check_tor_connection<L, C, K>(
 	keychain_mask: Option<&SecretKey>,
 	tor_config: &TorConfig,
 ) -> Result<(), Error>
-	where
-		L: WalletLCProvider<'static, C, K> + 'static,
-		C: NodeClient + 'static,
-		K: keychain::Keychain + 'static,
+where
+	L: WalletLCProvider<'static, C, K> + 'static,
+	C: NodeClient + 'static,
+	K: keychain::Keychain + 'static,
 {
 	if !controller::is_foreign_api_running() {
 		return Err(ErrorKind::GenericError(
 			"TOR is not running. Please start tor listener for your wallet".to_string(),
 		)
-			.into());
+		.into());
 	}
 
 	let tor_pk = owner::get_wallet_public_address(wallet_inst.clone(), keychain_mask)?;
@@ -3599,12 +3600,10 @@ pub fn check_tor_connection<L, C, K>(
 	let this_tor_address = tor_addr.to_string();
 	let dest = format!("http://{}.onion", this_tor_address);
 
-	let sender =
-		create_sender("tor", &dest, &None, Some(tor_config.clone()))?;
+	let sender = create_sender("tor", &dest, &None, Some(tor_config.clone()))?;
 	match sender.check_other_wallet_version(&dest) {
 		Ok(_) => println!("Tor connection online"),
 		Err(e) => println!("Tor is offline, {}", e),
 	}
 	Ok(())
 }
-
