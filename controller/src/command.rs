@@ -36,7 +36,7 @@ use grin_wallet_impls::{libp2p_messaging, HttpDataSender};
 use grin_wallet_impls::{Address, MWCMQSAddress, Publisher};
 use grin_wallet_libwallet::api_impl::{owner, owner_libp2p, owner_swap};
 use grin_wallet_libwallet::internal::selection;
-use grin_wallet_libwallet::proof::proofaddress::{self, ProofAddressType, ProvableAddress};
+use grin_wallet_libwallet::proof::proofaddress::{self, ProvableAddress};
 use grin_wallet_libwallet::proof::tx_proof::TxProof;
 use grin_wallet_libwallet::slatepack::SlatePurpose;
 use grin_wallet_libwallet::swap::fsm::state::StateId;
@@ -46,6 +46,7 @@ use grin_wallet_libwallet::swap::{message, Swap};
 use grin_wallet_libwallet::{Slate, TxLogEntry, WalletInst};
 use grin_wallet_util::grin_core::consensus::GRIN_BASE;
 use grin_wallet_util::grin_core::core::amount_to_hr_string;
+use grin_wallet_util::grin_p2p::libp2p_connection::ReceivedMessage;
 use grin_wallet_util::grin_p2p::{libp2p_connection, PeerAddr};
 use serde_json as json;
 use serde_json::json;
@@ -3154,6 +3155,26 @@ where
 								println!("Joining the node peer at {}", addr);
 							}
 						}
+
+						if let Ok(messages) = w.w2n_client().get_libp2p_messages() {
+							let mut inject_msgs: Vec<ReceivedMessage> = vec![];
+
+							let cur_time = Utc::now().timestamp();
+							let delta = cur_time - messages.current_time;
+
+							let topics: HashSet<String> = libp2p_connection::get_topics()
+								.iter()
+								.map(|(topic_str, _topic, _fee)| topic_str.clone())
+								.collect();
+
+							for mut m in messages.libp2p_messages {
+								if topics.contains(&m.topic) {
+									m.timestamp += delta;
+									inject_msgs.push(m);
+								}
+							}
+							libp2p_connection::inject_received_messaged(inject_msgs);
+						}
 					}
 					Err(e) => {
 						println!(
@@ -3203,7 +3224,7 @@ where
 			json_res.insert(
 				"topics".to_string(),
 				JsonValue::from(
-					libp2p_messaging::get_topics()
+					libp2p_connection::get_topics()
 						.iter()
 						.map(|t| JsonValue::from(t.0.clone()))
 						.collect::<Vec<JsonValue>>(),
@@ -3228,10 +3249,10 @@ where
 			);
 			json_res.insert(
 				"received_messages".to_string(),
-				JsonValue::from(libp2p_messaging::get_received_messages_num()),
+				JsonValue::from(libp2p_connection::get_received_messages_num()),
 			);
 		} else {
-			let listening_topics = libp2p_messaging::get_topics();
+			let listening_topics = libp2p_connection::get_topics();
 			let mut topics_str = listening_topics
 				.iter()
 				.map(|t| t.0.clone())
@@ -3257,7 +3278,7 @@ where
 
 			println!(
 				"Received messages: {}",
-				libp2p_messaging::get_received_messages_num()
+				libp2p_connection::get_received_messages_num()
 			)
 		}
 	}
@@ -3265,7 +3286,7 @@ where
 	// Adding topics
 	if args.add_topic.is_some() {
 		let new_topic = args.add_topic.clone().unwrap();
-		if libp2p_messaging::add_topic(&new_topic, args.fee.clone().unwrap_or(0)) {
+		if libp2p_connection::add_topic(&new_topic, args.fee.clone().unwrap_or(0)) {
 			if args.json {
 				json_res.insert("add_topic".to_string(), JsonValue::from(new_topic));
 			} else {
@@ -3282,7 +3303,7 @@ where
 
 	if args.remove_topic.is_some() {
 		let remove_topic = args.remove_topic.clone().unwrap();
-		if libp2p_messaging::remove_topic(&remove_topic) {
+		if libp2p_connection::remove_topic(&remove_topic) {
 			if args.json {
 				json_res.insert("remove_topic".to_string(), JsonValue::from(remove_topic));
 			} else {
@@ -3449,7 +3470,7 @@ where
 	}
 
 	if let Some(remove) = args.receive_messages {
-		let messages = libp2p_messaging::get_received_messages(remove);
+		let messages = libp2p_connection::get_received_messages(remove);
 		if args.json {
 			json_res.insert(
 				"receive_messages".to_string(),
@@ -3460,7 +3481,7 @@ where
 							json!({ "topic": msg.topic.to_string(),
 								"fee": msg.fee.to_string(),
 								"message": msg.message,
-								"wallet" : msg.peer_id.get_address().unwrap_or("".to_string()),
+								"wallet" : msg.peer_id,
 							})
 						})
 						.collect::<Vec<JsonValue>>(),
@@ -3471,7 +3492,7 @@ where
 			for m in &messages {
 				println!(
 					"  wallet: {}, topic: {}, fee: {}, message: {}",
-					m.peer_id.get_address().unwrap_or("".to_string()),
+					m.peer_id,
 					m.topic,
 					amount_to_hr_string(m.fee, true),
 					m.message

@@ -122,7 +122,7 @@ mod tests {
 	use crate::swap::fsm::state;
 	use crate::swap::fsm::state::{Input, StateId, StateProcessRespond};
 	use crate::swap::message::{SecondaryUpdate, Update};
-	use grin_api::Libp2pPeers;
+	use grin_api::{Libp2pMessages, Libp2pPeers};
 	use grin_core::global;
 	use grin_core::global::ChainTypes;
 	use grin_wallet_util::grin_core::core::Committed;
@@ -432,6 +432,13 @@ mod tests {
 			Ok(Libp2pPeers {
 				libp2p_peers: vec![],
 				node_peers: vec![],
+			})
+		}
+
+		fn get_libp2p_messages(&self) -> Result<Libp2pMessages, crate::Error> {
+			Ok(Libp2pMessages {
+				current_time: chrono::Utc::now().timestamp(),
+				libp2p_messages: vec![],
 			})
 		}
 	}

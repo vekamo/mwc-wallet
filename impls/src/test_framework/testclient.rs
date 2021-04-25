@@ -38,7 +38,7 @@ use crate::util::{Mutex, RwLock};
 use grin_core::core::hash::Hashed;
 use grin_core::core::BlockHeader;
 use grin_util::ToHex;
-use grin_wallet_util::grin_api::Libp2pPeers;
+use grin_wallet_util::grin_api::{Libp2pMessages, Libp2pPeers};
 use serde_json;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -786,6 +786,13 @@ impl NodeClient for LocalWalletClient {
 		Ok(Libp2pPeers {
 			libp2p_peers: vec![],
 			node_peers: vec![],
+		})
+	}
+
+	fn get_libp2p_messages(&self) -> Result<Libp2pMessages, libwallet::Error> {
+		Ok(Libp2pMessages {
+			current_time: chrono::Utc::now().timestamp(),
+			libp2p_messages: vec![],
 		})
 	}
 }

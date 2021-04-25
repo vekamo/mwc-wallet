@@ -18,24 +18,9 @@ use chrono::Utc;
 use grin_p2p::libp2p_connection;
 use grin_util::RwLock;
 use grin_wallet_libwallet::IntegrityContext;
-use libp2p::gossipsub::{IdentTopic as Topic, TopicHash};
-use libp2p::PeerId;
-use std::collections::{HashMap, VecDeque};
+use libp2p::gossipsub::IdentTopic as Topic;
 use std::thread;
 use uuid::Uuid;
-
-/// Message that was received from libp2p gossipsub network
-#[derive(Clone, Debug)]
-pub struct ReceivedMessage {
-	/// Peer who send the message
-	pub peer_id: PeerId,
-	/// Topic that received the message
-	pub topic: Topic,
-	/// Integrity fee that was paid
-	pub fee: u64,
-	/// The message.
-	pub message: String,
-}
 
 /// Publishing message
 #[derive(Clone, Debug)]
@@ -57,87 +42,13 @@ pub struct PublishingMessage {
 }
 // required to check at least once in an hour. Without checking will not send it
 const INTEGRITY_CTX_CHECK_INTERVAL: i64 = 3600;
-const MESSAGING_RECEIVED_LIMIT: usize = 1000;
 
 lazy_static! {
-	/// Topics that we are listening now
-	static ref MESSAGING_TOPICS: RwLock<HashMap<TopicHash, (String, Topic, u64)>> = RwLock::new(HashMap::new());
-	/// Received messages
-	static ref MESSAGING_RECEIVED: RwLock<VecDeque<ReceivedMessage>> = RwLock::new(VecDeque::new());
 	/// Messages that are broadcasting
 	static ref MESSAGING_BROADCASTING: RwLock<Vec<PublishingMessage>> = RwLock::new(Vec::new());
 
 	/// Flag if broadcasting tread is already running
 	static ref BROADCASTING_RUNNUNG: RwLock<bool> = RwLock::new(false);
-}
-
-/// Get topics that we are listening
-pub fn get_topics() -> Vec<(String, Topic, u64)> {
-	MESSAGING_TOPICS
-		.read()
-		.iter()
-		.map(|(_k, v)| v.clone())
-		.collect()
-}
-
-fn listener_handler(peer_id: &PeerId, topic: &TopicHash, data: Vec<u8>, fee: u64) -> bool {
-	if let Some((_topic_str, topic, min_fee)) = MESSAGING_TOPICS.read().get(topic) {
-		if fee >= *min_fee {
-			// Parse message. It should be Json string
-			let message_str = match String::from_utf8(data) {
-				Ok(s) => s,
-				Err(_) => return false,
-			};
-			if serde_json::from_str::<serde_json::Value>(&message_str).is_err() {
-				return false;
-			}
-			// Everything looks good so far. We can keep the data
-			{
-				let mut messages = MESSAGING_RECEIVED.write();
-				messages.retain(|m| m.message != message_str);
-				messages.push_back(ReceivedMessage {
-					peer_id: peer_id.clone(),
-					topic: topic.clone(),
-					fee,
-					message: message_str,
-				});
-				while messages.len() > MESSAGING_RECEIVED_LIMIT {
-					messages.pop_front();
-				}
-			}
-		}
-	}
-	true
-}
-
-/// Start listening on the topic
-pub fn add_topic(topic_str: &String, min_fee: u64) -> bool {
-	let topic = Topic::new(topic_str.clone());
-
-	match MESSAGING_TOPICS
-		.write()
-		.insert(topic.hash(), (topic_str.clone(), topic, min_fee))
-	{
-		Some(_) => (), // Data updated, already subscribed
-		None => {
-			libp2p_connection::add_topic(&topic_str, listener_handler);
-			return true;
-		}
-	}
-	return false;
-}
-
-pub fn remove_topic(topic_str: &String) -> bool {
-	let topic = Topic::new(topic_str.clone());
-
-	match MESSAGING_TOPICS.write().remove(&topic.hash()) {
-		Some(_) => {
-			libp2p_connection::remove_topic(&topic_str);
-			return true;
-		}
-		None => (),
-	}
-	return false;
 }
 
 /// Get messages that are broadcast
@@ -288,20 +199,4 @@ pub fn check_integrity_context_expiration(tip_height: u64, delete: bool) -> Vec<
 	}
 
 	expired_msgs
-}
-
-/// Get number of received messages
-pub fn get_received_messages_num() -> usize {
-	MESSAGING_RECEIVED.read().len()
-}
-
-/// Read received messages
-pub fn get_received_messages(delete: bool) -> VecDeque<ReceivedMessage> {
-	if delete {
-		let mut res: VecDeque<ReceivedMessage> = VecDeque::new();
-		res.append(&mut *MESSAGING_RECEIVED.write());
-		res
-	} else {
-		MESSAGING_RECEIVED.read().clone()
-	}
 }

@@ -34,7 +34,7 @@ use super::resp_types::*;
 use crate::client_utils::json_rpc::*;
 use std::time::{Duration, Instant};
 use std::sync::{Arc, RwLock};
-use grin_wallet_util::grin_api::Libp2pPeers;
+use grin_wallet_util::grin_api::{Libp2pPeers, Libp2pMessages};
 use failure::_core::sync::atomic::{AtomicU8, Ordering};
 
 const ENDPOINT: &str = "/v2/foreign";
@@ -653,6 +653,13 @@ impl NodeClient for HTTPNodeClient {
 		debug!("Requesting libp2p peer connections from mwc-node");
 		let params = json!([]);
 		let res = self.send_json_request::<Libp2pPeers>("get_libp2p_peers", &params, NODE_CALL_RETRY)?;
+		Ok(res)
+	}
+
+	fn get_libp2p_messages(&self) -> Result<Libp2pMessages, libwallet::Error> {
+		debug!("Requesting libp2p received messages from mwc-node");
+		let params = json!([]);
+		let res = self.send_json_request::<Libp2pMessages>("get_libp2p_messages", &params, NODE_CALL_RETRY)?;
 		Ok(res)
 	}
 }

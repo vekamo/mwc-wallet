@@ -338,12 +338,15 @@ where
 
 			let total_amount: u64 = outputs.iter().map(|o| o.output.value).sum();
 			let mut amount = amount;
-			let src_account_name = if total_amount < fee {
+			let (src_account_name, tx_comment) = if total_amount < fee {
 				// Need move some coins here
-				account_from.clone().unwrap_or("default".to_string())
+				(
+					account_from.clone().unwrap_or("default".to_string()),
+					"Integrity fee reserve",
+				)
 			} else {
 				amount = total_amount;
-				INTEGRITY_ACCOUNT_NAME.to_string()
+				(INTEGRITY_ACCOUNT_NAME.to_string(), "Integrity fee")
 			};
 
 			let mut args = InitTxArgs::default();
@@ -351,7 +354,7 @@ where
 			args.amount = amount - fee;
 			args.minimum_confirmations = 1;
 			args.target_slate_version = Some(4); // Need Compact slate
-			args.address = Some("Integrity fee".to_string());
+			args.address = Some(tx_comment.to_string());
 			args.min_fee = Some(fee);
 			args.ttl_blocks = Some(3);
 			args.late_lock = Some(true);
