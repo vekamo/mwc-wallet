@@ -363,7 +363,7 @@ where
 		for i in 0..num_outputs {
 			let key_id = if key_id_opt.is_some() {
 				// Note! No need to handle so far, that is why we have one key_id_opt, so num_outputs can be only 1
-				// If it is not true - likely use case was chnaged.
+				// If it is not true - likely use case was changed.
 				assert!(num_outputs == 1);
 				let key_str = key_id_opt.unwrap();
 				Identifier::from_hex(key_str)?
@@ -384,8 +384,16 @@ where
 	}
 
 	// Note, it is not very critical, has to match for all normal case,
-	// might faill for edge case if we send very smaller coins amount
+	// might fail for edge case if we send very smaller coins amount
 	debug_assert!(key_vec_amounts.len() == num_outputs);
+
+	if slate.amount == 0 || num_outputs == 0 || key_vec_amounts.len() != num_outputs {
+		return Err(ErrorKind::GenericError(format!(
+			"Unable to build transaction for amount {} and outputs number {}",
+			slate.amount, num_outputs
+		))
+		.into());
+	}
 
 	let keychain = wallet.keychain(keychain_mask)?;
 	let amount = slate.amount;
