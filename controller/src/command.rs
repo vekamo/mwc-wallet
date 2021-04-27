@@ -3482,6 +3482,7 @@ where
 								"fee": msg.fee.to_string(),
 								"message": msg.message,
 								"wallet" : msg.peer_id,
+								"timestamp" : msg.timestamp.to_string(),
 							})
 						})
 						.collect::<Vec<JsonValue>>(),
