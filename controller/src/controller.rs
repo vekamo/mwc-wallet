@@ -137,6 +137,7 @@ pub fn init_tor_listener<L, C, K>(
 	socks_listener_addr: &str,
 	libp2p_listener_port: &Option<u16>,
 	tor_base: Option<&str>,
+	tor_log_file: &Option<String>,
 ) -> Result<(tor_process::TorProcess, SecretKey), Error>
 	where
 		L: WalletLCProvider<'static, C, K> + 'static,
@@ -167,7 +168,7 @@ pub fn init_tor_listener<L, C, K>(
 	);
 
 	tor_config::output_tor_listener_config(&tor_dir, socks_listener_addr, addr, libp2p_listener_port,
-										   &vec![sec_key.clone()])
+										   &vec![sec_key.clone()], tor_log_file)
 		.map_err(|e| ErrorKind::TorConfig(format!("Failed to configure tor, {}", e).into()))?;
 	// Start TOR process
 	let tor_path = format!("{}/torrc", tor_dir);
@@ -885,6 +886,7 @@ pub fn foreign_listener<L, C, K>(
 	use_tor: bool,
 	socks_proxy_addr: &str,
 	libp2p_listen_port: &Option<u16>,
+	tor_log_file: &Option<String>,
 ) -> Result<(), Error>
 	where
 		L: WalletLCProvider<'static, C, K> + 'static,
@@ -905,7 +907,7 @@ pub fn foreign_listener<L, C, K>(
 	let tor_info = match use_tor {
 		true => match init_tor_listener(wallet.clone(), keychain_mask.clone(), addr,
 										socks_proxy_addr,
-										libp2p_listen_port, None) {
+										libp2p_listen_port, None, tor_log_file) {
 			Ok((tp, tor_secret)) => Some((tp, tor_secret)),
 			Err(e) => {
 				warn!("Unable to start TOR listener; Check that TOR executable is installed and on your path");

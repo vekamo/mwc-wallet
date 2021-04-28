@@ -43,6 +43,7 @@ pub struct HttpDataSender {
 	socks_proxy_addr: Option<SocketAddr>,
 	tor_config_dir: String,
 	socks_running: bool,
+	tor_log_file: Option<String>,
 }
 
 impl HttpDataSender {
@@ -52,6 +53,7 @@ impl HttpDataSender {
 		apisecret: Option<String>,
 		tor_config_dir: Option<String>,
 		socks_running: bool,
+		tor_log_file: Option<String>,
 	) -> Result<HttpDataSender, Error> {
 		if !base_url.starts_with("http") && !base_url.starts_with("https") {
 			Err(ErrorKind::GenericError(format!("Invalid http url: {}", base_url)).into())
@@ -63,6 +65,7 @@ impl HttpDataSender {
 				socks_proxy_addr: None,
 				tor_config_dir: tor_config_dir.unwrap_or(String::from("")),
 				socks_running: socks_running,
+				tor_log_file,
 			})
 		}
 	}
@@ -74,8 +77,15 @@ impl HttpDataSender {
 		proxy_addr: &str,
 		tor_config_dir: Option<String>,
 		socks_running: bool,
+		tor_log_file: Option<String>,
 	) -> Result<HttpDataSender, Error> {
-		let mut ret = Self::new(base_url, apisecret, tor_config_dir.clone(), socks_running)?;
+		let mut ret = Self::new(
+			base_url,
+			apisecret,
+			tor_config_dir.clone(),
+			socks_running,
+			tor_log_file,
+		)?;
 		ret.use_socks = true;
 		let addr = proxy_addr.parse().map_err(|e| {
 			ErrorKind::GenericError(format!("Unable to parse address {}, {}", proxy_addr, e))
@@ -341,6 +351,7 @@ impl HttpDataSender {
 						"Not found socks_proxy_addr value".to_string(),
 					))?
 					.to_string(),
+				&self.tor_log_file,
 			)
 			.map_err(|e| ErrorKind::TorConfig(format!("Failed to config Tor, {}", e)))?;
 			// Start TOR process

@@ -203,6 +203,8 @@ pub struct TorConfig {
 	pub send_config_dir: String,
 	/// Whether or not the socks5 proxy is already running
 	pub socks_running: bool,
+	/// Optional log file for tor. Default is
+	pub tor_log_file: Option<String>,
 }
 
 impl Default for TorConfig {
@@ -212,6 +214,7 @@ impl Default for TorConfig {
 			socks_proxy_addr: "127.0.0.1:59050".to_owned(),
 			send_config_dir: ".".into(),
 			socks_running: false,
+			tor_log_file: None,
 		}
 	}
 }

@@ -178,7 +178,8 @@ pub fn create_sender(
 
 	Ok(match method {
 		"http" => Box::new(
-			HttpDataSender::new(&dest, apisecret.clone(), None, false).map_err(|e| invalid(e))?,
+			HttpDataSender::new(&dest, apisecret.clone(), None, false, None)
+				.map_err(|e| invalid(e))?,
 		),
 		"tor" => match tor_config {
 			None => {
@@ -195,6 +196,7 @@ pub fn create_sender(
 						&tc.socks_proxy_addr,
 						Some(tc.send_config_dir),
 						tc.socks_running,
+						tc.tor_log_file.clone(),
 					)
 					.map_err(|e| invalid(e))?,
 				)
@@ -231,6 +233,7 @@ pub fn create_swap_message_sender(
 					&tor_config.socks_proxy_addr,
 					Some(tor_config.send_config_dir.clone()),
 					tor_config.socks_running,
+					tor_config.tor_log_file.clone(),
 				)
 				.map_err(|e| invalid(e))?,
 			)

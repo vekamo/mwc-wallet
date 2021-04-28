@@ -183,6 +183,7 @@ where
 						tor_config.use_tor_listener,
 						&tor_config.socks_proxy_addr,
 						&config.libp2p_listen_port,
+						&tor_config.tor_log_file,
 					);
 					if let Err(e) = res {
 						error!("Error starting http listener: {}", e);
@@ -2256,6 +2257,7 @@ where
 										tor_config.use_tor_listener,
 										&tor_config.socks_proxy_addr,
 										&None,
+										&tor_config.tor_log_file,
 									);
 									if let Err(e) = res {
 										error!("Error starting http listener: {}", e);
@@ -2423,6 +2425,7 @@ where
 									tor_config.use_tor_listener,
 									&tor_config.socks_proxy_addr,
 									&None,
+									&tor_config.tor_log_file,
 								);
 								if let Err(e) = res {
 									error!("Error starting http listener: {}", e);
@@ -3580,6 +3583,7 @@ where
 		&tor_config.socks_proxy_addr,
 		Some(tor_config.send_config_dir.clone()),
 		tor_config.socks_running,
+		tor_config.tor_log_file.clone(),
 	)
 	.map_err(|e| ErrorKind::GenericError(format!("Unable to create HTTP client to send, {}", e)))?;
 

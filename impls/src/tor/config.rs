@@ -209,6 +209,7 @@ pub fn output_torrc(
 	libp2p_listener_port: &Option<u16>,
 	socks_port: &str,
 	service_dirs: &[String],
+	tor_log_file: &Option<String>,
 ) -> Result<(), Error> {
 	let torrc_file_path = format!("{}{}{}", tor_config_directory, MAIN_SEPARATOR, TORRC_FILE);
 
@@ -229,6 +230,10 @@ pub fn output_torrc(
 			}
 			_ => (),
 		}
+		if let Some(log_file) = tor_log_file {
+			props.add_item("Log", &format!("info file {}", log_file));
+			props.add_item("Log", &"notice stdout");
+		}
 	}
 
 	props.write_to_file(&torrc_file_path)?;
@@ -243,6 +248,7 @@ pub fn output_tor_listener_config(
 	wallet_listener_addr: &str,
 	libp2p_listener_port: &Option<u16>,
 	listener_keys: &[SecretKey],
+	tor_log_file: &Option<String>,
 ) -> Result<(), Error> {
 	let tor_data_dir = format!("{}{}{}", tor_config_directory, MAIN_SEPARATOR, TOR_DATA_DIR);
 
@@ -270,6 +276,7 @@ pub fn output_tor_listener_config(
 		libp2p_listener_port,
 		socks_listener_addr,
 		&service_dirs,
+		tor_log_file,
 	)?;
 
 	Ok(())
@@ -279,12 +286,20 @@ pub fn output_tor_listener_config(
 pub fn output_tor_sender_config(
 	tor_config_dir: &str,
 	socks_listener_addr: &str,
+	tor_log_file: &Option<String>,
 ) -> Result<(), Error> {
 	// create data directory if it doesn't exist
 	fs::create_dir_all(&tor_config_dir)
 		.map_err(|e| ErrorKind::IO(format!("Unable to create dir {}, {}", tor_config_dir, e)))?;
 
-	output_torrc(tor_config_dir, "", &None, socks_listener_addr, &[])?;
+	output_torrc(
+		tor_config_dir,
+		"",
+		&None,
+		socks_listener_addr,
+		&[],
+		&tor_log_file.clone().map(|s| format!("{}.sender", s)),
+	)?;
 
 	Ok(())
 }
@@ -347,7 +362,7 @@ mod tests {
 		setup(test_dir);
 		let mut test_rng = StepRng::new(1_234_567_890_u64, 1);
 		let sec_key = secp::key::SecretKey::new(&mut test_rng);
-		output_tor_listener_config(test_dir, "0", "127.0.0.1:3415", &None, &[sec_key])?;
+		output_tor_listener_config(test_dir, "0", "127.0.0.1:3415", &None, &[sec_key], &None)?;
 		clean_output_dir(test_dir);
 		Ok(())
 	}
