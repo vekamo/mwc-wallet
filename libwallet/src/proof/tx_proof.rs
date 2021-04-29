@@ -34,10 +34,10 @@ use std::path::Path;
 use std::{fs, path};
 use util::Mutex;
 
+use crate::grin_core::core::amount_to_hr_string;
+use crate::grin_core::core::Committed;
+use crate::grin_core::global;
 use colored::*;
-use grin_core::core::amount_to_hr_string;
-use grin_core::global;
-use grin_wallet_util::grin_core::core::Committed;
 use std::collections::HashSet;
 
 /// Dir name with proof files
@@ -698,7 +698,10 @@ pub fn verify_tx_proof_wrapper(
 ) -> Result<(Option<String>, String, u64, Vec<String>, String), Error> {
 	let (sender, receiver, amount, outputs, excess_sum) = verify_tx_proof(tx_proof)?;
 
-	let outputs = outputs.iter().map(|o| grin_util::to_hex(&o.0)).collect();
+	let outputs = outputs
+		.iter()
+		.map(|o| crate::grin_util::to_hex(&o.0))
+		.collect();
 
 	Ok((
 		sender.map(|a| a.public_key.clone()),

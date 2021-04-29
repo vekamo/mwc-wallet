@@ -50,7 +50,7 @@ pub fn get_base_fee() -> u64 {
 	BASE_FEE
 		.read()
 		.unwrap()
-		.unwrap_or(grin_core::libtx::DEFAULT_BASE_FEE)
+		.unwrap_or(crate::grin_core::libtx::DEFAULT_BASE_FEE)
 }
 
 /// Initialize a transaction on the sender side, returns a corresponding

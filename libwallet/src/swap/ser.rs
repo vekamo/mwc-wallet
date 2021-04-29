@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::grin_util::secp::key::{PublicKey, SecretKey};
+use crate::grin_util::secp::pedersen::Commitment;
+use crate::grin_util::secp::Signature;
 use crate::{Slate, VersionedSlate};
 use failure::Error;
-use grin_util::secp::key::{PublicKey, SecretKey};
-use grin_util::secp::pedersen::Commitment;
-use grin_util::secp::Signature;
 use hex::{self, FromHex};
 use serde::{Deserialize, Deserializer, Serializer};
 

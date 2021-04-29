@@ -23,8 +23,10 @@
 #![warn(missing_docs)]
 
 use grin_wallet_config as config;
+use grin_wallet_util::grin_api;
 use grin_wallet_util::grin_core;
 use grin_wallet_util::grin_keychain;
+use grin_wallet_util::grin_p2p;
 use grin_wallet_util::grin_store;
 use grin_wallet_util::grin_util;
 
@@ -46,7 +48,6 @@ extern crate strum;
 #[macro_use]
 extern crate strum_macros;
 
-extern crate grin_api;
 extern crate hex;
 extern crate signature;
 

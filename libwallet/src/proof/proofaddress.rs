@@ -14,6 +14,8 @@
 
 use super::base58::Base58;
 use crate::error::Error;
+use crate::grin_core::global;
+use crate::grin_keychain::Keychain;
 use crate::grin_util::secp::key::PublicKey;
 use crate::grin_util::secp::key::SecretKey;
 use crate::proof::crypto;
@@ -21,8 +23,6 @@ use crate::proof::hasher;
 use crate::ErrorKind;
 use ed25519_dalek::PublicKey as DalekPublicKey;
 use ed25519_dalek::SecretKey as DalekSecretKey;
-use grin_core::global;
-use grin_wallet_util::grin_keychain::Keychain;
 use grin_wallet_util::OnionV3Address;
 use serde::{Deserialize, Deserializer, Serializer};
 use sha2::{Digest, Sha512};

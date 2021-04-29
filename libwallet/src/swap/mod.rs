@@ -54,7 +54,7 @@ pub(crate) use self::api::SwapApi;
 pub(crate) use self::buyer::BuyApi;
 pub(crate) use self::seller::SellApi;
 
-pub use grin_keychain::Keychain;
+pub use crate::grin_keychain::Keychain;
 
 #[cfg(test)]
 use serial_test::serial;
@@ -96,18 +96,18 @@ pub fn is_test_response() -> bool {
 
 #[cfg(test)]
 mod tests {
+	use crate::grin_core::core::transaction::Weighting;
+	use crate::grin_core::core::verifier_cache::LruVerifierCache;
+	use crate::grin_core::core::{Inputs, KernelFeatures, Transaction, TxKernel};
+	use crate::grin_keychain::{ExtKeychain, Identifier, Keychain, SwitchCommitmentType};
+	use crate::grin_util::secp::key::{PublicKey, SecretKey};
+	use crate::grin_util::secp::pedersen::{Commitment, RangeProof};
+	use crate::grin_util::to_hex;
 	use crate::grin_util::{Mutex, RwLock};
 	use crate::{NodeClient, Slate, SlateVersion, VersionedSlate};
 	use bitcoin_lib::network::constants::Network as BtcNetwork;
 	use bitcoin_lib::util::key::PublicKey as BtcPublicKey;
 	use bitcoin_lib::{Address, AddressType, Transaction as BtcTransaction, TxOut};
-	use grin_core::core::transaction::Weighting;
-	use grin_core::core::verifier_cache::LruVerifierCache;
-	use grin_core::core::{Inputs, KernelFeatures, Transaction, TxKernel};
-	use grin_keychain::{ExtKeychain, Identifier, Keychain, SwitchCommitmentType};
-	use grin_util::secp::key::{PublicKey, SecretKey};
-	use grin_util::secp::pedersen::{Commitment, RangeProof};
-	use grin_util::to_hex;
 	use std::collections::HashMap;
 	#[cfg(not(target_os = "windows"))]
 	use std::fs::{read_to_string, write};
@@ -118,14 +118,14 @@ mod tests {
 	use super::message::Message;
 	use super::types::*;
 	use super::*;
+	use crate::grin_api::{Libp2pMessages, Libp2pPeers};
+	use crate::grin_core::core::Committed;
+	use crate::grin_core::global;
+	use crate::grin_core::global::ChainTypes;
 	use crate::swap::fsm::machine::StateMachine;
 	use crate::swap::fsm::state;
 	use crate::swap::fsm::state::{Input, StateId, StateProcessRespond};
 	use crate::swap::message::{SecondaryUpdate, Update};
-	use grin_api::{Libp2pMessages, Libp2pPeers};
-	use grin_core::global;
-	use grin_core::global::ChainTypes;
-	use grin_wallet_util::grin_core::core::Committed;
 
 	const GRIN_UNIT: u64 = 1_000_000_000;
 
@@ -312,7 +312,7 @@ mod tests {
 		}
 		fn get_connected_peer_info(
 			&self,
-		) -> Result<Vec<grin_p2p::types::PeerInfoDisplayLegacy>, crate::Error> {
+		) -> Result<Vec<crate::grin_p2p::types::PeerInfoDisplayLegacy>, crate::Error> {
 			unimplemented!()
 		}
 		fn height_range_to_pmmr_indices(
@@ -327,7 +327,7 @@ mod tests {
 			_start_height: u64,
 			_end_height: u64,
 			_threads_number: usize,
-		) -> Result<Vec<grin_api::BlockPrintable>, crate::Error> {
+		) -> Result<Vec<crate::grin_api::BlockPrintable>, crate::Error> {
 			unimplemented!()
 		}
 		fn reset_cache(&self) {

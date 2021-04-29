@@ -24,6 +24,7 @@ use crate::grin_core::core::transaction::{
 	Weighting,
 };
 use crate::grin_core::core::verifier_cache::LruVerifierCache;
+use crate::grin_core::global;
 use crate::grin_core::libtx::{aggsig, build, proof::ProofBuild, secp_ser, tx_fee};
 use crate::grin_core::map_vec;
 use crate::grin_keychain::{BlindSum, BlindingFactor, Keychain, SwitchCommitmentType};
@@ -32,7 +33,6 @@ use crate::grin_util::secp::pedersen::Commitment;
 use crate::grin_util::secp::Signature;
 use crate::grin_util::{self, secp, RwLock};
 use crate::Context;
-use grin_core::global;
 use serde::ser::{Serialize, Serializer};
 use serde_json;
 use std::fmt;
@@ -48,12 +48,12 @@ use crate::slate_versions::v3::{
 };
 
 // use crate::slate_versions::{CURRENT_SLATE_VERSION, GRIN_BLOCK_HEADER_VERSION};
+use crate::grin_core::core::{Inputs, NRDRelativeHeight, OutputIdentifier};
 use crate::proof::proofaddress;
 use crate::proof::proofaddress::ProvableAddress;
 use crate::types::CbData;
 use crate::{SlateVersion, Slatepacker, CURRENT_SLATE_VERSION};
 use ed25519_dalek::SecretKey as DalekSecretKey;
-use grin_core::core::{Inputs, NRDRelativeHeight, OutputIdentifier};
 use rand::rngs::mock::StepRng;
 use rand::thread_rng;
 

@@ -18,12 +18,16 @@ use crate::api_impl::owner;
 use crate::api_impl::owner_updater::StatusMessage;
 use crate::api_impl::types::InitTxArgs;
 use crate::grin_core::consensus::{valid_header_version, WEEK_HEIGHT};
+use crate::grin_core::core::Committed;
 use crate::grin_core::core::HeaderVersion;
+use crate::grin_core::core::Transaction;
 use crate::grin_core::global;
 use crate::grin_core::libtx::{proof, tx_fee};
 use crate::grin_keychain::{ChildNumber, Identifier, Keychain, SwitchCommitmentType};
+use crate::grin_util as util;
 use crate::grin_util::secp::key::SecretKey;
 use crate::grin_util::secp::pedersen;
+use crate::grin_util::secp::Secp256k1;
 use crate::grin_util::static_secp_instance;
 use crate::grin_util::Mutex;
 use crate::internal::tx;
@@ -31,10 +35,6 @@ use crate::internal::{keys, updater};
 use crate::types::*;
 use crate::ReplayMitigationConfig;
 use crate::{wallet_lock, Error, ErrorKind};
-use grin_core::core::Transaction;
-use grin_util::secp::Secp256k1;
-use grin_wallet_util::grin_core::core::Committed;
-use grin_wallet_util::grin_util as util;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::Sender;
@@ -672,7 +672,7 @@ where
 			let client = w.w2n_client().clone();
 			let keychain = w.keychain(keychain_mask)?.clone();
 
-			let mut blocks: Vec<grin_api::BlockPrintable> = Vec::new();
+			let mut blocks: Vec<crate::grin_api::BlockPrintable> = Vec::new();
 
 			let mut cur_height = start_height;
 			while cur_height <= end_height {
@@ -768,8 +768,8 @@ where
 							out.commit,
 							out.range_proof()?,
 							match out.output_type {
-								grin_api::OutputType::Coinbase => true,
-								grin_api::OutputType::Transaction => false,
+								crate::grin_api::OutputType::Coinbase => true,
+								crate::grin_api::OutputType::Transaction => false,
 							},
 							height,
 							out.mmr_index,

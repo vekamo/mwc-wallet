@@ -15,12 +15,12 @@
 use super::bitcoin::{BtcBuyerContext, BtcData, BtcSellerContext};
 use super::ser::*;
 use super::ErrorKind;
+use crate::grin_core::global::ChainTypes;
+use crate::grin_core::{global, ser};
+use crate::grin_keychain::Identifier;
+use crate::grin_util::secp::key::SecretKey;
 use crate::swap::message::Message;
 use bitcoin::Address;
-use grin_core::global::ChainTypes;
-use grin_core::{global, ser};
-use grin_keychain::Identifier;
-use grin_util::secp::key::SecretKey;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fmt;

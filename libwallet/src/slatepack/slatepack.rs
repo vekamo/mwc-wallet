@@ -23,21 +23,21 @@ use crate::{ParticipantData, Slate, SlateVersion};
 use crate::proof::proofaddress::ProvableAddress;
 use std::io;
 
+use crate::grin_core::core::CommitWrapper;
+use crate::grin_core::core::{
+	Input, Inputs, KernelFeatures, Output, OutputFeatures, OutputIdentifier, TxKernel,
+};
+use crate::grin_core::global;
+use crate::grin_keychain::{BlindingFactor, ExtKeychain};
+use crate::grin_util::secp::constants::{PEDERSEN_COMMITMENT_SIZE, SECRET_KEY_SIZE};
+use crate::grin_util::secp::pedersen::{Commitment, RangeProof};
+use crate::grin_util::secp::Signature;
+use crate::grin_util::static_secp_instance;
+use crate::grin_util::{from_hex, to_hex};
 use crate::proof::proofaddress;
 use crate::slate::PaymentInfo;
 use bitstream_io::{BigEndian, BitReader, BitWriter, Endianness};
 use crc::{crc32, Hasher32};
-use grin_core::core::{
-	Input, Inputs, KernelFeatures, Output, OutputFeatures, OutputIdentifier, TxKernel,
-};
-use grin_core::global;
-use grin_keychain::{BlindingFactor, ExtKeychain};
-use grin_util::secp::constants::{PEDERSEN_COMMITMENT_SIZE, SECRET_KEY_SIZE};
-use grin_util::secp::pedersen::{Commitment, RangeProof};
-use grin_util::secp::Signature;
-use grin_util::{from_hex, to_hex};
-use grin_wallet_util::grin_core::core::CommitWrapper;
-use grin_wallet_util::grin_util::static_secp_instance;
 use rand::{thread_rng, Rng};
 use ring::aead;
 use smaz;

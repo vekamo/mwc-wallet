@@ -3,11 +3,11 @@ use hmac::{Hmac, Mac};
 use ripemd160::Ripemd160;
 use sha2::{Digest, Sha256, Sha512};
 
-use grin_core::global::is_floonet;
-use grin_keychain::extkey_bip32::{BIP32Hasher, ChildNumber, ExtendedPrivKey};
-use grin_keychain::Keychain;
-use grin_keychain::SwitchCommitmentType;
-use grin_util::secp::key::SecretKey;
+use crate::grin_core::global::is_floonet;
+use crate::grin_keychain::extkey_bip32::{BIP32Hasher, ChildNumber, ExtendedPrivKey};
+use crate::grin_keychain::Keychain;
+use crate::grin_keychain::SwitchCommitmentType;
+use crate::grin_util::secp::key::SecretKey;
 
 use crate::{Error, ErrorKind};
 

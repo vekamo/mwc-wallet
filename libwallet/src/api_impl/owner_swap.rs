@@ -17,7 +17,11 @@
 use crate::grin_util::secp::key::SecretKey;
 use crate::grin_util::Mutex;
 
+use crate::grin_core::core;
+use crate::grin_core::core::Committed;
+use crate::grin_keychain::ExtKeychainPath;
 use crate::grin_keychain::{Identifier, Keychain, SwitchCommitmentType};
+use crate::grin_util::to_hex;
 use crate::internal::selection;
 use crate::swap::error::ErrorKind;
 use crate::swap::fsm::state::{Input, StateEtaInfo, StateId, StateProcessRespond};
@@ -31,10 +35,6 @@ use crate::{
 	wallet_lock, OutputData, OutputStatus, Slate, SwapStartArgs, TxLogEntry, TxLogEntryType,
 	WalletBackend, WalletInst, WalletLCProvider,
 };
-use grin_core::core;
-use grin_keychain::ExtKeychainPath;
-use grin_util::to_hex;
-use grin_wallet_util::grin_core::core::Committed;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
@@ -148,7 +148,7 @@ where
 
 	if swap_reserved_amount > 0 {
 		let swap_reserved_amount_str =
-			grin_core::core::amount_to_hr_string(swap_reserved_amount, true);
+			crate::grin_core::core::amount_to_hr_string(swap_reserved_amount, true);
 		info!("Running swaps reserved {} coins", swap_reserved_amount);
 		println!("WARNING. This swap will need to reserve {} MWC. If you don't have enough funds, please cancel it.", swap_reserved_amount_str);
 	}

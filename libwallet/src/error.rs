@@ -65,7 +65,7 @@ pub enum ErrorKind {
 
 	/// LibTX Error
 	#[fail(display = "LibTx Error, {}", _0)]
-	LibTX(grin_core::libtx::ErrorKind),
+	LibTX(crate::grin_core::libtx::ErrorKind),
 
 	/// Keychain error
 	#[fail(display = "Keychain error, {}", _0)]

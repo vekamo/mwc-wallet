@@ -17,13 +17,13 @@ use super::multisig::ParticipantData as MultisigParticipant;
 use super::ser::*;
 use super::types::{Currency, Network};
 use super::ErrorKind;
+use crate::grin_core::libtx::secp_ser;
+use crate::grin_util::secp::key::{PublicKey, SecretKey};
+use crate::grin_util::secp::Signature;
 use crate::proof::message::EncryptedMessage;
 use crate::proof::proofaddress::ProvableAddress;
 use crate::{ParticipantData as TxParticipant, VersionedSlate};
 use chrono::{DateTime, Utc};
-use grin_core::libtx::secp_ser;
-use grin_util::secp::key::{PublicKey, SecretKey};
-use grin_util::secp::Signature;
 use uuid::Uuid;
 
 /// Swap message that is used for Seller/Buyer interaction

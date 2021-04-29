@@ -18,22 +18,22 @@ use crate::grin_util::secp::key::SecretKey;
 use crate::grin_util::Mutex;
 
 use crate::api_impl::{foreign, owner};
+use crate::grin_core::core::hash::Hash;
+use crate::grin_core::libtx::tx_fee;
+use crate::grin_core::ser;
 use crate::grin_keychain::Keychain;
+use crate::grin_keychain::{ExtKeychainPath, Identifier};
+use crate::grin_p2p::libp2p_connection;
+use crate::grin_util::secp;
+use crate::grin_util::secp::pedersen::Commitment;
+use crate::grin_util::secp::Signature;
+use crate::grin_util::secp::{Message, PublicKey};
 use crate::internal::{keys, updater};
 use crate::swap::error::ErrorKind;
 use crate::types::NodeClient;
 use crate::Context;
 use crate::{wallet_lock, WalletInst, WalletLCProvider};
 use crate::{AcctPathMapping, Error, InitTxArgs, OutputCommitMapping, OutputStatus};
-use grin_core::libtx::tx_fee;
-use grin_core::ser;
-use grin_keychain::{ExtKeychainPath, Identifier};
-use grin_p2p::libp2p_connection;
-use grin_util::secp;
-use grin_util::secp::pedersen::Commitment;
-use grin_util::secp::{Message, PublicKey};
-use grin_wallet_util::grin_core::core::hash::Hash;
-use grin_wallet_util::grin_util::secp::Signature;
 use libp2p::PeerId;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -110,7 +110,7 @@ impl IntegrityContext {
 		#[cfg(debug_assertions)]
 		{
 			// Sanity check
-			grin_core::libtx::aggsig::verify_completed_sig(
+			crate::grin_core::libtx::aggsig::verify_completed_sig(
 				secp,
 				&signature,
 				&pk,

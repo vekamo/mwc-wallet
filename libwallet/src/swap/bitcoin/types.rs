@@ -13,6 +13,9 @@
 // limitations under the License.
 
 use super::client::Output;
+use crate::grin_keychain::{Identifier, SwitchCommitmentType};
+use crate::grin_util::secp::key::PublicKey;
+use crate::grin_util::secp::{Message, Signature};
 use crate::swap::message::SecondaryUpdate;
 use crate::swap::ser::*;
 use crate::swap::swap;
@@ -27,9 +30,6 @@ use bitcoin::OutPoint;
 use bitcoin::{Address, Script, Transaction, TxIn, TxOut, VarInt};
 use bitcoin_hashes::sha256d;
 use byteorder::{ByteOrder, LittleEndian};
-use grin_keychain::{Identifier, SwitchCommitmentType};
-use grin_util::secp::key::PublicKey;
-use grin_util::secp::{Message, Signature};
 use std::io::Cursor;
 use std::ops::Deref;
 
@@ -681,13 +681,13 @@ fn bch_network(network: Network) -> bch::network::Network {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::grin_core::global;
+	use crate::grin_core::global::ChainTypes;
+	use crate::grin_util::from_hex;
+	use crate::grin_util::secp::key::{PublicKey, SecretKey};
+	use crate::grin_util::secp::{ContextFlag, Secp256k1};
 	use bitcoin::util::address::Payload;
 	use bitcoin::util::key::PublicKey as BTCPublicKey;
-	use grin_core::global;
-	use grin_core::global::ChainTypes;
-	use grin_util::from_hex;
-	use grin_util::secp::key::{PublicKey, SecretKey};
-	use grin_util::secp::{ContextFlag, Secp256k1};
 	use rand::{thread_rng, Rng, RngCore};
 	use std::collections::HashMap;
 

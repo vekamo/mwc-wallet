@@ -15,6 +15,7 @@
 //! Generic implementation of owner API functions
 use crate::api_impl::owner::check_ttl;
 use crate::api_impl::owner_swap;
+use crate::grin_core::core::amount_to_hr_string;
 use crate::grin_keychain::Keychain;
 use crate::grin_util::secp::key::SecretKey;
 use crate::grin_util::Mutex;
@@ -31,7 +32,6 @@ use crate::{
 	VersionInfo, VersionedSlate, WalletBackend, WalletInst, WalletLCProvider,
 };
 use ed25519_dalek::PublicKey as DalekPublicKey;
-use grin_core::core::amount_to_hr_string;
 use grin_wallet_util::OnionV3Address;
 use std::sync::Arc;
 use std::sync::RwLock;

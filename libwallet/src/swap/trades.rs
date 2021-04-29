@@ -13,13 +13,13 @@
 // limitations under the License.
 
 use super::ErrorKind;
+use crate::grin_core::global;
+use crate::grin_util::secp::key::SecretKey;
+use crate::grin_util::{from_hex, to_hex};
+use crate::grin_util::{Mutex, RwLock};
 use crate::swap::types::{Context, Currency};
 use crate::swap::Swap;
 use base64;
-use grin_util::secp::key::SecretKey;
-use grin_util::{from_hex, to_hex};
-use grin_util::{Mutex, RwLock};
-use grin_wallet_util::grin_core::global;
 use rand::{thread_rng, Rng};
 use ring::aead;
 use std::collections::{BTreeMap, HashMap};

@@ -18,6 +18,7 @@ use super::state::{
 	JOURNAL_CANCELLED_BYER_LOCK_TOO_MUCH_FUNDS, JOURNAL_CANCELLED_BY_TIMEOUT,
 	JOURNAL_CANCELLED_BY_USER, JOURNAL_NOT_LOCKED,
 };
+use crate::grin_keychain::Keychain;
 use crate::swap::fsm::state;
 use crate::swap::fsm::state::{Input, State, StateEtaInfo, StateId, StateProcessRespond};
 use crate::swap::message::Message;
@@ -26,7 +27,6 @@ use crate::swap::{swap, Context, ErrorKind, SellApi, Swap, SwapApi};
 use crate::NodeClient;
 use chrono::{Local, TimeZone};
 use failure::_core::marker::PhantomData;
-use grin_keychain::Keychain;
 use std::sync::Arc;
 
 /// State SellerOfferCreated

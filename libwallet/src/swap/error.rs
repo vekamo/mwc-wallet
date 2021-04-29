@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use super::multisig;
+use crate::grin_core::core::committed;
+use crate::grin_util::secp;
 use failure::Fail;
-use grin_core::core::committed;
-use grin_util::secp;
 use std::error::Error as StdError;
 use std::io;
 
@@ -81,7 +81,7 @@ pub enum ErrorKind {
 	Multisig(multisig::ErrorKind),
 	/// Keychain failed
 	#[fail(display = "Swap Keychain error: {}", _0)]
-	Keychain(grin_keychain::Error),
+	Keychain(crate::grin_keychain::Error),
 	/// LibWallet error
 	#[fail(display = "Swap LibWallet error: {}", _0)]
 	LibWallet(crate::ErrorKind),
@@ -139,8 +139,8 @@ impl ErrorKind {
 	}
 }
 
-impl From<grin_keychain::Error> for ErrorKind {
-	fn from(error: grin_keychain::Error) -> ErrorKind {
+impl From<crate::grin_keychain::Error> for ErrorKind {
+	fn from(error: crate::grin_keychain::Error) -> ErrorKind {
 		ErrorKind::Keychain(error)
 	}
 }

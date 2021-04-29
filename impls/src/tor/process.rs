@@ -248,6 +248,26 @@ impl TorProcess {
 			Ok(stdout) => {
 				stdout_thread.join().unwrap();
 				self.stdout = Some(stdout);
+
+				if let Some(pr) = &mut self.process {
+					match pr.try_wait() {
+						Ok(Some(status)) => {
+							return Err(Error::Process(format!(
+								"TOR executable {} failed to start with a status {}",
+								Self::get_tor_cmd(),
+								status
+							)))
+						}
+						Ok(None) => (),
+						Err(e) => {
+							return Err(Error::Process(format!(
+								"Unable to validate TOR {} running status, {}",
+								Self::get_tor_cmd(),
+								e
+							)))
+						}
+					}
+				}
 				Ok(self)
 			}
 			Err(err) => {

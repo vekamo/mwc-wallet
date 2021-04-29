@@ -19,17 +19,17 @@ use super::swap;
 use super::swap::{tx_add_input, tx_add_output, Swap};
 use super::types::*;
 use super::{ErrorKind, Keychain, CURRENT_VERSION};
+use crate::grin_core::core::Committed;
+use crate::grin_core::core::KernelFeatures;
+use crate::grin_core::libtx::{build, proof, tx_fee};
+use crate::grin_keychain::{BlindSum, BlindingFactor, SwitchCommitmentType};
+use crate::grin_util::secp::aggsig;
+use crate::grin_util::secp::key::{PublicKey, SecretKey};
+use crate::grin_util::secp::pedersen::RangeProof;
 use crate::swap::bitcoin::BtcData;
 use crate::swap::fsm::state::StateId;
 use crate::swap::multisig::{Builder as MultisigBuilder, ParticipantData as MultisigParticipant};
 use crate::{NodeClient, ParticipantData as TxParticipant, Slate, SlateVersion, VersionedSlate};
-use grin_core::core::KernelFeatures;
-use grin_core::libtx::{build, proof, tx_fee};
-use grin_keychain::{BlindSum, BlindingFactor, SwitchCommitmentType};
-use grin_util::secp::aggsig;
-use grin_util::secp::key::{PublicKey, SecretKey};
-use grin_util::secp::pedersen::RangeProof;
-use grin_wallet_util::grin_core::core::Committed;
 use rand::thread_rng;
 use std::mem;
 use uuid::Uuid;
@@ -410,7 +410,7 @@ impl BuyApi {
 
 		// Add multisig output to slate (with invalid proof)
 		let mut proof = RangeProof::zero();
-		proof.plen = grin_util::secp::constants::MAX_PROOF_SIZE;
+		proof.plen = crate::grin_util::secp::constants::MAX_PROOF_SIZE;
 
 		tx_add_output(slate, swap.multisig.commit(keychain.secp())?, proof);
 

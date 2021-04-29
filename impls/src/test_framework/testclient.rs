@@ -17,9 +17,12 @@
 //! Operates directly on a chain instance
 
 use crate::api::{self, LocatedTxKernel};
+use crate::api::{Libp2pMessages, Libp2pPeers};
 use crate::chain::types::NoopAdapter;
 use crate::chain::Chain;
+use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::LruVerifierCache;
+use crate::core::core::BlockHeader;
 use crate::core::core::{Transaction, TxKernel};
 use crate::core::global::{set_local_chain_type, ChainTypes};
 use crate::core::pow;
@@ -34,11 +37,8 @@ use crate::util;
 use crate::util::secp::key::SecretKey;
 use crate::util::secp::pedersen;
 use crate::util::secp::pedersen::Commitment;
+use crate::util::ToHex;
 use crate::util::{Mutex, RwLock};
-use grin_core::core::hash::Hashed;
-use grin_core::core::BlockHeader;
-use grin_util::ToHex;
-use grin_wallet_util::grin_api::{Libp2pMessages, Libp2pPeers};
 use serde_json;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -574,7 +574,7 @@ impl NodeClient for LocalWalletClient {
 	/// Return Connected peers
 	fn get_connected_peer_info(
 		&self,
-	) -> Result<Vec<grin_p2p::types::PeerInfoDisplayLegacy>, libwallet::Error> {
+	) -> Result<Vec<crate::grin_p2p::types::PeerInfoDisplayLegacy>, libwallet::Error> {
 		trace!("get_connected_peer_info called at the test client. Skipped.");
 		return Ok(Vec::new());
 	}

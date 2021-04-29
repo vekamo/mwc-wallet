@@ -19,6 +19,7 @@
 
 use crate::error::{Error, ErrorKind};
 use crate::grin_core::core::transaction::OutputFeatures;
+use crate::grin_core::global;
 use crate::grin_core::libtx::secp_ser;
 use crate::grin_core::map_vec;
 use crate::grin_keychain::{BlindingFactor, Identifier};
@@ -29,7 +30,6 @@ use crate::grin_util::secp::Signature;
 use crate::proof::proofaddress;
 use crate::proof::proofaddress::ProvableAddress;
 use crate::slate::CompatKernelFeatures;
-use grin_core::global;
 use uuid::Uuid;
 
 use crate::grin_core::core::transaction::Transaction;

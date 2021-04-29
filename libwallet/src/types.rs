@@ -17,7 +17,9 @@
 
 use crate::config::{MQSConfig, TorConfig, WalletConfig};
 use crate::error::{Error, ErrorKind};
+use crate::grin_api::{Libp2pMessages, Libp2pPeers};
 use crate::grin_core::core::hash::Hash;
+use crate::grin_core::core::Committed;
 use crate::grin_core::core::{Output, Transaction, TxKernel};
 use crate::grin_core::libtx::{aggsig, secp_ser};
 use crate::grin_core::{global, ser};
@@ -26,15 +28,13 @@ use crate::grin_util::logger::LoggingConfig;
 use crate::grin_util::secp::key::{PublicKey, SecretKey, ZERO_KEY};
 use crate::grin_util::secp::pedersen::Commitment;
 use crate::grin_util::secp::{self, pedersen, Secp256k1};
+use crate::grin_util::ToHex;
 use crate::grin_util::ZeroingString;
 use crate::proof::proofaddress::ProvableAddress;
 use crate::slate::ParticipantMessages;
 use crate::Slate;
 use crate::{InitTxArgs, IntegrityContext};
 use chrono::prelude::*;
-use grin_util::ToHex;
-use grin_wallet_util::grin_api::{Libp2pMessages, Libp2pPeers};
-use grin_wallet_util::grin_core::core::Committed;
 use rand::rngs::mock::StepRng;
 use rand::thread_rng;
 use serde;
@@ -403,8 +403,9 @@ pub trait NodeClient: Send + Sync + Clone {
 	fn get_header_info(&self, height: u64) -> Result<HeaderInfo, Error>;
 
 	/// Return Connected peers
-	fn get_connected_peer_info(&self)
-		-> Result<Vec<grin_p2p::types::PeerInfoDisplayLegacy>, Error>;
+	fn get_connected_peer_info(
+		&self,
+	) -> Result<Vec<crate::grin_p2p::types::PeerInfoDisplayLegacy>, Error>;
 
 	/// Get a kernel and the height of the block it's included in. Returns
 	/// (tx_kernel, height, mmr_index)
@@ -459,7 +460,7 @@ pub trait NodeClient: Send + Sync + Clone {
 		start_height: u64,
 		end_height: u64,
 		threads_number: usize,
-	) -> Result<Vec<grin_api::BlockPrintable>, Error>;
+	) -> Result<Vec<crate::grin_api::BlockPrintable>, Error>;
 
 	/// Get Node Tor address
 	fn get_libp2p_peers(&self) -> Result<Libp2pPeers, Error>;

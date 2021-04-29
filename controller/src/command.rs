@@ -3158,26 +3158,6 @@ where
 								println!("Joining the node peer at {}", addr);
 							}
 						}
-
-						if let Ok(messages) = w.w2n_client().get_libp2p_messages() {
-							let mut inject_msgs: Vec<ReceivedMessage> = vec![];
-
-							let cur_time = Utc::now().timestamp();
-							let delta = cur_time - messages.current_time;
-
-							let topics: HashSet<String> = libp2p_connection::get_topics()
-								.iter()
-								.map(|(topic_str, _topic, _fee)| topic_str.clone())
-								.collect();
-
-							for mut m in messages.libp2p_messages {
-								if topics.contains(&m.topic) {
-									m.timestamp += delta;
-									inject_msgs.push(m);
-								}
-							}
-							libp2p_connection::inject_received_messaged(inject_msgs);
-						}
 					}
 					Err(e) => {
 						println!(
@@ -3188,36 +3168,43 @@ where
 				}
 				// Adding seed nodes. Those onion addresses must match what we have for seeds.
 				// Please note, it is a secondary source, the primary source is the wallet's node
-				if global::is_mainnet() {
-					libp2p_connection::add_new_peer(&PeerAddr::Onion(
-						"bsvrlu2vab3frt24bqwkfo5kqm35v2pmlv3dvqg5bgc72a3cwyizuyqd.onion"
-							.to_string(),
-					))
-					.map_err(|e| {
-						ErrorKind::GenericError(format!("Failed to add libp2p peer, {}", e))
-					})?;
-					libp2p_connection::add_new_peer(&PeerAddr::Onion(
-						"r6dkxkiyg5grfhyftj3cusxvxm34e63lg5ed2zy4zbrwh4pwrcmvmpid.onion"
-							.to_string(),
-					))
-					.map_err(|e| {
-						ErrorKind::GenericError(format!("Failed to add libp2p peer, {}", e))
-					})?;
+				let seed_list = if global::is_mainnet() {
+					crate::grin_servers::MAINNET_DNS_SEEDS
 				} else {
-					libp2p_connection::add_new_peer(&PeerAddr::Onion(
-						"nvo4xrfnn46vhaocnswea564bnmbgfjib7fqpa2my3e3ren4iujnzeyd.onion"
-							.to_string(),
-					))
-					.map_err(|e| {
-						ErrorKind::GenericError(format!("Failed to add libp2p peer, {}", e))
-					})?;
-					libp2p_connection::add_new_peer(&PeerAddr::Onion(
-						"627qgblkpc4ayr5fe6tfg6ryhev7kmjhge2ualab7ajxk5gbs3v7bmqd.onion"
-							.to_string(),
-					))
-					.map_err(|e| {
-						ErrorKind::GenericError(format!("Failed to add libp2p peer, {}", e))
-					})?;
+					crate::grin_servers::FLOONET_DNS_SEEDS
+				};
+
+				for seed in seed_list {
+					if seed.ends_with("onion") {
+						libp2p_connection::add_new_peer(&PeerAddr::Onion(seed.to_string()))
+							.map_err(|e| {
+								ErrorKind::GenericError(format!("Failed to add libp2p peer, {}", e))
+							})?;
+					}
+				}
+			}
+
+			if peers.len() < 5 {
+				let mut w_lock = wallet_inst.lock();
+				let w = w_lock.lc_provider()?.wallet_inst()?;
+				if let Ok(messages) = w.w2n_client().get_libp2p_messages() {
+					let mut inject_msgs: Vec<ReceivedMessage> = vec![];
+
+					let cur_time = Utc::now().timestamp();
+					let delta = cur_time - messages.current_time;
+
+					let topics: HashSet<String> = libp2p_connection::get_topics()
+						.iter()
+						.map(|(topic_str, _topic, _fee)| topic_str.clone())
+						.collect();
+
+					for mut m in messages.libp2p_messages {
+						if topics.contains(&m.topic) {
+							m.timestamp += delta;
+							inject_msgs.push(m);
+						}
+					}
+					libp2p_connection::inject_received_messaged(inject_msgs);
 				}
 			}
 		}

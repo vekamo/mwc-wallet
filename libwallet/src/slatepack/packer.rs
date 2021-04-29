@@ -111,19 +111,19 @@ impl Slatepacker {
 
 #[test]
 fn slatepack_io_test() {
+	use crate::grin_core::core::KernelFeatures;
+	use crate::grin_core::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
+	use crate::grin_core::global;
+	use crate::grin_keychain::BlindingFactor;
+	use crate::grin_keychain::ExtKeychain;
 	use crate::grin_util as util;
+	use crate::grin_util::secp::pedersen::{Commitment, RangeProof};
 	use crate::grin_util::secp::Signature;
+	use crate::grin_util::secp::{PublicKey, Secp256k1, SecretKey};
 	use crate::proof::proofaddress;
 	use crate::proof::proofaddress::ProvableAddress;
 	use crate::slate::{PaymentInfo, VersionCompatInfo};
 	use crate::ParticipantData;
-	use grin_core::core::KernelFeatures;
-	use grin_core::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
-	use grin_core::global;
-	use grin_keychain::ExtKeychain;
-	use grin_util::secp::pedersen::{Commitment, RangeProof};
-	use grin_util::secp::{PublicKey, Secp256k1, SecretKey};
-	use grin_wallet_util::grin_keychain::BlindingFactor;
 	use uuid::Uuid;
 	use x25519_dalek::PublicKey as xDalekPublicKey;
 

@@ -14,11 +14,11 @@
 
 use super::client::*;
 use super::rpc::*;
+use crate::grin_util::{from_hex, to_hex};
 use crate::swap::types::Currency;
 use crate::swap::ErrorKind;
 use bitcoin::{OutPoint, Script, Txid};
 use bitcoin_hashes::sha256d::Hash;
-use grin_util::{from_hex, to_hex};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;

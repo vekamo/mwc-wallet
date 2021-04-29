@@ -20,15 +20,15 @@ use super::swap;
 use super::swap::{signature_as_secret, tx_add_input, tx_add_output, Swap};
 use super::types::*;
 use super::{ErrorKind, Keychain, CURRENT_VERSION};
+use crate::grin_core::libtx::{build, proof, tx_fee};
+use crate::grin_keychain::{BlindSum, BlindingFactor};
+use crate::grin_util::secp::aggsig;
+use crate::grin_util::secp::key::{PublicKey, SecretKey};
+use crate::grin_util::secp::pedersen::{Commitment, RangeProof};
 use crate::grin_util::secp::Secp256k1;
 use crate::swap::fsm::state::StateId;
 use crate::{ParticipantData as TxParticipant, Slate, SlateVersion, VersionedSlate};
 use chrono::{DateTime, NaiveDateTime, Utc};
-use grin_core::libtx::{build, proof, tx_fee};
-use grin_keychain::{BlindSum, BlindingFactor};
-use grin_util::secp::aggsig;
-use grin_util::secp::key::{PublicKey, SecretKey};
-use grin_util::secp::pedersen::{Commitment, RangeProof};
 use rand::thread_rng;
 
 #[cfg(test)]

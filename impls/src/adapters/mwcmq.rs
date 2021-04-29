@@ -19,11 +19,11 @@ use crate::libwallet::proof::crypto;
 use crate::libwallet::proof::crypto::Hex;
 use crate::util::Mutex;
 
+use crate::core::core::amount_to_hr_string;
+use crate::util::RwLock;
 use crate::SlateSender;
 use crate::SwapMessageSender;
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
-use grin_core::core::amount_to_hr_string;
-use grin_util::RwLock;
 use grin_wallet_libwallet::proof::message::EncryptedMessage;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::proof::tx_proof::{push_proof_for_slate, TxProof};

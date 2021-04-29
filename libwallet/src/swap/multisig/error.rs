@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::grin_util::secp;
 use failure::Fail;
-use grin_util::secp;
 use std::error::Error as StdError;
 
 /// Multisig error
