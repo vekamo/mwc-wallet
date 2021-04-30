@@ -42,6 +42,7 @@ use grin_wallet_util::grin_p2p::libp2p_connection;
 use grin_wallet_util::grin_util::secp;
 use grin_wallet_util::grin_util::secp::pedersen::Commitment;
 use grin_wallet_util::grin_util::secp::Message;
+use libp2p::identity::Keypair;
 use std::collections::HashMap;
 
 /// self send impl
@@ -114,7 +115,7 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance[0].1, false);
 	assert_eq!(
 		integral_balance[0].0.clone().unwrap().expiration_height,
-		1445+3
+		1445 + 3
 	);
 
 	let (account, outputs, _height, integral_balance) =
@@ -124,7 +125,7 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance.len(), 1);
 	assert_eq!(integral_balance[0].0.fee, 30_000_000);
 	assert_eq!(integral_balance[0].1, false);
-	assert_eq!(integral_balance[0].0.expiration_height, 1445+3);
+	assert_eq!(integral_balance[0].0.expiration_height, 1445 + 3);
 
 	// Retry should do nothing because first transaction is not mined yet
 	let integral_balance = libwallet::owner_libp2p::create_integral_balance(
@@ -140,7 +141,7 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance[1].1, false);
 	assert_eq!(
 		integral_balance[1].0.clone().unwrap().expiration_height,
-		1445+3
+		1445 + 3
 	);
 	assert_eq!(integral_balance[0].0.is_some(), false);
 	assert_eq!(integral_balance[0].1, false);
@@ -156,7 +157,7 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance.len(), 1);
 	assert_eq!(integral_balance[0].0.fee, 30_000_000);
 	assert_eq!(integral_balance[0].1, false); // Now should be confirmed...
-	assert_eq!(integral_balance[0].0.expiration_height, 1446+3);
+	assert_eq!(integral_balance[0].0.expiration_height, 1446 + 3);
 
 	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), mask1, 2, false);
 	let _ = owner::perform_refresh_from_node(wallet1.clone(), mask1, &None)?;
@@ -181,13 +182,13 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance[1].1, true);
 	assert_eq!(
 		integral_balance[1].0.clone().unwrap().expiration_height,
-		1446+3
+		1446 + 3
 	);
 	assert_eq!(integral_balance[0].0.clone().unwrap().fee, 35_000_000);
 	assert_eq!(integral_balance[0].1, false);
 	assert_eq!(
 		integral_balance[0].0.clone().unwrap().expiration_height,
-		1449+3
+		1449 + 3
 	);
 
 	// Mine a block, the second transaction should be confirmed
@@ -201,10 +202,10 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	assert_eq!(integral_balance.len(), 2);
 	assert_eq!(integral_balance[0].0.fee, 30_000_000);
 	assert_eq!(integral_balance[0].1, true);
-	assert_eq!(integral_balance[0].0.expiration_height, 1446+3);
+	assert_eq!(integral_balance[0].0.expiration_height, 1446 + 3);
 	assert_eq!(integral_balance[1].0.fee, 35_000_000);
 	assert_eq!(integral_balance[1].1, true);
-	assert_eq!(integral_balance[1].0.expiration_height, 1450+3); // +1 because post in test environment mining another block.
+	assert_eq!(integral_balance[1].0.expiration_height, 1450 + 3); // +1 because post in test environment mining another block.
 
 	// Let's verify if Integrity context match the Tx Kernels.
 	let txs = {
@@ -234,13 +235,16 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	// Let's check if all signaatures are unique. It is expected
 	let mut signatures: Vec<secp::Signature> = Vec::new();
 
-	let peer_id = PeerId::random();
+	let peer_keys = Keypair::generate_ed25519();
+
+	let peer_id = PeerId::from_public_key(peer_keys.public());
+	let peer_pk = peer_id.as_dalek_pubkey().unwrap();
 	let peer_id_message =
-		Message::from_slice(Hash::from_vec(&peer_id.to_bytes()).as_bytes()).unwrap();
+		Message::from_slice(Hash::from_vec(peer_pk.as_bytes()).as_bytes()).unwrap();
 
 	// Let't verify the we can generate multiple valid signatures for the commits
 	for _i in 0..20 {
-		let (excess1, signature1) = integrity_context1.calc_kernel_excess(&secp, &peer_id)?;
+		let (excess1, signature1) = integrity_context1.calc_kernel_excess(&secp, &peer_pk)?;
 		assert_eq!(excess1, kernel1);
 		let pk1 = excess1.to_pubkey().unwrap();
 		// Validating the message
@@ -251,7 +255,7 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 		aggsig::verify_completed_sig(&secp, &signature1, &pk1, Some(&pk1), &peer_id_message)
 			.expect("Signature1 validation is failed");
 
-		let (excess2, signature2) = integrity_context2.calc_kernel_excess(&secp, &peer_id)?;
+		let (excess2, signature2) = integrity_context2.calc_kernel_excess(&secp, &peer_pk)?;
 		assert_eq!(excess2, kernel2);
 		let pk2 = excess2.to_pubkey().unwrap();
 		// Validating the message
@@ -265,7 +269,7 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	// Testing for libp2p routine
 	println!("peer_id data: {}", util::to_hex(&peer_id.to_bytes()));
 
-	let (kernel_excess, signature) = integrity_context1.calc_kernel_excess(&secp, &peer_id)?;
+	let (kernel_excess, signature) = integrity_context1.calc_kernel_excess(&secp, &peer_pk)?;
 	let message: Vec<u8> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 	println!("kernel_excess: {}", util::to_hex(&kernel_excess.0));
@@ -276,7 +280,8 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 
 	// Build message for p2p network
 	let libp2p_message =
-		libp2p_connection::build_integrity_message(&kernel_excess, &signature, &message).unwrap();
+		libp2p_connection::build_integrity_message(&kernel_excess, &peer_pk, &signature, &message)
+			.unwrap();
 
 	let output_validation_fn = |_kernel: &Commitment| {
 		Ok(Some(TxKernel::with_features(KernelFeatures::Plain {
@@ -291,7 +296,8 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 		&mut HashMap::new(),
 		1_000_000,
 	);
-	let validate_fail = libp2p_connection::validate_integrity_message(
+	// PeerId can be anyting. because of forward it can change
+	let validate_ok2 = libp2p_connection::validate_integrity_message(
 		&PeerId::random(),
 		&libp2p_message,
 		output_validation_fn,
@@ -299,9 +305,9 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 		1_000_000,
 	);
 	assert!(validate_ok.is_ok());
-	assert_eq!(validate_ok.unwrap(), 100_000_000);
-	assert!(validate_fail.is_ok());
-	assert_eq!(validate_fail.unwrap(), 0);
+	assert_eq!(validate_ok.unwrap().0, 100_000_000);
+	assert!(validate_ok2.is_ok());
+	assert_eq!(validate_ok2.unwrap().0, 100_000_000);
 
 	// add some accounts to check if lowest indexes will be used.
 	wallet::controller::owner_single_use(Some(wallet1.clone()), mask1, None, |api, m| {

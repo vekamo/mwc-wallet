@@ -34,7 +34,7 @@ use crate::types::NodeClient;
 use crate::Context;
 use crate::{wallet_lock, WalletInst, WalletLCProvider};
 use crate::{AcctPathMapping, Error, InitTxArgs, OutputCommitMapping, OutputStatus};
-use libp2p::PeerId;
+use ed25519_dalek::PublicKey as DalekPublicKey;
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -90,9 +90,9 @@ impl IntegrityContext {
 	pub fn calc_kernel_excess(
 		&self,
 		secp: &secp::Secp256k1,
-		peer_id: &PeerId,
+		tor_pk: &DalekPublicKey,
 	) -> Result<(Commitment, Signature), Error> {
-		let msg_hash = Hash::from_vec(&peer_id.to_bytes());
+		let msg_hash = Hash::from_vec(tor_pk.as_bytes());
 		let message = Message::from_slice(msg_hash.as_bytes())?;
 
 		let pk = PublicKey::from_secret_key(&secp, &self.sec_key)?;
