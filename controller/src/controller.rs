@@ -852,24 +852,32 @@ pub fn start_libp2p_listener<L, C, K>(
 				}
 			};
 
-			let libp2p_node_runner = libp2p_connection::run_libp2p_node(
-				tor_addr.port(),
-				&tor_secret,
-				libp2p_listen_port as u16,
-				selection::get_base_fee(),
-				output_validation_fn,
-				stop_mutex,
-			);
+			let validation_fn = Arc::new(output_validation_fn);
 
-			info!("Starting gossipsub libp2p server");
-			let mut rt = tokio::runtime::Runtime::new().unwrap();
+			loop {
+                let libp2p_node_runner = libp2p_connection::run_libp2p_node(
+                    tor_addr.port(),
+                    &tor_secret,
+                    libp2p_listen_port as u16,
+                    selection::get_base_fee(),
+					validation_fn.clone(),
+                    stop_mutex.clone(),
+                );
 
-			match rt.block_on(libp2p_node_runner) {
-				Ok(_) => info!("libp2p node is exited"),
-				Err(e) => error!("Unable to start libp2p node, {:?}", e),
+                info!("Starting gossipsub libp2p server");
+                let mut rt = tokio::runtime::Runtime::new().unwrap();
+
+                match rt.block_on(libp2p_node_runner) {
+                    Ok(_) => info!("libp2p node is exited"),
+                    Err(e) => error!("Unable to start libp2p node, {:?}", e),
+                }
+                // Swarm is not valid any more, let's update our global instance.
+                libp2p_connection::reset_libp2p_swarm();
+
+				if *stop_mutex.lock().unwrap() == 0 {
+					break;
+				}
 			}
-			// Swarm is not valid any more, let's update our global instance.
-			libp2p_connection::reset_libp2p_swarm();
 		})
 		.map_err(|e| ErrorKind::GenericError(format!("Unable to start libp2p_node server, {}", e)))?;
 
