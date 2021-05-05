@@ -288,11 +288,12 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 			fee: 100_000_000,
 		})))
 	};
+	let output_validation_fn = std::sync::Arc::new(output_validation_fn);
 
 	let validate_ok = libp2p_connection::validate_integrity_message(
 		&peer_id,
 		&libp2p_message,
-		output_validation_fn,
+		output_validation_fn.clone(),
 		&mut HashMap::new(),
 		1_000_000,
 	);
@@ -300,7 +301,7 @@ fn integrity_kernel_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	let validate_ok2 = libp2p_connection::validate_integrity_message(
 		&PeerId::random(),
 		&libp2p_message,
-		output_validation_fn,
+		output_validation_fn.clone(),
 		&mut HashMap::new(),
 		1_000_000,
 	);

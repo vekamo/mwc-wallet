@@ -134,7 +134,7 @@ impl fmt::Display for StateId {
 			StateId::SellerWaitingForRedeemConfirmations => {
 				"Waiting for confirmations of Redeem transaction"
 			}
-			StateId::SellerSwapComplete => "Seller Swap trade is successfully complete",
+			StateId::SellerSwapComplete => "Complete",
 
 			StateId::SellerWaitingForRefundHeight => "Waiting when refund Slate can be posted",
 			StateId::SellerPostingRefundSlate => "Post MWC refund slate",
@@ -161,7 +161,7 @@ impl fmt::Display for StateId {
 			StateId::BuyerWaitForRedeemMwcConfirmations => {
 				"Waiting for confirmations of Redeem transaction"
 			}
-			StateId::BuyerSwapComplete => "Buyer Swap trade is successfully complete",
+			StateId::BuyerSwapComplete => "Complete",
 
 			StateId::BuyerWaitingForRefundTime => "Waiting when refund Transaction can be posted",
 			StateId::BuyerPostingRefundForSecondary => "Post Refund Transaction",
