@@ -46,6 +46,7 @@ use grin_wallet_libwallet::swap::{message, Swap};
 use grin_wallet_libwallet::{Slate, TxLogEntry, WalletInst};
 use grin_wallet_util::grin_core::consensus::GRIN_BASE;
 use grin_wallet_util::grin_core::core::amount_to_hr_string;
+use grin_wallet_util::grin_core::global::{FLOONET_DNS_SEEDS, MAINNET_DNS_SEEDS};
 use grin_wallet_util::grin_p2p::libp2p_connection::ReceivedMessage;
 use grin_wallet_util::grin_p2p::{libp2p_connection, PeerAddr};
 use serde_json as json;
@@ -3169,9 +3170,9 @@ where
 				// Adding seed nodes. Those onion addresses must match what we have for seeds.
 				// Please note, it is a secondary source, the primary source is the wallet's node
 				let seed_list = if global::is_mainnet() {
-					crate::grin_servers::MAINNET_DNS_SEEDS
+					MAINNET_DNS_SEEDS
 				} else {
-					crate::grin_servers::FLOONET_DNS_SEEDS
+					FLOONET_DNS_SEEDS
 				};
 
 				for seed in seed_list {
