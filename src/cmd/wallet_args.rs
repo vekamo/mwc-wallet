@@ -56,8 +56,8 @@ macro_rules! arg_parse {
 			Ok(res) => res,
 			Err(e) => {
 				return Err(ErrorKind::ArgumentError(format!("{}", e)).into());
+				}
 			}
-		}
 	};
 }
 /// Simple error definition, just so we can return errors from all commands
@@ -1021,7 +1021,7 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 	let secondary_currency = parse_required(args, "secondary_currency")?;
 	let secondary_currency = secondary_currency.to_lowercase();
 	match secondary_currency.as_str() {
-		"btc" | "bch" | "ltc" | "zcash" | "dash" | "doge" => (),
+		"btc" | "bch" | "ltc" | "zcash" | "dash" | "doge" | "ether" => (),
 		_ => {
 			return Err(ParseError::ArgumentError(format!(
 				"{} is not on the supported currency list.",
@@ -1032,6 +1032,7 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 
 	let btc_amount = parse_required(args, "secondary_amount")?;
 	let btc_address = parse_required(args, "secondary_address")?;
+	let secondary_redeem_address = btc_address.to_string();
 
 	let who_lock_first = parse_required(args, "who_lock_first")?.to_lowercase();
 	if !(who_lock_first == "buyer" || who_lock_first == "seller") {
@@ -1065,6 +1066,16 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 		.map(|s| String::from(s))
 		.filter(|s| !s.is_empty());
 
+	let eth_swap_contract_address = args
+		.value_of("eth_swap_contract_address")
+		.map(|s| String::from(s))
+		.filter(|s| !s.is_empty());
+	let eth_infura_project_id = args
+		.value_of("eth_infura_project_id")
+		.map(|s| String::from(s))
+		.filter(|s| !s.is_empty());
+	let eth_redirect_to_private_wallet = args.is_present("eth_redirect_to_private_wallet");
+
 	let secondary_fee = match args.value_of("secondary_fee") {
 		Some(fee_str) => Some(fee_str.parse::<f32>().map_err(|e| {
 			ParseError::ArgumentError(format!("Invalid secondary_fee value, {}", e))
@@ -1081,7 +1092,7 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 			.map(|s| s.split(",").map(|s| s.to_string()).collect::<Vec<String>>()),
 		secondary_currency: secondary_currency.to_string(),
 		secondary_amount: btc_amount.to_string(),
-		secondary_redeem_address: btc_address.to_string(),
+		secondary_redeem_address,
 		secondary_fee,
 		seller_lock_first: who_lock_first == "seller",
 		minimum_confirmations: Some(min_c),
@@ -1093,6 +1104,9 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 		buyer_communication_address: destination.to_string(),
 		electrum_node_uri1,
 		electrum_node_uri2,
+		eth_swap_contract_address,
+		eth_infura_project_id,
+		eth_redirect_to_private_wallet,
 		dry_run,
 		tag: args.value_of("tag").map(|s| s.to_string()),
 	})
@@ -1152,6 +1166,13 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 
 	let electrum_node_uri1 = args.value_of("electrum_uri1").map(|s| String::from(s));
 	let electrum_node_uri2 = args.value_of("electrum_uri2").map(|s| String::from(s));
+	let eth_swap_contract_address = args
+		.value_of("eth_swap_contract_address")
+		.map(|s| String::from(s));
+	let eth_infura_project_id = args
+		.value_of("eth_infura_project_id")
+		.map(|s| String::from(s));
+	let eth_redirect_to_private_wallet = args.is_present("eth_redirect_to_private_wallet");
 
 	Ok(command::SwapArgs {
 		subcommand,
@@ -1168,6 +1189,9 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		json_format: false,
 		electrum_node_uri1,
 		electrum_node_uri2,
+		eth_swap_contract_address,
+		eth_infura_project_id,
+		eth_redirect_to_private_wallet,
 		wait_for_backup1: false, // waiting is a primary usage for qt wallet. We are not documented that properly to make available for all users.
 		tag: args.value_of("tag").map(|s| String::from(s)),
 	})
@@ -1257,6 +1281,27 @@ pub fn parse_send_marketplace_message(
 		command: parse_required(args, "command")?.to_string(),
 		offer_id: parse_required(args, "offer_id")?.to_string(),
 		tor_address: parse_required(args, "tor_address")?.to_string(),
+	})
+}
+
+pub fn parse_eth_args(args: &ArgMatches) -> Result<command::EthArgs, ParseError> {
+	let subcommand = if args.is_present("info") {
+		command::EthSubcommand::Info
+	} else if args.is_present("send") {
+		command::EthSubcommand::Send
+	} else {
+		return Err(ParseError::ArgumentError(format!(
+			"Please define some action to do"
+		)));
+	};
+
+	let dest = args.value_of("dest").map(|s| String::from(s));
+	let amount = args.value_of("amount").map(|s| String::from(s));
+
+	Ok(command::EthArgs {
+		subcommand,
+		dest,
+		amount,
 	})
 }
 
@@ -1392,6 +1437,8 @@ where
 			grin_wallet_libwallet::swap::trades::init_swap_trade_backend(
 				wallet_inst.get_data_file_dir(),
 				&wallet_config.swap_electrumx_addr,
+				&wallet_config.eth_swap_contract_address,
+				&wallet_config.eth_infura_project_id,
 			);
 
 			//read or save the node index(the good node)
@@ -1681,6 +1728,10 @@ where
 		}
 		("check_tor_connection", _) => {
 			command::check_tor_connection(owner_api.wallet_inst.clone(), km, tor_config)
+		}
+		("eth", Some(args)) => {
+			let a = arg_parse!(parse_eth_args(&args));
+			command::eth(owner_api.wallet_inst.clone(), a)
 		}
 		(cmd, _) => {
 			return Err(ErrorKind::ArgumentError(format!(

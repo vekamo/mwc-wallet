@@ -15,6 +15,7 @@
 //! Types and traits that should be provided by a wallet
 //! implementation
 
+use super::swap::ethereum::EthereumWallet;
 use crate::config::{MQSConfig, TorConfig, WalletConfig};
 use crate::error::{Error, ErrorKind};
 use crate::grin_api::{Libp2pMessages, Libp2pPeers};
@@ -257,6 +258,13 @@ where
 
 	/// last block scanned during scan or restore
 	fn last_scanned_blocks(&mut self) -> Result<Vec<ScannedBlockInfo>, Error>;
+
+	/// set ethereum wallet instance
+	fn set_ethereum_wallet(&mut self, ethereum_wallet: Option<EthereumWallet>)
+		-> Result<(), Error>;
+
+	/// get ethereum wallet instance
+	fn get_ethereum_wallet(&self) -> Result<EthereumWallet, Error>;
 }
 
 /// Batch trait to update the output data backend atomically. Trying to use a

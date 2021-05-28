@@ -149,6 +149,12 @@ pub struct Swap {
 	pub electrum_node_uri1: Option<String>,
 	/// ElectrumX failover URI2
 	pub electrum_node_uri2: Option<String>,
+	/// Ethereum Swap Contract Address
+	pub eth_swap_contract_address: Option<String>,
+	/// Ethereum Infura Project Id
+	pub eth_infura_project_id: Option<String>,
+	/// Ethereum transfer to users' wallet directly
+	pub eth_redirect_to_private_wallet: bool,
 
 	// --------------------------------
 	// Additional non stored params for the trade. They good for a single call, not for all sessions
@@ -384,7 +390,7 @@ impl Swap {
 		self.get_time_message_offers()
 			+ std::cmp::max(
 				self.get_timeinterval_mwc_lock(),
-				self.get_timeinterval_btc_lock(),
+				self.get_timeinterval_secondary_lock(),
 			) / 20
 	}
 
@@ -394,7 +400,7 @@ impl Swap {
 		self.get_time_message_offers()
 			+ std::cmp::max(
 				self.get_timeinterval_mwc_lock(),
-				self.get_timeinterval_btc_lock(),
+				self.get_timeinterval_secondary_lock(),
 			)
 	}
 
@@ -420,16 +426,16 @@ impl Swap {
 		self.get_time_mwc_lock() + self.redeem_time_sec as i64
 	}
 
-	/// BTC lock time for script
-	pub fn get_time_btc_lock_script(&self) -> i64 {
+	/// BTC/ETH lock time for script
+	pub fn get_time_secondary_lock_script(&self) -> i64 {
 		self.get_time_mwc_refund()
 			+ self.redeem_time_sec as i64
 			+ self.get_timeinterval_mwc_lock()
-			+ self.get_timeinterval_btc_lock()
+			+ self.get_timeinterval_secondary_lock()
 	}
 
-	/// BTC lock time publish
-	pub fn get_time_btc_lock_publish(&self) -> i64 {
+	/// BTC/ETH lock time publish
+	pub fn get_time_secondary_lock_publish(&self) -> i64 {
 		// Here is what BTC node said:
 		// Only accept nLockTime-using transactions that can be mined in the next
 		// block; we don't want our mempool filled up with transactions that can't
@@ -437,13 +443,13 @@ impl Swap {
 		//
 		// As a result we have to wait guarantee 1 block. To be safe, we will wait time for 5 blocks before we try to publish
 		// 5 is a large number, but accordign the testnet, it is needed.
-		self.get_time_btc_lock_script() + self.secondary_currency.block_time_period_sec() * 5
+		self.get_time_secondary_lock_script() + self.secondary_currency.block_time_period_sec() * 5
 	}
 
 	/// btc redeem time limit
 	pub fn get_time_btc_redeem_limit(&self) -> i64 {
 		// Using script time as lowest possible value
-		self.get_time_btc_lock_script() - self.get_timeinterval_btc_lock()
+		self.get_time_secondary_lock_script() - self.get_timeinterval_secondary_lock()
 	}
 
 	////////////////////////////////////////////////////////////
@@ -455,8 +461,8 @@ impl Swap {
 		self.mwc_confirmations as i64 * 60 * 11 / 10
 	}
 
-	/// BTC locking time interval
-	pub fn get_timeinterval_btc_lock(&self) -> i64 {
+	/// BTC/ETH locking time interval
+	pub fn get_timeinterval_secondary_lock(&self) -> i64 {
 		// adding extra 10% for chain instability
 		self.secondary_confirmations as i64 * self.secondary_currency.block_time_period_sec() * 11
 			/ 10

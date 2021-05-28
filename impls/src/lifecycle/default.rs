@@ -20,6 +20,7 @@ use crate::config::{
 };
 use crate::core::global;
 use crate::keychain::Keychain;
+use crate::libwallet::swap::ethereum::generate_ethereum_wallet;
 use crate::libwallet::{Error, ErrorKind, NodeClient, WalletBackend, WalletLCProvider};
 use crate::lifecycle::seed::WalletSeed;
 use crate::util::secp::key::SecretKey;
@@ -251,12 +252,37 @@ where
 				}
 				Ok(d) => d,
 			};
-		let wallet_seed = WalletSeed::from_file(&data_dir_name, password).map_err(|e| {
+		let wallet_seed = WalletSeed::from_file(&data_dir_name, password.clone()).map_err(|e| {
 			ErrorKind::Lifecycle(format!(
 				"Error opening wallet (is password correct?), {}",
 				e
 			))
 		})?;
+
+		if let Ok(mnmenoic) = wallet_seed.to_mnemonic() {
+			let ethereum_wallet = match global::is_mainnet() {
+				true => Some(
+					generate_ethereum_wallet(
+						"mainnet",
+						mnmenoic.as_str(),
+						&password,
+						"m/44'/0'/0'/0",
+					)
+					.unwrap(),
+				),
+				false => Some(
+					generate_ethereum_wallet(
+						"ropsten",
+						mnmenoic.as_str(),
+						&password,
+						"m/44'/0'/0'/0",
+					)
+					.unwrap(),
+				),
+			};
+			wallet.set_ethereum_wallet(ethereum_wallet)?;
+		}
+
 		let keychain = wallet_seed
 			.derive_keychain(global::is_floonet())
 			.map_err(|e| ErrorKind::Lifecycle(format!("Error deriving keychain, {}", e)))?;

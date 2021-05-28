@@ -18,6 +18,9 @@ pub mod api;
 /// Library that support bitcoin operations
 pub mod bitcoin;
 
+/// Library that support ethereum operations
+pub mod ethereum;
+
 /// Swap crate errors
 pub mod error;
 
@@ -60,14 +63,20 @@ pub use crate::grin_keychain::Keychain;
 use serial_test::serial;
 #[cfg(test)]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(test)]
+use std::sync::{Arc, Mutex};
 
 const CURRENT_VERSION: u8 = 1;
+
+#[cfg(test)]
+use self::ethereum::*;
 
 #[cfg(test)]
 lazy_static! {
 	/// Flag to set test mode
 	static ref TEST_MODE: AtomicBool = AtomicBool::new(false);
 	static ref ACTIVATE_TEST_RESPONSE: AtomicBool = AtomicBool::new(true);
+	static ref ETH_RANDOM_WALLET: Arc<Mutex<Option<EthereumWallet>>> = Arc::new(Mutex::new(None));
 }
 
 #[cfg(test)]
@@ -115,6 +124,7 @@ mod tests {
 	use std::sync::Arc;
 
 	use super::bitcoin::*;
+	use super::ethereum::*;
 	use super::message::Message;
 	use super::types::*;
 	use super::*;
@@ -126,6 +136,7 @@ mod tests {
 	use crate::swap::fsm::state;
 	use crate::swap::fsm::state::{Input, StateId, StateProcessRespond};
 	use crate::swap::message::{SecondaryUpdate, Update};
+	extern crate web3;
 
 	const GRIN_UNIT: u64 = 1_000_000_000;
 
@@ -196,6 +207,60 @@ mod tests {
 			BtcNetwork::Testnet,
 		);
 		format!("{}", address)
+	}
+
+	fn context_eth_sell(kc: &ExtKeychain) -> Context {
+		let eth_sell_wallet = EthereumWallet::from_mnemonic::<Ropsten, English>(
+			ETH_MNEMONIC,
+			Some(ETH_PARTICIPANT_PASSWORD),
+			ETH_ACCOUNT_PATH,
+		)
+		.unwrap();
+		let redeem_address = to_eth_address(eth_sell_wallet.address.clone().unwrap());
+		Context {
+			multisig_key: key_id(0, 0),
+			multisig_nonce: key(kc, 1, 0),
+			lock_nonce: key(kc, 1, 1),
+			refund_nonce: key(kc, 1, 2),
+			redeem_nonce: key(kc, 1, 3),
+			role_context: RoleContext::Seller(SellerContext {
+				parent_key_id: key_id(0, 0),
+				inputs: vec![
+					(key_id(0, 1), None, 60 * GRIN_UNIT),
+					(key_id(0, 2), None, 60 * GRIN_UNIT),
+				],
+				change_output: key_id(0, 3),
+				change_amount: 20 * GRIN_UNIT, // selling 100 coins, so 20 will be left
+				refund_output: key_id(0, 4),
+				secondary_context: SecondarySellerContext::Eth(EthSellerContext {
+					redeem_address: Some(redeem_address.unwrap()),
+				}),
+			}),
+		}
+	}
+
+	fn context_eth_buy(kc: &ExtKeychain) -> Context {
+		let sec_key = key(kc, 0, 2);
+		let eth_rand_wallet =
+			EthereumWallet::from_private_key(to_hex(&sec_key.0).as_str()).unwrap();
+		let address_from_secret = to_eth_address(eth_rand_wallet.address.clone().unwrap());
+		*ETH_RANDOM_WALLET.lock().unwrap() = Some(eth_rand_wallet.clone());
+
+		Context {
+			multisig_key: key_id(0, 0),
+			multisig_nonce: key(kc, 1, 0),
+			lock_nonce: key(kc, 1, 1),
+			refund_nonce: key(kc, 1, 2),
+			redeem_nonce: key(kc, 1, 3),
+			role_context: RoleContext::Buyer(BuyerContext {
+				parent_key_id: key_id(0, 0),
+				output: key_id(0, 1),
+				redeem: key_id(0, 2),
+				secondary_context: SecondaryBuyerContext::Eth(EthBuyerContext {
+					address_from_secret: Some(address_from_secret.unwrap()),
+				}),
+			}),
+		}
 	}
 
 	#[derive(Debug, Clone)]
@@ -445,7 +510,7 @@ mod tests {
 
 	#[test]
 	#[serial]
-	fn test_refund_tx_lock() {
+	fn test_btc_refund_tx_lock() {
 		set_test_mode(true);
 		global::set_local_chain_type(global::ChainTypes::Floonet);
 		swap::set_testing_cur_time(1567632152);
@@ -476,6 +541,9 @@ mod tests {
 				"/tmp/del.me".to_string(),
 				None,
 				None,
+				None,
+				None,
+				false,
 				false,
 				None,
 			)
@@ -555,6 +623,9 @@ mod tests {
 				"/tmp/del.me".to_string(),
 				None,
 				None,
+				None,
+				None,
+				false,
 				false,
 				None,
 			)
@@ -1622,6 +1693,9 @@ mod tests {
 					"/tmp/del.me".to_string(),
 					None,
 					None,
+					None,
+					None,
+					false,
 					false,
 					None,
 				)
@@ -2351,7 +2425,10 @@ mod tests {
 			seller.swap.get_time_message_redeem(),
 			lock_second_message_round_timelimit
 		);
-		assert_eq!(seller.swap.get_time_btc_lock_script(), btc_lock_time_limit);
+		assert_eq!(
+			seller.swap.get_time_secondary_lock_script(),
+			btc_lock_time_limit
+		);
 		assert_eq!(seller.swap.get_time_mwc_lock(), mwc_lock_time_limit);
 
 		test_responds(
@@ -5488,6 +5565,9 @@ mod tests {
 				"/tmp/del.me".to_string(),
 				None,
 				None,
+				None,
+				None,
+				false,
 				false,
 				None,
 			)
@@ -5584,5 +5664,135 @@ mod tests {
 		swap_api
 			.publish_secondary_transaction(&kc_sell, &mut swap_sell, &ctx_sell, true)
 			.unwrap();
+	}
+
+	const ETH_MNEMONIC: &str = "square social wall upgrade owner flat razor across enable idea mirror autumn rescue pottery total seat confirm dizzy fabric couple reveal relief lucky session";
+	const ETH_INITIATOR_PASSWORD: &str = "initiator";
+	const ETH_PARTICIPANT_PASSWORD: &str = "participant";
+	const ETH_ACCOUNT_PATH: &str = "m/44'/60'/0'/0";
+
+	// Test ethereum wallet generate process
+	#[test]
+	fn test_eth_genwallet() {
+		// initiator: for sender, 0xAB90ddDF7bdff0e4FCAB3c9bF608393a6C7e2390
+		// participant: for receiver, 0x0a6d6D1f7D798cd1Ce033a3a9222b524B9d4bf0B
+		let wallet = EthereumWallet::from_mnemonic::<Ropsten, English>(
+			ETH_MNEMONIC,
+			Some(ETH_PARTICIPANT_PASSWORD),
+			ETH_ACCOUNT_PATH,
+		)
+		.unwrap();
+
+		println!("test_eth_genwallet --- {}", wallet);
+	}
+
+	#[test]
+	#[serial]
+	fn test_eth_refund_tx_lock() {
+		set_test_mode(true);
+		global::set_local_chain_type(global::ChainTypes::Floonet);
+		swap::set_testing_cur_time(1617589405);
+
+		let kc_sell = keychain(1);
+		let ctx_sell = context_eth_sell(&kc_sell);
+		let eth_buy_wallet = EthereumWallet::from_mnemonic::<Ropsten, English>(
+			ETH_MNEMONIC,
+			Some(ETH_INITIATOR_PASSWORD),
+			ETH_ACCOUNT_PATH,
+		)
+		.unwrap();
+		let secondary_redeem_address = eth_buy_wallet.address.clone().unwrap().drain(2..).collect();
+		let height = 100_000;
+
+		let mut api_sell = EthSwapApi::new_test(
+			Arc::new(TestNodeClient::new(height)),
+			Arc::new(Mutex::new(TestEthNodeClient::new(1))),
+		);
+		let mut swap = api_sell
+			.create_swap_offer(
+				&kc_sell,
+				&ctx_sell,
+				100 * GRIN_UNIT,
+				3_000_000,
+				Currency::Ether,
+				secondary_redeem_address,
+				true, // mwc should be publisher first
+				30,
+				3,
+				3600,
+				3600,
+				"file".to_string(),
+				"/tmp/del.me".to_string(),
+				None,
+				None,
+				None,
+				None,
+				false,
+				false,
+				None,
+			)
+			.unwrap();
+		let mut fsm_sell = api_sell.get_fsm(&kc_sell, &swap);
+		let tx_state = api_sell
+			.request_tx_confirmations(&kc_sell, &mut swap)
+			.unwrap();
+
+		let message = match fsm_sell
+			.process(Input::Check, &mut swap, &ctx_sell, &tx_state)
+			.unwrap()
+			.action
+			.unwrap()
+		{
+			Action::SellerSendOfferMessage(message) => message,
+			_ => panic!("Unexpected action"),
+		};
+
+		// Simulate short refund lock time by passing height+4h
+		let kc_buy = keychain(2);
+		let ctx_buy = context_eth_buy(&kc_buy);
+		let nc = TestNodeClient::new(height + 12 * 60);
+
+		let (id, offer, secondary_update) = message.unwrap_offer().unwrap();
+		let res = BuyApi::accept_swap_offer(&kc_buy, &ctx_buy, id, offer, secondary_update, &nc);
+
+		assert_eq!(
+			res.err().unwrap(),
+			ErrorKind::InvalidMessageData(
+				"Lock Slate inputs are not found at the chain".to_string()
+			)
+		); // Swap cannot be accepted
+	}
+
+	#[test]
+	fn test_eth_wallet() {
+		let kc = keychain(1);
+		let sec_key = key(&kc, 0, 0);
+		let eth_pri_wallet = EthereumWallet::from_private_key(to_hex(&sec_key.0).as_str()).unwrap();
+		println!("eth_pri_wallet  ---- {:?}", eth_pri_wallet);
+
+		let pub_key = PublicKey::from_secret_key(kc.secp(), &sec_key).unwrap();
+		println!("pub_key  ---- {:?}", pub_key);
+
+		let pub_key_array = pub_key.0 .0;
+		let first_part: Vec<u8> = pub_key_array[..pub_key_array.len() / 2]
+			.to_owned()
+			.iter()
+			.rev()
+			.cloned()
+			.collect();
+		let second_part: Vec<u8> = pub_key_array[pub_key_array.len() / 2..]
+			.to_owned()
+			.iter()
+			.rev()
+			.cloned()
+			.collect();
+		let pub_key_vec: Vec<u8> = first_part
+			.into_iter()
+			.chain(second_part.into_iter())
+			.collect();
+
+		let eth_pub_wallet =
+			EthereumWallet::from_public_key(to_hex(&pub_key_vec).as_str()).unwrap();
+		println!("eth_pub_wallet  ---- {:?}", eth_pub_wallet);
 	}
 }

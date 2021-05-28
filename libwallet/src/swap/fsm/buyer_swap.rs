@@ -25,7 +25,7 @@ use crate::grin_util::RwLock;
 use crate::swap::fsm::state::{Input, State, StateEtaInfo, StateId, StateProcessRespond};
 use crate::swap::message::Message;
 use crate::swap::swap;
-use crate::swap::types::{Action, SwapTransactionsConfirmations};
+use crate::swap::types::{check_txs_confirmed, Action, SwapTransactionsConfirmations};
 use crate::swap::{BuyApi, Context, ErrorKind, Swap, SwapApi};
 use crate::NodeClient;
 use chrono::{Local, TimeZone};
@@ -404,15 +404,13 @@ where
 					));
 				}
 
-				// Check if mwc lock is already done
+				// Check if btc/eth lock is already done
 				let (pending_amount, confirmed_amount, _least_confirmations) = self
 					.swap_api
 					.request_secondary_lock_balance(swap, swap.secondary_confirmations)?;
-
 				let chain_amount = pending_amount + confirmed_amount;
 				let time_limit = swap.get_time_start_lock();
 
-				// Check the deadline for locking
 				if chain_amount != swap.secondary_amount {
 					if swap::get_cur_time() > time_limit {
 						// cancelling because of timeout
@@ -427,15 +425,25 @@ where
 
 				if chain_amount < swap.secondary_amount {
 					// At this point, user needs to deposit (more) Bitcoin
-					return Ok(StateProcessRespond::new(
-						StateId::BuyerPostingSecondaryToMultisigAccount,
-					)
-					.action(Action::DepositSecondary {
-						currency: swap.secondary_currency,
-						amount: swap.secondary_amount - chain_amount,
-						address: self.swap_api.get_secondary_lock_address(swap)?,
-					})
-					.time_limit(time_limit));
+					// For eth, coins are locked in contract address in automatic mode,
+					// so it will face this situation
+					if swap.secondary_currency.is_btc_family() {
+						return Ok(StateProcessRespond::new(
+							StateId::BuyerPostingSecondaryToMultisigAccount,
+						)
+						.action(Action::DepositSecondary {
+							currency: swap.secondary_currency,
+							amount: swap.secondary_amount - chain_amount,
+							address: self.swap_api.get_secondary_lock_address(swap)?,
+						})
+						.time_limit(time_limit));
+					} else {
+						return Ok(StateProcessRespond::new(
+							StateId::BuyerPostingSecondaryToMultisigAccount,
+						)
+						.action(Action::BuyerDepositToContractAccount)
+						.time_limit(time_limit));
+					}
 				}
 
 				let lock_address = self.swap_api.get_secondary_lock_address(swap)?;
@@ -467,6 +475,20 @@ where
 				));
 				Ok(StateProcessRespond::new(
 					StateId::BuyerWaitingForLockConfirmations,
+				))
+			}
+			Input::Execute => {
+				// for btc family, buyer should deposit secondary currency manually.
+				if swap.secondary_currency.is_btc_family() {
+					return Err(ErrorKind::InvalidSwapStateInput(format!(
+						"BuyerPostingSecondaryToMultisigAccount get {:?}",
+						input
+					)));
+				}
+				self.swap_api.post_secondary_lock_tx(swap)?;
+
+				Ok(StateProcessRespond::new(
+					StateId::BuyerPostingSecondaryToMultisigAccount,
 				))
 			}
 			_ => Err(ErrorKind::InvalidSwapStateInput(format!(
@@ -584,9 +606,12 @@ where
 				}
 
 				let time_limit = swap.get_time_message_redeem();
-				if mwc_lock < swap.mwc_confirmations
-					|| secondary_lock < swap.secondary_confirmations
-				{
+				let secondary_confirmed = check_txs_confirmed(
+					swap.secondary_currency,
+					secondary_lock,
+					swap.secondary_confirmations,
+				);
+				if mwc_lock < swap.mwc_confirmations || !secondary_confirmed {
 					// Checking for a deadline. Note time_message_redeem is fine, we can borrow time from that operation and still be safe
 					if swap::get_cur_time() > time_limit {
 						// cancelling because of timeout
@@ -677,15 +702,17 @@ impl State for BuyerSendingInitRedeemMessage {
 				// Check first if everything is still locked...
 				let mwc_lock = tx_conf.mwc_lock_conf.unwrap_or(0);
 				let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
-				if mwc_lock < swap.mwc_confirmations
-					|| secondary_lock < swap.secondary_confirmations
-				{
+				let secondary_confirmed = check_txs_confirmed(
+					swap.secondary_currency,
+					secondary_lock,
+					swap.secondary_confirmations,
+				);
+				if mwc_lock < swap.mwc_confirmations || !secondary_confirmed {
 					swap.add_journal_message(JOURNAL_NOT_LOCKED.to_string());
 					return Ok(StateProcessRespond::new(
 						StateId::BuyerWaitingForLockConfirmations,
 					));
 				}
-
 				let time_limit = swap.get_time_message_redeem();
 
 				if swap.posted_msg2.unwrap_or(0)
@@ -784,9 +811,12 @@ impl<K: Keychain> State for BuyerWaitingForRespondRedeemMessage<K> {
 				// Check first if everything is still locked...
 				let mwc_lock = tx_conf.mwc_lock_conf.unwrap_or(0);
 				let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
-				if mwc_lock < swap.mwc_confirmations
-					|| secondary_lock < swap.secondary_confirmations
-				{
+				let secondary_confirmed = check_txs_confirmed(
+					swap.secondary_currency,
+					secondary_lock,
+					swap.secondary_confirmations,
+				);
+				if mwc_lock < swap.mwc_confirmations || !secondary_confirmed {
 					swap.add_journal_message(JOURNAL_NOT_LOCKED.to_string());
 					return Ok(StateProcessRespond::new(
 						StateId::BuyerWaitingForLockConfirmations,
@@ -940,9 +970,12 @@ where
 				// Check if everything is still locked...
 				let mwc_lock = tx_conf.mwc_lock_conf.unwrap_or(0);
 				let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
-				if mwc_lock < swap.mwc_confirmations
-					|| secondary_lock < swap.secondary_confirmations
-				{
+				let secondary_confirmed = check_txs_confirmed(
+					swap.secondary_currency,
+					secondary_lock,
+					swap.secondary_confirmations,
+				);
+				if mwc_lock < swap.mwc_confirmations || !secondary_confirmed {
 					swap.add_journal_message(JOURNAL_NOT_LOCKED.to_string());
 					return Ok(StateProcessRespond::new(
 						StateId::BuyerWaitingForLockConfirmations,
@@ -969,9 +1002,12 @@ where
 				// Check if everything is still locked...
 				let mwc_lock = tx_conf.mwc_lock_conf.unwrap_or(0);
 				let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
-				if mwc_lock < swap.mwc_confirmations
-					|| secondary_lock < swap.secondary_confirmations
-				{
+				let secondary_confirmed = check_txs_confirmed(
+					swap.secondary_currency,
+					secondary_lock,
+					swap.secondary_confirmations,
+				);
+				if mwc_lock < swap.mwc_confirmations || !secondary_confirmed {
 					swap.add_journal_message(JOURNAL_NOT_LOCKED.to_string());
 					return Ok(StateProcessRespond::new(
 						StateId::BuyerWaitingForLockConfirmations,
@@ -1203,7 +1239,7 @@ impl State for BuyerWaitingForRefundTime {
 				"Waiting for {} to unlock",
 				swap.secondary_currency
 			))
-			.start_time(swap.get_time_btc_lock_publish()),
+			.start_time(swap.get_time_secondary_lock_publish()),
 		)
 	}
 	fn is_cancellable(&self) -> bool {
@@ -1227,7 +1263,7 @@ impl State for BuyerWaitingForRefundTime {
 				debug_assert!(tx_conf.mwc_redeem_conf.is_none());
 
 				let cur_time = swap::get_cur_time();
-				let time_limit = swap.get_time_btc_lock_publish();
+				let time_limit = swap.get_time_secondary_lock_publish();
 				if cur_time > time_limit {
 					swap.add_journal_message(format!(
 						"{} funds are unlocked, ready for refund",
@@ -1303,7 +1339,7 @@ where
 					.unwrap()
 					.unwrap_or("XXXXXXX".to_string())
 			))
-			.start_time(swap.get_time_btc_lock_publish()),
+			.start_time(swap.get_time_secondary_lock_publish()),
 		)
 	}
 	fn is_cancellable(&self) -> bool {
@@ -1321,7 +1357,7 @@ where
 		match input {
 			Input::Check => {
 				let cur_time = swap::get_cur_time();
-				let time_limit = swap.get_time_btc_lock_publish();
+				let time_limit = swap.get_time_secondary_lock_publish();
 				if cur_time < time_limit {
 					return Ok(StateProcessRespond::new(StateId::BuyerWaitingForRefundTime));
 				}

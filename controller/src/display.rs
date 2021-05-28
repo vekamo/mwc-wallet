@@ -709,7 +709,7 @@ pub fn swap_trade(
 	}
 
 	let now_ts = Utc::now().timestamp();
-	let btc_lock_time = swap.get_time_btc_lock_publish();
+	let btc_lock_time = swap.get_time_secondary_lock_publish();
 	if now_ts < btc_lock_time {
 		let buyer_lock_time = btc_lock_time - now_ts;
 		let buy_lock_h = buyer_lock_time / 3600;
@@ -816,4 +816,23 @@ pub fn swap_trade(
 fn timestamp_to_local_time(timestamp: i64) -> String {
 	let dt = Local.timestamp(timestamp, 0);
 	dt.format("%B %e %H:%M:%S").to_string()
+}
+
+/// Display summary eth info in a pretty way
+pub fn eth_info(account: String, height: String, balance: String) {
+	println!(
+		"\n____ Ethereum Wallet Summary Info - Account '{}' as of height {} ____\n",
+		account, height,
+	);
+
+	let mut table = table!();
+
+	table.add_row(row![
+		bFG->"Ethereum  Balance",
+		FG->balance
+	]);
+
+	table.set_format(*prettytable::format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
+	table.printstd();
+	println!();
 }

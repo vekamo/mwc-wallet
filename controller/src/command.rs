@@ -34,7 +34,7 @@ use grin_wallet_impls::adapters::{
 use grin_wallet_impls::tor;
 use grin_wallet_impls::{libp2p_messaging, HttpDataSender};
 use grin_wallet_impls::{Address, MWCMQSAddress, Publisher};
-use grin_wallet_libwallet::api_impl::{owner, owner_libp2p, owner_swap};
+use grin_wallet_libwallet::api_impl::{owner, owner_eth, owner_libp2p, owner_swap};
 use grin_wallet_libwallet::internal::selection;
 use grin_wallet_libwallet::proof::proofaddress::{self, ProvableAddress};
 use grin_wallet_libwallet::proof::tx_proof::TxProof;
@@ -1726,10 +1726,32 @@ pub struct SwapArgs {
 	pub electrum_node_uri1: Option<String>,
 	/// ElectrumX failover URI2
 	pub electrum_node_uri2: Option<String>,
+	/// Ethereum Swap Contract Address
+	pub eth_swap_contract_address: Option<String>,
+	/// Ethereum Infura Project Id
+	pub eth_infura_project_id: Option<String>,
+	/// Redirect to users' private ethereum wallet
+	pub eth_redirect_to_private_wallet: bool,
 	/// Need to wait for the first backup.
 	pub wait_for_backup1: bool,
 	/// Assign tag to this trade
 	pub tag: Option<String>,
+}
+
+/// Eth operation
+#[derive(PartialEq)]
+pub enum EthSubcommand {
+	Info,
+	Send,
+}
+/// Arguments for the eth command
+pub struct EthArgs {
+	/// eth subcommand
+	pub subcommand: EthSubcommand,
+	/// dest address
+	pub dest: Option<String>,
+	/// amount
+	pub amount: Option<String>,
 }
 
 // Integrity operation
@@ -2000,6 +2022,7 @@ where
 					args.secondary_fee,
 					args.electrum_node_uri1.clone(),
 					args.electrum_node_uri2.clone(),
+					args.eth_infura_project_id.clone(),
 					args.tag.clone(),
 				);
 				match result {
@@ -2036,6 +2059,8 @@ where
 						&swap_id,
 						args.electrum_node_uri1.clone(),
 						args.electrum_node_uri2.clone(),
+						args.eth_swap_contract_address.clone(),
+						args.eth_infura_project_id.clone(),
 					) {
 						Ok(status) => status,
 						Err(e) => {
@@ -2067,7 +2092,7 @@ where
 									"sellerLockingFirst" : swap.seller_lock_first,
 									"mwcLockHeight" : swap.refund_slate.lock_height,
 									"mwcLockTime" : "0".to_string(),
-									"secondaryLockTime" : swap.get_time_btc_lock_publish().to_string(),
+									"secondaryLockTime" : swap.get_time_secondary_lock_publish().to_string(),
 									"communicationMethod" : swap.communication_method,
 									"communicationAddress" : swap.communication_address,
 
@@ -2077,6 +2102,8 @@ where
 									"journal_records" : journal_records_to_print,
 									"electrumNodeUri1" : swap.electrum_node_uri1.clone().unwrap_or("".to_string()),
 									"electrumNodeUri2" : swap.electrum_node_uri2.clone().unwrap_or("".to_string()),
+									"eth_swap_contract_address": swap.eth_swap_contract_address.clone().unwrap_or("".to_string()),
+									"eth_infura_project_id": swap.eth_infura_project_id.clone().unwrap_or("".to_string()),
 								});
 								println!("JSON: {}", item.to_string());
 								return Ok(());
@@ -2100,6 +2127,8 @@ where
 						&swap_id,
 						args.electrum_node_uri1,
 						args.electrum_node_uri2,
+						args.eth_swap_contract_address,
+						args.eth_infura_project_id,
 						args.wait_for_backup1,
 					)?;
 
@@ -2152,7 +2181,7 @@ where
 							"sellerLockingFirst" : swap.seller_lock_first,
 							"mwcLockHeight" : swap.refund_slate.lock_height,
 							"mwcLockTime" : mwc_lock_time.to_string(),
-							"secondaryLockTime" : swap.get_time_btc_lock_publish().to_string(),
+							"secondaryLockTime" : swap.get_time_secondary_lock_publish().to_string(),
 							"communicationMethod" : swap.communication_method,
 							"communicationAddress" : swap.communication_address,
 
@@ -2163,6 +2192,9 @@ where
 
 							"electrumNodeUri1" : swap.electrum_node_uri1.clone().unwrap_or("".to_string()),
 							"electrumNodeUri2" : swap.electrum_node_uri2.clone().unwrap_or("".to_string()),
+
+							"eth_swap_contract_address": swap.eth_swap_contract_address.clone().unwrap_or("".to_string()),
+							"eth_infura_project_id": swap.eth_infura_project_id.clone().unwrap_or("".to_string()),
 						});
 
 						println!("JSON: {}", item.to_string());
@@ -2342,6 +2374,7 @@ where
 				args.secondary_address,
 				args.electrum_node_uri1,
 				args.electrum_node_uri2,
+				args.eth_infura_project_id,
 				args.wait_for_backup1,
 			);
 
@@ -2539,6 +2572,8 @@ where
 					&swap_id,
 					args.electrum_node_uri1.clone(),
 					args.electrum_node_uri2.clone(),
+					args.eth_swap_contract_address.clone(),
+					args.eth_infura_project_id.clone(),
 				)?;
 				let (
 					state,
@@ -2554,6 +2589,8 @@ where
 					&swap_id,
 					args.electrum_node_uri1,
 					args.electrum_node_uri2,
+					args.eth_swap_contract_address,
+					args.eth_infura_project_id,
 					args.wait_for_backup1,
 				)?;
 
@@ -2579,7 +2616,9 @@ where
 								})?
 						}
 						None => {
-							if swap.get_secondary_address().is_empty() {
+							if swap.get_secondary_address().is_empty()
+								&& swap.secondary_currency.is_btc_family()
+							{
 								return Err(ErrorKind::GenericError(
 									"Please define buyer_refund_address for automated swap"
 										.to_string(),
@@ -2646,6 +2685,7 @@ where
 							km2.as_ref(),
 							&swap_id2,
 							None,None, // URIs are already updated
+							None, None,
 							wait_for_backup1,
 						) {
 							Ok(res) => res,
@@ -2676,6 +2716,7 @@ where
 								fee_satoshi.clone(),
 								secondary_address.clone(),
 								None, None, // URIs was already updated before. No need to update the same.
+								None,
 								wait_for_backup1,
 							) {
 								Ok( (res, cancelled_swaps)) => {
@@ -2886,6 +2927,55 @@ where
 				swap_id, trade_file_name
 			);
 			Ok(())
+		}
+	}
+}
+
+pub fn eth<L, C, K>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
+	args: EthArgs,
+) -> Result<(), Error>
+where
+	L: WalletLCProvider<'static, C, K> + 'static,
+	C: NodeClient + 'static,
+	K: keychain::Keychain + 'static,
+{
+	match args.subcommand {
+		EthSubcommand::Info => {
+			let result = owner_eth::info(wallet_inst.clone());
+			match result {
+				Ok((address, height, balance)) => {
+					display::eth_info(address, height, balance);
+					return Ok(());
+				}
+				_ => {
+					return Err(ErrorKind::LibWallet(
+						"Ethereum Chain Operation failed!".to_string(),
+					)
+					.into());
+				}
+			}
+		}
+		EthSubcommand::Send => {
+			let dest = args.dest;
+			let amount = args.amount;
+			if dest.is_none() || amount.is_none() {
+				println!("Please specify destination address and amounts");
+				return Ok(());
+			}
+			let result = owner_eth::transfer(wallet_inst.clone(), dest.clone(), amount.clone());
+			match result {
+				Ok(()) => {
+					println!("Transfer {} to {} done!!!", amount.unwrap(), dest.unwrap());
+					return Ok(());
+				}
+				_ => {
+					return Err(ErrorKind::LibWallet(
+						"Ethereum Chain Operation failed!".to_string(),
+					)
+					.into());
+				}
+			}
 		}
 	}
 }
