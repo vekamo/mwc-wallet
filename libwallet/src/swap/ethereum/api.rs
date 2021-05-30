@@ -32,7 +32,7 @@ use crate::{NodeClient, Slate};
 use failure::_core::marker::PhantomData;
 use grin_wallet_util::grin_core::core::Committed;
 use std::sync::Arc;
-use web3::types::{Address, H256};
+use web3::types::{Address, H256, U256};
 
 /// SwapApi trait implementaiton for ETH
 #[derive(Clone)]
@@ -99,16 +99,17 @@ where
 	/// Check ETH amount at the chain.
 	pub(crate) fn eth_swap_details(
 		&self,
+		swap: &Swap,
 		address_from_secret: Option<Address>,
-	) -> Result<(u64, Address, Address, u64), ErrorKind> {
+	) -> Result<(u64, Option<Address>, Address, Address, u64), ErrorKind> {
 		if address_from_secret.is_none() {
 			return Err(ErrorKind::InvalidEthSwapTradeIndex);
 		}
 
 		let c = self.eth_node_client.lock();
-		let res = c.get_swap_details(address_from_secret.unwrap());
+		let res = c.get_swap_details(swap.secondary_currency, address_from_secret.unwrap());
 		match res {
-			Ok((_refund_time, _initiator, _participant, _value)) => res,
+			Ok((_refund_time, _contract_address, _initiator, _participant, _value)) => res,
 			_ => Err(ErrorKind::InvalidEthSwapTradeIndex),
 		}
 	}
@@ -125,6 +126,7 @@ where
 		let secret_key: secp256k1::SecretKey =
 			secp256k1::SecretKey::from_slice(&redeem_secret.0).unwrap();
 		c.redeem(
+			swap.secondary_currency,
 			eth_data.address_from_secret.clone().unwrap(),
 			secret_key,
 			swap.secondary_fee,
@@ -135,8 +137,11 @@ where
 	fn seller_transfer_secondary(&self, swap: &Swap) -> Result<H256, ErrorKind> {
 		let c = self.eth_node_client.lock();
 		let address = swap.unwrap_seller().unwrap().0;
-		// convert ether to wei
-		c.transfer(to_eth_address(address).unwrap(), swap.secondary_amount)
+		c.transfer(
+			swap.secondary_currency,
+			to_eth_address(address).unwrap(),
+			swap.secondary_amount,
+		)
 	}
 
 	/// buyer call contract function to refund their Ethers
@@ -150,7 +155,18 @@ where
 		let c = self.eth_node_client.lock();
 		let eth_data = swap.secondary_data.unwrap_eth()?;
 		c.refund(
+			swap.secondary_currency,
 			eth_data.address_from_secret.clone().unwrap(),
+			swap.secondary_fee,
+		)
+	}
+
+	/// buyer deposit eth to contract address
+	fn erc20_approve(&self, swap: &mut Swap) -> Result<H256, ErrorKind> {
+		let nc = self.eth_node_client.lock();
+		nc.erc20_approve(
+			swap.secondary_currency,
+			swap.secondary_amount,
 			swap.secondary_fee,
 		)
 	}
@@ -189,6 +205,7 @@ where
 
 		let nc = self.eth_node_client.lock();
 		nc.initiate(
+			swap.secondary_currency,
 			refund_time,
 			address_from_secret,
 			participant,
@@ -260,7 +277,7 @@ where
 				}
 				_ => Ok(0),
 			},
-			_ => Err(ErrorKind::InvalidEthSwapTradeIndex),
+			_ => Err(ErrorKind::EthRetrieveTransReciptError),
 		}
 	}
 
@@ -268,8 +285,24 @@ where
 	fn get_eth_initiate_tx_status(&self, swap: &Swap) -> Result<u64, ErrorKind> {
 		let eth_data = swap.secondary_data.unwrap_eth()?;
 		let eth_tip = self.eth_height()?;
-		match self.eth_swap_details(eth_data.address_from_secret.clone()) {
-			Ok((refund_time, _, participant, value)) => {
+		match self.eth_swap_details(swap, eth_data.address_from_secret.clone()) {
+			Ok((refund_time, erc20_token_addr, _, participant, value)) => {
+				if swap.secondary_currency.is_erc20() {
+					if erc20_token_addr.is_none() {
+						return Ok(0);
+					} else {
+						if swap.secondary_currency.erc20_token_address()?
+							!= erc20_token_addr.unwrap()
+						{
+							return Ok(0);
+						}
+					}
+				}
+				let mut value = value;
+				if swap.secondary_currency.is_expo_shrinked18to9() {
+					value = (U256::from(value) / U256::exp10(9)).as_u64();
+				}
+
 				if (eth_data.redeem_address.clone().unwrap() == participant)
 				&& (refund_time > eth_tip + 100u64) //100 about 25 minutes, make sure we have enough time to redeem ether
 				&& value == swap.secondary_amount
@@ -324,7 +357,18 @@ where
 		_is_seller: bool,
 	) -> Result<usize, ErrorKind> {
 		match secondary_currency {
-			Currency::Ether => Ok(3),
+			Currency::Ether
+			| Currency::Busd
+			| Currency::Bnb
+			| Currency::Link
+			| Currency::Dai
+			| Currency::Tusd
+			| Currency::Pax
+			| Currency::Wbtc
+			| Currency::Usdt
+			| Currency::Usdc
+			| Currency::Trx
+			| Currency::Tst => Ok(3),
 			_ => return Err(ErrorKind::UnexpectedCoinType),
 		}
 	}
@@ -341,7 +385,18 @@ where
 		parent_key_id: Identifier,
 	) -> Result<Context, ErrorKind> {
 		match secondary_currency {
-			Currency::Ether => (),
+			Currency::Ether
+			| Currency::Busd
+			| Currency::Bnb
+			| Currency::Link
+			| Currency::Dai
+			| Currency::Tusd
+			| Currency::Pax
+			| Currency::Wbtc
+			| Currency::Usdt
+			| Currency::Usdc
+			| Currency::Trx
+			| Currency::Tst => (),
 			_ => return Err(ErrorKind::UnexpectedCoinType),
 		}
 
@@ -409,13 +464,25 @@ where
 		electrum_node_uri1: Option<String>,
 		electrum_node_uri2: Option<String>,
 		eth_swap_contract_address: Option<String>,
+		erc20_swap_contract_address: Option<String>,
 		eth_infura_project_id: Option<String>,
 		eth_redirect_out_wallet: bool,
 		dry_run: bool,
 		tag: Option<String>,
 	) -> Result<Swap, ErrorKind> {
 		match secondary_currency {
-			Currency::Ether => (),
+			Currency::Ether
+			| Currency::Busd
+			| Currency::Bnb
+			| Currency::Link
+			| Currency::Dai
+			| Currency::Tusd
+			| Currency::Pax
+			| Currency::Wbtc
+			| Currency::Usdt
+			| Currency::Usdc
+			| Currency::Trx
+			| Currency::Tst => (),
 			_ => return Err(ErrorKind::UnexpectedCoinType),
 		}
 
@@ -438,6 +505,7 @@ where
 			electrum_node_uri1,
 			electrum_node_uri2,
 			eth_swap_contract_address,
+			erc20_swap_contract_address,
 			eth_infura_project_id,
 			eth_redirect_out_wallet,
 			dry_run,
@@ -699,9 +767,27 @@ where
 			return Ok(());
 		}
 
-		let eth_tx = self.buyer_deposit(swap)?;
-		let eth_data = swap.secondary_data.unwrap_eth_mut()?;
-		eth_data.lock_tx = Some(eth_tx);
+		if swap.secondary_currency.is_erc20() {
+			if eth_data.erc20_approve_tx.is_some() {
+				let approve_status =
+					self.check_eth_transaction_status(eth_data.erc20_approve_tx)?;
+				if approve_status == 1 {
+					let eth_tx = self.buyer_deposit(swap)?;
+					let eth_data = swap.secondary_data.unwrap_eth_mut()?;
+					eth_data.lock_tx = Some(eth_tx);
+				} else {
+					return Err(ErrorKind::EthERC20TokenApproveError);
+				}
+			} else {
+				let erc20_approve_tx = self.erc20_approve(swap)?;
+				let eth_data = swap.secondary_data.unwrap_eth_mut()?;
+				eth_data.erc20_approve_tx = Some(erc20_approve_tx);
+			}
+		} else {
+			let eth_tx = self.buyer_deposit(swap)?;
+			let eth_data = swap.secondary_data.unwrap_eth_mut()?;
+			eth_data.lock_tx = Some(eth_tx);
+		}
 
 		Ok(())
 	}

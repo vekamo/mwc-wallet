@@ -128,6 +128,13 @@ fn comments() -> HashMap<String, String> {
 		.to_string(),
 	);
 	retval.insert(
+		"erc20_swap_contract_address".to_string(),
+		"
+#erc20 atomic swap contract address
+"
+		.to_string(),
+	);
+	retval.insert(
 		"eth_infura_project_id".to_string(),
 		"
 #ethereum infura chain project id

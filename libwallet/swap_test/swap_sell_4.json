@@ -451,6 +451,7 @@
   "electrum_node_uri1": null,
   "electrum_node_uri2": null,
   "eth_swap_contract_address": null,
+  "erc20_swap_contract_address": null,
   "eth_infura_project_id": null,
   "eth_redirect_to_private_wallet": false,
   "tag": null,

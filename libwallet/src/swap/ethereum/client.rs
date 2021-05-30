@@ -33,10 +33,13 @@ pub trait EthNodeClient: Sync + Send + 'static {
 	/// Retrieve receipt
 	fn retrieve_receipt(&self, tx_hash: H256) -> Result<TransactionReceipt, ErrorKind>;
 	/// Send coins to destination account
-	fn transfer(&self, to: Address, value: u64) -> Result<H256, ErrorKind>;
+	fn transfer(&self, currency: Currency, to: Address, value: u64) -> Result<H256, ErrorKind>;
+	/// erc20 approve
+	fn erc20_approve(&self, currency: Currency, value: u64, gas: f32) -> Result<H256, ErrorKind>;
 	/// initiate swap
 	fn initiate(
 		&self,
+		currency: Currency,
 		refund_time: u64,
 		address_from_secret: Address,
 		participant: Address,
@@ -46,17 +49,24 @@ pub trait EthNodeClient: Sync + Send + 'static {
 	/// redeem ether
 	fn redeem(
 		&self,
+		currency: Currency,
 		address_from_secret: Address,
 		secret_key: SecretKey,
 		gas: f32,
 	) -> Result<H256, ErrorKind>;
 	/// refund ether
-	fn refund(&self, address_from_secret: Address, gas: f32) -> Result<H256, ErrorKind>;
+	fn refund(
+		&self,
+		currency: Currency,
+		address_from_secret: Address,
+		gas: f32,
+	) -> Result<H256, ErrorKind>;
 	/// get swap info
 	fn get_swap_details(
 		&self,
+		currency: Currency,
 		address_from_secret: Address,
-	) -> Result<(u64, Address, Address, u64), ErrorKind>;
+	) -> Result<(u64, Option<Address>, Address, Address, u64), ErrorKind>;
 }
 
 /// Mock Eth node for the testing
@@ -72,7 +82,7 @@ pub struct TestEthNodeClient {
 	/// mock node state
 	pub state: Arc<Mutex<TestEthNodeClientState>>,
 	/// swap HashMap
-	pub swap_store: Arc<Mutex<HashMap<Address, (u64, Address, Address, u64)>>>,
+	pub swap_store: Arc<Mutex<HashMap<Address, (u64, Option<Address>, Address, Address, u64)>>>,
 	/// txs HashMap
 	pub tx_store: Arc<Mutex<HashMap<H256, String>>>,
 }
@@ -142,13 +152,23 @@ impl EthNodeClient for TestEthNodeClient {
 	}
 
 	/// Send coins
-	fn transfer(&self, _to: Address, _value: u64) -> Result<H256, ErrorKind> {
+	fn transfer(&self, _currency: Currency, _to: Address, _value: u64) -> Result<H256, ErrorKind> {
+		unimplemented!()
+	}
+
+	fn erc20_approve(
+		&self,
+		_currency: Currency,
+		_value: u64,
+		_gas: f32,
+	) -> Result<H256, ErrorKind> {
 		unimplemented!()
 	}
 
 	/// initiate swap offer
 	fn initiate(
 		&self,
+		_currency: Currency,
 		refund_time: u64,
 		address_from_secret: Address,
 		participant: Address,
@@ -164,6 +184,7 @@ impl EthNodeClient for TestEthNodeClient {
 			address_from_secret,
 			(
 				refund_time,
+				None,
 				to_eth_address("0xAB90ddDF7bdff0e4FCAB3c9bF608393a6C7e2390".to_string()).unwrap(),
 				participant,
 				value,
@@ -181,6 +202,7 @@ impl EthNodeClient for TestEthNodeClient {
 	/// ether buyer redeem
 	fn redeem(
 		&self,
+		_currency: Currency,
 		address_from_secret: Address,
 		_secret_key: SecretKey,
 		_gas: f32,
@@ -197,7 +219,12 @@ impl EthNodeClient for TestEthNodeClient {
 	}
 
 	/// refund ether
-	fn refund(&self, address_from_secret: Address, _gas: f32) -> Result<H256, ErrorKind> {
+	fn refund(
+		&self,
+		_currency: Currency,
+		address_from_secret: Address,
+		_gas: f32,
+	) -> Result<H256, ErrorKind> {
 		let mut store = self.swap_store.lock();
 		if store.contains_key(&address_from_secret) {
 			let mut txs = self.tx_store.lock();
@@ -212,8 +239,9 @@ impl EthNodeClient for TestEthNodeClient {
 	/// get swap info
 	fn get_swap_details(
 		&self,
+		_currency: Currency,
 		address_from_secret: Address,
-	) -> Result<(u64, Address, Address, u64), ErrorKind> {
+	) -> Result<(u64, Option<Address>, Address, Address, u64), ErrorKind> {
 		let store = self.swap_store.lock();
 		if store.contains_key(&address_from_secret) {
 			Ok(store[&address_from_secret])

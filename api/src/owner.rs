@@ -29,7 +29,7 @@ use crate::libwallet::api_impl::{owner, owner_eth, owner_swap, owner_updater};
 use crate::libwallet::proof::proofaddress;
 use crate::libwallet::proof::tx_proof::TxProof;
 use crate::libwallet::swap::fsm::state::{StateEtaInfo, StateId, StateProcessRespond};
-use crate::libwallet::swap::types::{Action, SwapTransactionsConfirmations};
+use crate::libwallet::swap::types::{Action, Currency, SwapTransactionsConfirmations};
 use crate::libwallet::swap::{message::Message, swap::Swap, swap::SwapJournalRecord};
 use crate::libwallet::{
 	AcctPathMapping, Error, ErrorKind, InitTxArgs, IssueInvoiceTxArgs, NodeClient,
@@ -2429,13 +2429,18 @@ where
 	}
 
 	/// dump ethereum info
-	pub fn eth_info(&self) -> Result<(String, String, String), Error> {
-		owner_eth::info(self.wallet_inst.clone())
+	pub fn eth_info(&self, currency: Currency) -> Result<(String, String, String), Error> {
+		owner_eth::info(self.wallet_inst.clone(), currency)
 	}
 
 	/// ethereum transfer
-	pub fn eth_transfer(&self, dest: Option<String>, amount: Option<String>) -> Result<(), Error> {
-		owner_eth::transfer(self.wallet_inst.clone(), dest, amount)
+	pub fn eth_transfer(
+		&self,
+		dest: Option<String>,
+		currency: Currency,
+		amount: Option<String>,
+	) -> Result<(), Error> {
+		owner_eth::transfer(self.wallet_inst.clone(), currency, dest, amount)
 	}
 
 	/// Refresh and get a status and current expected action for the swap.
@@ -2448,6 +2453,7 @@ where
 		electrum_node_uri1: Option<String>,
 		electrum_node_uri2: Option<String>,
 		eth_swap_contract_address: Option<String>,
+		erc20_swap_contract_address: Option<String>,
 		eth_infura_project_id: Option<String>,
 	) -> Result<
 		(
@@ -2468,6 +2474,7 @@ where
 			electrum_node_uri1,
 			electrum_node_uri2,
 			eth_swap_contract_address,
+			erc20_swap_contract_address,
 			eth_infura_project_id,
 			false,
 		)
@@ -2481,6 +2488,7 @@ where
 		electrum_node_uri1: Option<String>,
 		electrum_node_uri2: Option<String>,
 		eth_swap_contract_address: Option<String>,
+		erc20_swap_contract_address: Option<String>,
 		eth_infura_project_id: Option<String>,
 	) -> Result<SwapTransactionsConfirmations, Error> {
 		owner_swap::get_swap_tx_tstatus(
@@ -2490,6 +2498,7 @@ where
 			electrum_node_uri1,
 			electrum_node_uri2,
 			eth_swap_contract_address,
+			erc20_swap_contract_address,
 			eth_infura_project_id,
 		)
 	}

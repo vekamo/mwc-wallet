@@ -41,6 +41,7 @@ lazy_static! {
 	static ref TRADE_DEALS_PATH: RwLock<Option<PathBuf>> = RwLock::new(None);
 	static ref ELECTRUM_X_URI: RwLock<Option<BTreeMap<String, String>>> = RwLock::new( Some(BTreeMap::new()));
 	static ref ETH_SWAP_CONTRACT_ADDR: RwLock<Option<String>> = RwLock::new(None);
+	static ref ERC20_SWAP_CONTRACT_ADDR: RwLock<Option<String>> = RwLock::new(None);
 	static ref ETH_INFURA_PROJECTID: RwLock<Option<String>> = RwLock::new(None);
 	// Locks for the swap reads. Note, all instances are in the memory, we don't expect too many of them
 	static ref SWAP_LOCKS: RwLock<HashMap< String, Arc<Mutex<()>>>> = RwLock::new(HashMap::new());
@@ -51,6 +52,7 @@ pub fn init_swap_trade_backend(
 	data_file_dir: &str,
 	electrumx_config_uri: &Option<BTreeMap<String, String>>,
 	eth_swap_contract_addr: &Option<String>,
+	erc20_swap_contract_addr: &Option<String>,
 	eth_infura_projectid: &Option<String>,
 ) {
 	let stored_swap_deal_path = Path::new(data_file_dir).join(SWAP_DEAL_SAVE_DIR);
@@ -74,6 +76,12 @@ pub fn init_swap_trade_backend(
 		ETH_SWAP_CONTRACT_ADDR
 			.write()
 			.replace(eth_swap_contract_addr.clone().unwrap());
+	}
+
+	if erc20_swap_contract_addr.is_some() {
+		ERC20_SWAP_CONTRACT_ADDR
+			.write()
+			.replace(erc20_swap_contract_addr.clone().unwrap());
 	}
 
 	if eth_infura_projectid.is_some() {
@@ -129,6 +137,22 @@ pub fn get_eth_swap_contract_address(
 		None => match swap_contract_addresss {
 			Some(s) => Ok(s),
 			None => swap_contract_addresss.ok_or(ErrorKind::UndefinedEthSwapContractAddress),
+		},
+	}
+}
+
+/// Get erc20 contract addr.
+pub fn get_erc20_swap_contract_address(
+	_currency: &Currency,
+	erc20_swap_contract_addr: &Option<String>,
+) -> Result<String, ErrorKind> {
+	let swap_contract_addresss = ERC20_SWAP_CONTRACT_ADDR.read().clone();
+
+	match erc20_swap_contract_addr.clone() {
+		Some(s) => Ok(s),
+		None => match swap_contract_addresss {
+			Some(s) => Ok(s),
+			None => swap_contract_addresss.ok_or(ErrorKind::UndefinedInfuraProjectId),
 		},
 	}
 }

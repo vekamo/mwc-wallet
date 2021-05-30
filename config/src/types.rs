@@ -70,6 +70,8 @@ pub struct WalletConfig {
 	pub base_fee: Option<u64>,
 	/// Ethereum Swap Contract Address
 	pub eth_swap_contract_address: Option<String>,
+	/// ERC20 Swap Contract Address
+	pub erc20_swap_contract_address: Option<String>,
 	/// Ethereum Infura Project Id
 	pub eth_infura_project_id: Option<String>,
 	/// Electrum nodes for secondary coins
@@ -100,6 +102,9 @@ impl Default for WalletConfig {
 			wallet_data_dir: None,
 			base_fee: None,
 			eth_swap_contract_address: Some("A21b2c034dF046a3DB790dd20b0C5C0040a74c67".to_string()),
+			erc20_swap_contract_address: Some(
+				"78c2AFa498cC5866A2BAfe267FE8d7C4F09Eef8f".to_string(),
+			),
 			eth_infura_project_id: Some("7f1274674be54d2881bf3c0168bf9855".to_string()),
 			swap_electrumx_addr: Some(
 				[

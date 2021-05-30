@@ -36,7 +36,8 @@ use grin_wallet_libwallet::proof::proofaddress;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::Slate;
 use grin_wallet_libwallet::{
-	IssueInvoiceTxArgs, NodeClient, SwapStartArgs, WalletInst, WalletLCProvider,
+	swap::types::Currency, IssueInvoiceTxArgs, NodeClient, SwapStartArgs, WalletInst,
+	WalletLCProvider,
 };
 use grin_wallet_util::grin_core as core;
 use grin_wallet_util::grin_core::core::amount_to_hr_string;
@@ -45,8 +46,11 @@ use grin_wallet_util::grin_keychain as keychain;
 use linefeed::terminal::Signal;
 use linefeed::{Interface, ReadResult};
 use rpassword;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::{
+	convert::TryFrom,
+	path::{Path, PathBuf},
+};
 use uuid::Uuid;
 
 // define what to do on argument error
@@ -1021,7 +1025,8 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 	let secondary_currency = parse_required(args, "secondary_currency")?;
 	let secondary_currency = secondary_currency.to_lowercase();
 	match secondary_currency.as_str() {
-		"btc" | "bch" | "ltc" | "zcash" | "dash" | "doge" | "ether" => (),
+		"btc" | "bch" | "ltc" | "zcash" | "dash" | "doge" | "ether" | "usdt" | "busd" | "bnb"
+		| "usdc" | "link" | "trx" | "dai" | "tusd" | "pax" | "wbtc" | "tst" => (),
 		_ => {
 			return Err(ParseError::ArgumentError(format!(
 				"{} is not on the supported currency list.",
@@ -1070,6 +1075,10 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 		.value_of("eth_swap_contract_address")
 		.map(|s| String::from(s))
 		.filter(|s| !s.is_empty());
+	let erc20_swap_contract_address = args
+		.value_of("erc20_swap_contract_address")
+		.map(|s| String::from(s))
+		.filter(|s| !s.is_empty());
 	let eth_infura_project_id = args
 		.value_of("eth_infura_project_id")
 		.map(|s| String::from(s))
@@ -1105,6 +1114,7 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 		electrum_node_uri1,
 		electrum_node_uri2,
 		eth_swap_contract_address,
+		erc20_swap_contract_address,
 		eth_infura_project_id,
 		eth_redirect_to_private_wallet,
 		dry_run,
@@ -1169,6 +1179,9 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 	let eth_swap_contract_address = args
 		.value_of("eth_swap_contract_address")
 		.map(|s| String::from(s));
+	let erc20_swap_contract_address = args
+		.value_of("erc20_swap_contract_address")
+		.map(|s| String::from(s));
 	let eth_infura_project_id = args
 		.value_of("eth_infura_project_id")
 		.map(|s| String::from(s));
@@ -1190,6 +1203,7 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 		electrum_node_uri1,
 		electrum_node_uri2,
 		eth_swap_contract_address,
+		erc20_swap_contract_address,
 		eth_infura_project_id,
 		eth_redirect_to_private_wallet,
 		wait_for_backup1: false, // waiting is a primary usage for qt wallet. We are not documented that properly to make available for all users.
@@ -1295,11 +1309,23 @@ pub fn parse_eth_args(args: &ArgMatches) -> Result<command::EthArgs, ParseError>
 		)));
 	};
 
+	let currency = match args.value_of("currency") {
+		None => "ether",
+		Some(token) => token,
+	};
+	let currency = Currency::try_from(currency);
+	if currency.is_err() {
+		return Err(ParseError::ArgumentError(format!(
+			"Please specify correct token!"
+		)));
+	}
+
 	let dest = args.value_of("dest").map(|s| String::from(s));
 	let amount = args.value_of("amount").map(|s| String::from(s));
 
 	Ok(command::EthArgs {
 		subcommand,
+		currency: currency.unwrap(),
 		dest,
 		amount,
 	})
@@ -1438,6 +1464,7 @@ where
 				wallet_inst.get_data_file_dir(),
 				&wallet_config.swap_electrumx_addr,
 				&wallet_config.eth_swap_contract_address,
+				&wallet_config.erc20_swap_contract_address,
 				&wallet_config.eth_infura_project_id,
 			);
 

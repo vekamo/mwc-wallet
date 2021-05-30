@@ -172,6 +172,10 @@ where
 				&secondary_currency,
 				&params.eth_swap_contract_address,
 			)?;
+			let erc20_swap_contract_address = trades::get_erc20_swap_contract_address(
+				&secondary_currency,
+				&params.erc20_swap_contract_address,
+			)?;
 			let eth_infura_project_id = trades::get_eth_infura_projectid(
 				&secondary_currency,
 				&params.eth_infura_project_id,
@@ -181,6 +185,7 @@ where
 				node_client,
 				ethereum_wallet.clone(),
 				eth_swap_contract_address,
+				erc20_swap_contract_address,
 				eth_infura_project_id,
 			)?
 		}
@@ -245,6 +250,7 @@ where
 		params.electrum_node_uri1.clone(),
 		params.electrum_node_uri2.clone(),
 		params.eth_swap_contract_address.clone(),
+		params.erc20_swap_contract_address.clone(),
 		params.eth_infura_project_id.clone(),
 		params.eth_redirect_to_private_wallet,
 		params.dry_run,
@@ -527,12 +533,18 @@ where
 					&swap.eth_swap_contract_address,
 				)?;
 
+				let erc20_swap_contract_address = trades::get_erc20_swap_contract_address(
+					&swap.secondary_currency,
+					&swap.erc20_swap_contract_address,
+				)?;
+
 				if eth_infura_project_id.is_some() {
 					let swap_api: Box<dyn SwapApi<K>> = crate::swap::api::create_eth_instance(
 						&swap.secondary_currency,
 						node_client.clone(),
 						ethereum_wallet,
 						eth_swap_contract_address,
+						erc20_swap_contract_address,
 						eth_infura_project_id.clone().unwrap(),
 					)?;
 					swap_api.test_client_connections()?;
@@ -634,6 +646,10 @@ where
 				&swap.secondary_currency,
 				&swap.eth_swap_contract_address,
 			)?;
+			let erc20_swap_contract_address = trades::get_erc20_swap_contract_address(
+				&swap.secondary_currency,
+				&swap.erc20_swap_contract_address,
+			)?;
 			let eth_infura_project_id = trades::get_eth_infura_projectid(
 				&swap.secondary_currency,
 				&swap.eth_infura_project_id,
@@ -643,6 +659,7 @@ where
 				node_client.clone(),
 				ethereum_wallet,
 				eth_swap_contract_address,
+				erc20_swap_contract_address,
 				eth_infura_project_id,
 			)?
 		}
@@ -764,6 +781,10 @@ where
 				&swap.secondary_currency,
 				&swap.eth_swap_contract_address,
 			)?;
+			let erc20_swap_contract_address = trades::get_erc20_swap_contract_address(
+				&swap.secondary_currency,
+				&swap.erc20_swap_contract_address,
+			)?;
 			let eth_infura_project_id = trades::get_eth_infura_projectid(
 				&swap.secondary_currency,
 				&swap.eth_infura_project_id,
@@ -773,6 +794,7 @@ where
 				node_client.clone(),
 				ethereum_wallet.clone(),
 				eth_swap_contract_address,
+				erc20_swap_contract_address,
 				eth_infura_project_id,
 			)?
 		}
@@ -888,6 +910,10 @@ where
 				&swap.secondary_currency,
 				&swap.eth_swap_contract_address,
 			)?;
+			let erc20_swap_contract_address = trades::get_erc20_swap_contract_address(
+				&swap.secondary_currency,
+				&swap.erc20_swap_contract_address,
+			)?;
 			let eth_infura_project_id = trades::get_eth_infura_projectid(
 				&swap.secondary_currency,
 				&swap.eth_infura_project_id,
@@ -897,6 +923,7 @@ where
 				node_client,
 				ethereum_wallet,
 				eth_swap_contract_address,
+				erc20_swap_contract_address,
 				eth_infura_project_id,
 			)?
 		}
@@ -982,6 +1009,7 @@ pub fn update_swap_status_action<'a, L, C, K>(
 	electrum_node_uri1: Option<String>,
 	electrum_node_uri2: Option<String>,
 	eth_swap_contract_address: Option<String>,
+	erc20_swap_contract_address: Option<String>,
 	eth_infura_project_id: Option<String>,
 	wait_for_backup1: bool,
 ) -> Result<
@@ -1022,6 +1050,9 @@ where
 	// Updating ethereum contract address and project id if they are defined. We can't reset them. For reset use Adjust
 	if eth_swap_contract_address.is_some() {
 		swap.eth_swap_contract_address = eth_swap_contract_address;
+	}
+	if erc20_swap_contract_address.is_some() {
+		swap.erc20_swap_contract_address = erc20_swap_contract_address;
 	}
 	if eth_infura_project_id.is_some() {
 		swap.eth_infura_project_id = eth_infura_project_id;
@@ -1073,6 +1104,7 @@ pub fn get_swap_tx_tstatus<'a, L, C, K>(
 	electrum_node_uri1: Option<String>,
 	electrum_node_uri2: Option<String>,
 	eth_swap_contract_address: Option<String>,
+	erc20_swap_contract_address: Option<String>,
 	eth_infura_project_id: Option<String>,
 ) -> Result<SwapTransactionsConfirmations, Error>
 where
@@ -1116,6 +1148,9 @@ where
 			if eth_swap_contract_address.is_some() {
 				swap.eth_swap_contract_address = eth_swap_contract_address;
 			}
+			if erc20_swap_contract_address.is_some() {
+				swap.erc20_swap_contract_address = erc20_swap_contract_address;
+			}
 			if eth_infura_project_id.is_some() {
 				swap.eth_infura_project_id = eth_infura_project_id;
 			}
@@ -1123,6 +1158,10 @@ where
 			let eth_swap_contract_address = trades::get_eth_swap_contract_address(
 				&swap.secondary_currency,
 				&swap.eth_swap_contract_address,
+			)?;
+			let erc20_swap_contract_address = trades::get_erc20_swap_contract_address(
+				&swap.secondary_currency,
+				&swap.erc20_swap_contract_address,
 			)?;
 			let eth_infura_project_id = trades::get_eth_infura_projectid(
 				&swap.secondary_currency,
@@ -1133,6 +1172,7 @@ where
 				node_client,
 				ethereum_wallet,
 				eth_swap_contract_address,
+				erc20_swap_contract_address,
 				eth_infura_project_id,
 			)?
 		}
@@ -1201,6 +1241,10 @@ where
 				&swap.secondary_currency,
 				&swap.eth_swap_contract_address,
 			)?;
+			let erc20_swap_contract_address = trades::get_erc20_swap_contract_address(
+				&swap.secondary_currency,
+				&swap.erc20_swap_contract_address,
+			)?;
 			let eth_infura_project_id = trades::get_eth_infura_projectid(
 				&swap.secondary_currency,
 				&swap.eth_infura_project_id,
@@ -1212,6 +1256,7 @@ where
 				node_client,
 				ethereum_wallet,
 				eth_swap_contract_address,
+				erc20_swap_contract_address,
 				eth_infura_project_id,
 			)?
 		}
@@ -1664,6 +1709,10 @@ where
 							&swap.secondary_currency,
 							&swap.eth_swap_contract_address,
 						)?;
+						let erc20_swap_contract_address = trades::get_erc20_swap_contract_address(
+							&swap.secondary_currency,
+							&swap.erc20_swap_contract_address,
+						)?;
 						let eth_infura_project_id = trades::get_eth_infura_projectid(
 							&swap.secondary_currency,
 							&swap.eth_infura_project_id,
@@ -1673,6 +1722,7 @@ where
 							node_client.clone(),
 							ethereum_wallet.clone(),
 							eth_swap_contract_address,
+							erc20_swap_contract_address,
 							eth_infura_project_id,
 						)?
 					}
@@ -1772,6 +1822,10 @@ where
 						&offer_update.secondary_currency,
 						&None,
 					)?;
+					let erc20_swap_contract_address = trades::get_erc20_swap_contract_address(
+						&offer_update.secondary_currency,
+						&None,
+					)?;
 					let eth_infura_project_id =
 						trades::get_eth_infura_projectid(&offer_update.secondary_currency, &None)?;
 					crate::swap::api::create_eth_instance(
@@ -1779,6 +1833,7 @@ where
 						node_client.clone(),
 						ethereum_wallet.clone(),
 						eth_swap_contract_address,
+						erc20_swap_contract_address,
 						eth_infura_project_id,
 					)?
 				}
@@ -1861,6 +1916,8 @@ where
 				_ => {
 					let eth_swap_contract_address =
 						trades::get_eth_swap_contract_address(&swap.secondary_currency, &None)?;
+					let erc20_swap_contract_address =
+						trades::get_erc20_swap_contract_address(&swap.secondary_currency, &None)?;
 					let eth_infura_project_id =
 						trades::get_eth_infura_projectid(&swap.secondary_currency, &None)?;
 					crate::swap::api::create_eth_instance(
@@ -1868,6 +1925,7 @@ where
 						node_client.clone(),
 						ethereum_wallet.clone(),
 						eth_swap_contract_address,
+						erc20_swap_contract_address,
 						eth_infura_project_id,
 					)?
 				}

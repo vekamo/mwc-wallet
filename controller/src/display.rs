@@ -16,7 +16,7 @@ use crate::core::core::{self, amount_to_hr_string};
 use crate::core::global;
 use crate::libwallet::swap::fsm::state::StateEtaInfo;
 use crate::libwallet::swap::swap;
-use crate::libwallet::swap::types::{Action, Role};
+use crate::libwallet::swap::types::{Action, Currency, Role};
 use crate::libwallet::{
 	AcctPathMapping, Error, OutputCommitMapping, OutputStatus, TxLogEntry, WalletInfo,
 };
@@ -819,7 +819,7 @@ fn timestamp_to_local_time(timestamp: i64) -> String {
 }
 
 /// Display summary eth info in a pretty way
-pub fn eth_info(account: String, height: String, balance: String) {
+pub fn eth_info(account: String, height: String, balance: String, currency: Currency) {
 	println!(
 		"\n____ Ethereum Wallet Summary Info - Account '{}' as of height {} ____\n",
 		account, height,
@@ -828,7 +828,7 @@ pub fn eth_info(account: String, height: String, balance: String) {
 	let mut table = table!();
 
 	table.add_row(row![
-		bFG->"Ethereum  Balance",
+		bFG->format!("{} Balance", currency).as_str(),
 		FG->balance
 	]);
 

@@ -352,8 +352,21 @@ impl BtcData {
 
 				(cosign_ser, redeem_ser)
 			}
-			Currency::Ether => {
-				return Err(ErrorKind::Generic("Ether not supported".to_string()));
+			Currency::Ether
+			| Currency::Busd
+			| Currency::Bnb
+			| Currency::Link
+			| Currency::Dai
+			| Currency::Tusd
+			| Currency::Pax
+			| Currency::Wbtc
+			| Currency::Usdt
+			| Currency::Usdc
+			| Currency::Trx
+			| Currency::Tst => {
+				return Err(ErrorKind::Generic(
+					"Ether/Erc20-token is not supported".to_string(),
+				));
 			}
 		};
 
@@ -533,8 +546,21 @@ impl BtcData {
 					None,
 				));
 			}
-			Currency::Ether => {
-				return Err(ErrorKind::Generic("Ether not supported".to_string()));
+			Currency::Ether
+			| Currency::Busd
+			| Currency::Bnb
+			| Currency::Link
+			| Currency::Dai
+			| Currency::Tusd
+			| Currency::Pax
+			| Currency::Wbtc
+			| Currency::Usdt
+			| Currency::Usdc
+			| Currency::Trx
+			| Currency::Tst => {
+				return Err(ErrorKind::Generic(
+					"Ether/Erc20-tonken is not supported".to_string(),
+				));
 			}
 		};
 
@@ -575,8 +601,21 @@ impl BtcData {
 				sign_ser.push(0x01); // SIGHASH_ALL
 				sign_ser
 			}
-			Currency::Ether => {
-				return Err(ErrorKind::Generic("Ether not supported".to_string()));
+			Currency::Ether
+			| Currency::Busd
+			| Currency::Bnb
+			| Currency::Link
+			| Currency::Dai
+			| Currency::Tusd
+			| Currency::Pax
+			| Currency::Wbtc
+			| Currency::Usdt
+			| Currency::Usdc
+			| Currency::Trx
+			| Currency::Tst => {
+				return Err(ErrorKind::Generic(
+					"Ether/Erc20-token is not supported".to_string(),
+				));
 			}
 		};
 

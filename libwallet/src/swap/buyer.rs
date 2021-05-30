@@ -193,7 +193,18 @@ impl BuyApi {
 			| Currency::Dash
 			| Currency::ZCash
 			| Currency::Doge
-			| Currency::Ether => (),
+			| Currency::Ether
+			| Currency::Busd
+			| Currency::Bnb
+			| Currency::Link
+			| Currency::Dai
+			| Currency::Tusd
+			| Currency::Pax
+			| Currency::Wbtc
+			| Currency::Usdt
+			| Currency::Usdc
+			| Currency::Trx
+			| Currency::Tst => (),
 		}
 
 		// Start redeem slate
@@ -271,6 +282,7 @@ impl BuyApi {
 					electrum_node_uri1: None, // User need to review the offer first. Then to electrumX uri can be updated
 					electrum_node_uri2: None,
 					eth_swap_contract_address: None,
+					erc20_swap_contract_address: None,
 					eth_infura_project_id: None,
 					eth_redirect_to_private_wallet: false,
 					last_process_error: None,
@@ -329,6 +341,7 @@ impl BuyApi {
 					electrum_node_uri1: None, // User need to review the offer first. Then to electrumX uri can be updated
 					electrum_node_uri2: None,
 					eth_swap_contract_address: None,
+					erc20_swap_contract_address: None,
 					eth_infura_project_id: None,
 					eth_redirect_to_private_wallet: false,
 					last_process_error: None,

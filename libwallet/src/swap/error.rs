@@ -128,9 +128,19 @@ pub enum ErrorKind {
 
 	/// Infura Node client error
 	#[fail(
+		display = "Infura Project Id not defined. Please specify it at wallet config or with swap arguments"
+	)]
+	UndefinedInfuraProjectId,
+	/// Eth SWap Contract Address error
+	#[fail(
 		display = "Eth Swap Contract Address is not defined. Please specify it at wallet config or with swap arguments"
 	)]
 	UndefinedEthSwapContractAddress,
+	/// ERC20 Swap Contract Address error
+	#[fail(
+		display = "ERC20 Swap Contract Address is not defined. Please specify it at wallet config or with swap arguments"
+	)]
+	UndefinedERC20SwapContractAddress,
 	/// Infura Node error
 	#[fail(display = "Infura Node error, {}", _0)]
 	InfuraNodeClient(String),
@@ -143,6 +153,9 @@ pub enum ErrorKind {
 	/// Eth balance is not enough
 	#[fail(display = "Eth Wallet Balance is not enough")]
 	EthBalanceNotEnough,
+	/// ERC20 Token balance is not enough
+	#[fail(display = "ERC20 Token {} Balance is not enough", _0)]
+	ERC20TokenBalanceNotEnough(String),
 	/// Invalid Tx Hash
 	#[fail(display = "Invalid Eth Transaction Hash")]
 	InvalidTxHash,
@@ -152,6 +165,12 @@ pub enum ErrorKind {
 	/// Retrieve TransactionRecipt error
 	#[fail(display = "Retrieve Eth TransactionReceipt error")]
 	EthRetrieveTransReciptError,
+	/// Unsupported ERC-20 Token
+	#[fail(display = "Unsupported ERC20 Token: {}", _0)]
+	EthUnsupportedERC20TokenError(String),
+	/// ERC-20 Token Approve Failed
+	#[fail(display = "ERC20 Token Approve Failed!")]
+	EthERC20TokenApproveError,
 }
 
 impl ErrorKind {

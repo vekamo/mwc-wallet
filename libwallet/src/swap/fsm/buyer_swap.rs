@@ -486,7 +486,6 @@ where
 					)));
 				}
 				self.swap_api.post_secondary_lock_tx(swap)?;
-
 				Ok(StateProcessRespond::new(
 					StateId::BuyerPostingSecondaryToMultisigAccount,
 				))

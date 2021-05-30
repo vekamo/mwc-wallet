@@ -30,6 +30,7 @@ use crate::Error;
 /// Show Wallet Info
 pub fn info<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
+	currency: Currency,
 ) -> Result<(String, String, String), Error>
 where
 	L: WalletLCProvider<'a, C, K>,
@@ -50,9 +51,10 @@ where
 		chain,
 		ethereum_wallet.clone(),
 		"".to_string(),
+		"".to_string(),
 	)?;
 	let height = eth_node_client.height()?;
-	let balance = eth_node_client.balance(Currency::Ether)?;
+	let balance = eth_node_client.balance(currency)?;
 
 	Ok((
 		ethereum_wallet.address.clone().unwrap(),
@@ -64,6 +66,7 @@ where
 /// transfer ethereum coins out
 pub fn transfer<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
+	currency: Currency,
 	dest: Option<String>,
 	amount: Option<String>,
 ) -> Result<(), Error>
@@ -86,18 +89,20 @@ where
 		chain,
 		ethereum_wallet.clone(),
 		"".to_string(),
+		"".to_string(),
 	)?;
 
 	let to = to_eth_address(dest.unwrap())?;
-	let amounts = ether_converter::to_wei(amount.unwrap().as_str(), "ether");
+	let amounts = to_gnorm(amount.unwrap().as_str(), "1");
 	let amounts_u64 = amounts.parse::<u64>();
 	info!(
-		"to: {}, amounts: {}, amounts_u64: {}",
+		"currency: {}, to: {}, amounts: {}, amounts_u64: {}",
+		currency,
 		to,
 		amounts,
 		amounts_u64.clone().unwrap()
 	);
-	eth_node_client.transfer(to, amounts_u64.unwrap())?;
+	eth_node_client.transfer(currency, to, amounts_u64.unwrap())?;
 
 	Ok(())
 }

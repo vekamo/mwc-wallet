@@ -25,6 +25,7 @@ use bitcoin::Address;
 use std::convert::TryInto;
 use std::fmt;
 use std::{convert::TryFrom, str::FromStr};
+use web3::types::H160;
 
 /// MWC Network where SWAP happens.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,10 +97,32 @@ pub enum Currency {
 	Doge,
 	/// Ether
 	Ether,
+	/// Tether USD
+	Usdt,
+	/// Binance USD
+	Busd,
+	/// Binance Token
+	Bnb,
+	/// USD Coin
+	Usdc,
+	/// ChainLink
+	Link,
+	/// TRON
+	Trx,
+	/// Dai Stablecoin
+	Dai,
+	/// True USD
+	Tusd,
+	/// Paxos Standard
+	Pax,
+	/// Wrapped BTC
+	Wbtc,
+	/// Test Standard Token (Ropsten)
+	Tst,
 }
 
 impl Currency {
-	/// Satoshi to 1 conversion; Gwei to 1 ether conversion for ETH
+	/// Satoshi to 1 conversion; Gwei to 1 ether conversion for ETH/Tst ...
 	pub fn exponent(&self) -> usize {
 		match self {
 			Currency::Btc
@@ -108,7 +131,16 @@ impl Currency {
 			| Currency::Dash
 			| Currency::ZCash
 			| Currency::Doge => 8,
-			Currency::Ether => 18,
+			Currency::Ether
+			| Currency::Busd
+			| Currency::Bnb
+			| Currency::Link
+			| Currency::Dai
+			| Currency::Tusd
+			| Currency::Pax
+			| Currency::Tst => 9, // 18 is too big , shrink to 9
+			Currency::Wbtc => 8,
+			Currency::Usdt | Currency::Usdc | Currency::Trx => 6,
 		}
 	}
 
@@ -120,7 +152,18 @@ impl Currency {
 			Currency::Dash => 60 * 2 + 39, // 2.65 Minutes
 			Currency::ZCash => 75,
 			Currency::Doge => 60,
-			Currency::Ether => 15,
+			Currency::Ether
+			| Currency::Busd
+			| Currency::Bnb
+			| Currency::Link
+			| Currency::Dai
+			| Currency::Tusd
+			| Currency::Pax
+			| Currency::Wbtc
+			| Currency::Usdt
+			| Currency::Usdc
+			| Currency::Trx
+			| Currency::Tst => 15,
 		}
 	}
 
@@ -301,7 +344,18 @@ impl Currency {
 					}
 				}
 			}
-			Currency::Ether => {
+			Currency::Ether
+			| Currency::Busd
+			| Currency::Bnb
+			| Currency::Link
+			| Currency::Dai
+			| Currency::Tusd
+			| Currency::Pax
+			| Currency::Wbtc
+			| Currency::Usdt
+			| Currency::Usdc
+			| Currency::Trx
+			| Currency::Tst => {
 				EthereumAddress::from_str(address.as_str()).map_err(|e| {
 					ErrorKind::Generic(format!(
 						"Unable to parse Ethereum address {}, {}",
@@ -377,7 +431,18 @@ impl Currency {
 				})?;
 				addr.to_btc().to_string()
 			}
-			Currency::Ether => {
+			Currency::Ether
+			| Currency::Busd
+			| Currency::Bnb
+			| Currency::Link
+			| Currency::Dai
+			| Currency::Tusd
+			| Currency::Pax
+			| Currency::Wbtc
+			| Currency::Usdt
+			| Currency::Usdc
+			| Currency::Trx
+			| Currency::Tst => {
 				//todo
 				"".to_string()
 			}
@@ -434,7 +499,18 @@ impl Currency {
 					Network::Mainnet => 3.0 as f32,
 				}
 			}
-			Currency::Ether => {
+			Currency::Ether
+			| Currency::Busd
+			| Currency::Bnb
+			| Currency::Link
+			| Currency::Dai
+			| Currency::Tusd
+			| Currency::Pax
+			| Currency::Wbtc
+			| Currency::Usdt
+			| Currency::Usdc
+			| Currency::Trx
+			| Currency::Tst => {
 				// Default values
 				match network {
 					Network::Floonet => 5500000.0 as f32, //gwei
@@ -455,7 +531,18 @@ impl Currency {
 			Currency::Dash => ("duff per byte".to_string(), 1, true),
 			Currency::ZCash => ("ZEC".to_string(), 100_000_000, false),
 			Currency::Doge => ("doge".to_string(), 100_000_000, false),
-			Currency::Ether => ("gwei".to_string(), 1, true),
+			Currency::Ether
+			| Currency::Busd
+			| Currency::Bnb
+			| Currency::Link
+			| Currency::Dai
+			| Currency::Tusd
+			| Currency::Pax
+			| Currency::Wbtc
+			| Currency::Usdt
+			| Currency::Usdc
+			| Currency::Trx
+			| Currency::Tst => ("gwei".to_string(), 1, true),
 		}
 	}
 
@@ -479,7 +566,18 @@ impl Currency {
 				Currency::Doge => {
 					"6b591fe460c9cfb75d4406c3787c913022be1caa8641415932ee8c5228ff2e3b".to_string()
 				}
-				Currency::Ether => {
+				Currency::Ether
+				| Currency::Busd
+				| Currency::Bnb
+				| Currency::Link
+				| Currency::Dai
+				| Currency::Tusd
+				| Currency::Pax
+				| Currency::Wbtc
+				| Currency::Usdt
+				| Currency::Usdc
+				| Currency::Trx
+				| Currency::Tst => {
 					"f37e9f691fffb635de0999491d906ee85ba40cd36dae9f6e5911a8277d7c5f75".to_string()
 				}
 			}
@@ -500,7 +598,18 @@ impl Currency {
 				Currency::Doge => {
 					"5f7e779f7600f54e528686e91d5891f3ae226ee907f461692519e549105f521c".to_string()
 				}
-				Currency::Ether => {
+				Currency::Ether
+				| Currency::Busd
+				| Currency::Bnb
+				| Currency::Link
+				| Currency::Dai
+				| Currency::Tusd
+				| Currency::Pax
+				| Currency::Wbtc
+				| Currency::Usdt
+				| Currency::Usdc
+				| Currency::Trx
+				| Currency::Tst => {
 					"f37e9f691fffb635de0999491d906ee85ba40cd36dae9f6e5911a8277d7c5f75".to_string()
 				}
 			}
@@ -519,6 +628,82 @@ impl Currency {
 			_ => false,
 		}
 	}
+
+	/// check is erc20 tokens
+	pub fn is_erc20(&self) -> bool {
+		match self {
+			Currency::Busd
+			| Currency::Bnb
+			| Currency::Link
+			| Currency::Dai
+			| Currency::Tusd
+			| Currency::Pax
+			| Currency::Wbtc
+			| Currency::Usdt
+			| Currency::Usdc
+			| Currency::Trx
+			| Currency::Tst => true,
+			_ => false,
+		}
+	}
+
+	/// get erc20 token contract address
+	pub fn erc20_token_address(&self) -> Result<H160, ErrorKind> {
+		match self {
+			Currency::Usdt => {
+				Ok(H160::from_str("dac17f958d2ee523a2206206994597c13d831ec7").unwrap())
+			}
+			Currency::Busd => {
+				Ok(H160::from_str("4fabb145d64652a948d72533023f6e7a623c7c53").unwrap())
+			}
+			Currency::Bnb => {
+				Ok(H160::from_str("B8c77482e45F1F44dE1745F52C74426C631bDD52").unwrap())
+			}
+			Currency::Usdc => {
+				Ok(H160::from_str("a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap())
+			}
+			Currency::Link => {
+				Ok(H160::from_str("514910771af9ca656af840dff83e8264ecf986ca").unwrap())
+			}
+			Currency::Trx => {
+				Ok(H160::from_str("e1be5d3f34e89de342ee97e6e90d405884da6c67").unwrap())
+			}
+			Currency::Dai => {
+				Ok(H160::from_str("6b175474e89094c44da98b954eedeac495271d0f").unwrap())
+			}
+			Currency::Tusd => {
+				Ok(H160::from_str("0000000000085d4780B73119b644AE5ecd22b376").unwrap())
+			}
+			Currency::Pax => {
+				Ok(H160::from_str("8e870d67f660d95d5be530380d0ec0bd388289e1").unwrap())
+			}
+			Currency::Wbtc => {
+				Ok(H160::from_str("2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap())
+			}
+			Currency::Tst => {
+				Ok(H160::from_str("722dd3F80BAC40c951b51BdD28Dd19d435762180").unwrap())
+			}
+			_ => Err(ErrorKind::EthUnsupportedERC20TokenError(format!(
+				"{}",
+				self
+			))),
+		}
+	}
+
+	/// check if token decimals shrinked from 18 to 9
+	pub fn is_expo_shrinked18to9(&self) -> bool {
+		match self {
+			Currency::Ether
+			| Currency::Busd
+			| Currency::Bnb
+			| Currency::Link
+			| Currency::Dai
+			| Currency::Tusd
+			| Currency::Pax
+			| Currency::Tst => true,
+			_ => false,
+		}
+	}
 }
 
 impl fmt::Display for Currency {
@@ -531,6 +716,17 @@ impl fmt::Display for Currency {
 			Currency::ZCash => "ZCash",
 			Currency::Doge => "Doge",
 			Currency::Ether => "Ether",
+			Currency::Busd => "Busd",
+			Currency::Bnb => "Bnb",
+			Currency::Link => "Link",
+			Currency::Dai => "Dai",
+			Currency::Tusd => "Tusd",
+			Currency::Pax => "Pax",
+			Currency::Wbtc => "Wbtc",
+			Currency::Usdt => "Usdt",
+			Currency::Usdc => "Usdc",
+			Currency::Trx => "Trx",
+			Currency::Tst => "Tst",
 		};
 		write!(f, "{}", disp)
 	}
@@ -548,6 +744,17 @@ impl TryFrom<&str> for Currency {
 			"zec" | "zcash" => Ok(Currency::ZCash),
 			"doge" => Ok(Currency::Doge),
 			"ether" => Ok(Currency::Ether),
+			"busd" => Ok(Currency::Busd),
+			"bnb" => Ok(Currency::Bnb),
+			"link" => Ok(Currency::Link),
+			"dai" => Ok(Currency::Dai),
+			"tusd" => Ok(Currency::Tusd),
+			"pax" => Ok(Currency::Pax),
+			"wbtc" => Ok(Currency::Wbtc),
+			"usdt" => Ok(Currency::Usdt),
+			"usdc" => Ok(Currency::Usdc),
+			"trx" => Ok(Currency::Trx),
+			"tst" => Ok(Currency::Tst),
 			_ => Err(ErrorKind::InvalidCurrency(value.to_string())),
 		}
 	}
@@ -1170,7 +1377,18 @@ pub fn check_txs_confirmed(currency: Currency, lock: u64, lock_conf: u64) -> boo
 				true
 			}
 		}
-		Currency::Ether => {
+		Currency::Ether
+		| Currency::Busd
+		| Currency::Bnb
+		| Currency::Link
+		| Currency::Dai
+		| Currency::Tusd
+		| Currency::Pax
+		| Currency::Wbtc
+		| Currency::Usdt
+		| Currency::Usdc
+		| Currency::Trx
+		| Currency::Tst => {
 			if lock >= 1 {
 				true
 			} else {

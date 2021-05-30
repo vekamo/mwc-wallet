@@ -187,6 +187,7 @@ where
 									wallet_inst.get_data_file_dir(),
 									&wallet_config.swap_electrumx_addr,
 									&wallet_config.eth_swap_contract_address,
+									&wallet_config.erc20_swap_contract_address,
 									&wallet_config.eth_infura_project_id,
 								);
 

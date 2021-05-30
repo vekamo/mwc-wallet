@@ -394,6 +394,8 @@ pub struct SwapStartArgs {
 	pub electrum_node_uri2: Option<String>,
 	/// Ethereum Swap Contract Address
 	pub eth_swap_contract_address: Option<String>,
+	/// ERC20 Swap Contract Address
+	pub erc20_swap_contract_address: Option<String>,
 	/// Ethereum Infura Project Id
 	pub eth_infura_project_id: Option<String>,
 	/// Ethereum transfer to users' private wallet directly

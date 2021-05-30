@@ -566,6 +566,17 @@ subcommands:
               - dash
               - doge
               - ether
+              - usdt
+              - busd
+              - bnb
+              - usdc
+              - link
+              - trx
+              - dai
+              - tusd
+              - pax
+              - wbtc
+              - tst
             default_value: bch
         - secondary_amount:
             help: Secondary currency amount excluding fees
@@ -635,6 +646,10 @@ subcommands:
         - eth_swap_contract_address:
             help: ethereum swap contract address
             long: eth_swap_contract_address
+            takes_value: true
+        - erc20_swap_contract_address:
+            help: erc20 swap contract address
+            long: erc20_swap_contract_address
             takes_value: true
         - eth_infura_project_id:
             help: ethereum infura project id
@@ -811,6 +826,11 @@ subcommands:
             short: i
             long: info
             takes_value: false
+        - currency:
+            help: specify coin to be operated
+            short: c
+            long: currency
+            takes_value: true
         - send:
             help: send out eth coins
             long: send

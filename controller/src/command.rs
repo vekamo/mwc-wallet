@@ -22,7 +22,9 @@ use crate::error::{Error, ErrorKind};
 use crate::impls::{create_sender, SlateGetter as _};
 use crate::impls::{PathToSlateGetter, PathToSlatePutter, SlatePutter};
 use crate::keychain;
-use crate::libwallet::{InitTxArgs, IssueInvoiceTxArgs, NodeClient, WalletLCProvider};
+use crate::libwallet::{
+	swap::types::Currency, InitTxArgs, IssueInvoiceTxArgs, NodeClient, WalletLCProvider,
+};
 use crate::util::secp::key::SecretKey;
 use crate::util::{Mutex, ZeroingString};
 use crate::{controller, display};
@@ -1728,6 +1730,8 @@ pub struct SwapArgs {
 	pub electrum_node_uri2: Option<String>,
 	/// Ethereum Swap Contract Address
 	pub eth_swap_contract_address: Option<String>,
+	/// ERC20 Swap Contract Address
+	pub erc20_swap_contract_address: Option<String>,
 	/// Ethereum Infura Project Id
 	pub eth_infura_project_id: Option<String>,
 	/// Redirect to users' private ethereum wallet
@@ -1748,6 +1752,8 @@ pub enum EthSubcommand {
 pub struct EthArgs {
 	/// eth subcommand
 	pub subcommand: EthSubcommand,
+	/// currency
+	pub currency: Currency,
 	/// dest address
 	pub dest: Option<String>,
 	/// amount
@@ -2060,6 +2066,7 @@ where
 						args.electrum_node_uri1.clone(),
 						args.electrum_node_uri2.clone(),
 						args.eth_swap_contract_address.clone(),
+						args.erc20_swap_contract_address.clone(),
 						args.eth_infura_project_id.clone(),
 					) {
 						Ok(status) => status,
@@ -2103,6 +2110,7 @@ where
 									"electrumNodeUri1" : swap.electrum_node_uri1.clone().unwrap_or("".to_string()),
 									"electrumNodeUri2" : swap.electrum_node_uri2.clone().unwrap_or("".to_string()),
 									"eth_swap_contract_address": swap.eth_swap_contract_address.clone().unwrap_or("".to_string()),
+									"erc20_swap_contract_address": swap.erc20_swap_contract_address.clone().unwrap_or("".to_string()),
 									"eth_infura_project_id": swap.eth_infura_project_id.clone().unwrap_or("".to_string()),
 								});
 								println!("JSON: {}", item.to_string());
@@ -2128,6 +2136,7 @@ where
 						args.electrum_node_uri1,
 						args.electrum_node_uri2,
 						args.eth_swap_contract_address,
+						args.erc20_swap_contract_address,
 						args.eth_infura_project_id,
 						args.wait_for_backup1,
 					)?;
@@ -2194,6 +2203,7 @@ where
 							"electrumNodeUri2" : swap.electrum_node_uri2.clone().unwrap_or("".to_string()),
 
 							"eth_swap_contract_address": swap.eth_swap_contract_address.clone().unwrap_or("".to_string()),
+							"erc20_swap_contract_address": swap.erc20_swap_contract_address.clone().unwrap_or("".to_string()),
 							"eth_infura_project_id": swap.eth_infura_project_id.clone().unwrap_or("".to_string()),
 						});
 
@@ -2573,6 +2583,7 @@ where
 					args.electrum_node_uri1.clone(),
 					args.electrum_node_uri2.clone(),
 					args.eth_swap_contract_address.clone(),
+					args.erc20_swap_contract_address.clone(),
 					args.eth_infura_project_id.clone(),
 				)?;
 				let (
@@ -2590,6 +2601,7 @@ where
 					args.electrum_node_uri1,
 					args.electrum_node_uri2,
 					args.eth_swap_contract_address,
+					args.erc20_swap_contract_address,
 					args.eth_infura_project_id,
 					args.wait_for_backup1,
 				)?;
@@ -2685,7 +2697,7 @@ where
 							km2.as_ref(),
 							&swap_id2,
 							None,None, // URIs are already updated
-							None, None,
+							None, None, None,
 							wait_for_backup1,
 						) {
 							Ok(res) => res,
@@ -2942,10 +2954,10 @@ where
 {
 	match args.subcommand {
 		EthSubcommand::Info => {
-			let result = owner_eth::info(wallet_inst.clone());
+			let result = owner_eth::info(wallet_inst.clone(), args.currency);
 			match result {
 				Ok((address, height, balance)) => {
-					display::eth_info(address, height, balance);
+					display::eth_info(address, height, balance, args.currency);
 					return Ok(());
 				}
 				_ => {
@@ -2957,16 +2969,24 @@ where
 			}
 		}
 		EthSubcommand::Send => {
+			let currency = args.currency;
 			let dest = args.dest;
 			let amount = args.amount;
 			if dest.is_none() || amount.is_none() {
 				println!("Please specify destination address and amounts");
 				return Ok(());
 			}
-			let result = owner_eth::transfer(wallet_inst.clone(), dest.clone(), amount.clone());
+
+			let result =
+				owner_eth::transfer(wallet_inst.clone(), currency, dest.clone(), amount.clone());
 			match result {
 				Ok(()) => {
-					println!("Transfer {} to {} done!!!", amount.unwrap(), dest.unwrap());
+					println!(
+						"Transfer {} {} to {} done!!!",
+						currency,
+						amount.unwrap(),
+						dest.unwrap()
+					);
 					return Ok(());
 				}
 				_ => {

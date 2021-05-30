@@ -73,6 +73,7 @@ pub trait SwapApi<K: Keychain>: Sync + Send {
 		electrum_node_uri1: Option<String>,
 		electrum_node_uri2: Option<String>,
 		eth_swap_contract_address: Option<String>,
+		erc20_swap_contract_address: Option<String>,
 		eth_infura_project_id: Option<String>,
 		eth_redirect_out_wallet: bool,
 		dry_run: bool,
@@ -200,6 +201,7 @@ pub fn create_eth_instance<'a, C, K>(
 	node_client: C,
 	ethereum_wallet: EthereumWallet,
 	eth_swap_contract_addr: String,
+	erc20_swap_contract_addr: String,
 	eth_infura_project_id: String,
 ) -> Result<Box<dyn SwapApi<K> + 'a>, ErrorKind>
 where
@@ -207,7 +209,18 @@ where
 	K: Keychain + 'a,
 {
 	match currency {
-		Currency::Ether => {
+		Currency::Ether
+		| Currency::Busd
+		| Currency::Bnb
+		| Currency::Link
+		| Currency::Dai
+		| Currency::Tusd
+		| Currency::Pax
+		| Currency::Wbtc
+		| Currency::Usdt
+		| Currency::Usdc
+		| Currency::Trx
+		| Currency::Tst => {
 			let chain = if global::is_mainnet() {
 				"mainnet".to_string()
 			} else {
@@ -218,6 +231,7 @@ where
 				chain,
 				ethereum_wallet,
 				eth_swap_contract_addr,
+				erc20_swap_contract_addr,
 			)
 			.unwrap();
 

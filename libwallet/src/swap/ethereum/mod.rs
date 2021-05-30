@@ -21,6 +21,9 @@ pub use wagyu_ethereum::{
 
 mod api;
 mod client;
+mod decimal_convert;
+mod erc20_contract;
+mod erc20_swap_contract;
 mod ethereum;
 mod infura;
 mod swap_contract;
@@ -28,6 +31,9 @@ mod types;
 
 pub use api::EthSwapApi;
 pub use client::*;
+pub use decimal_convert::{to_gnorm, to_norm};
+pub use erc20_contract::ERC20_TOKEN_CONTRACT;
+pub use erc20_swap_contract::ERC20_SWAP_CONTRACT;
 pub use ethereum::*;
 pub use infura::InfuraNodeClient;
 pub use swap_contract::ETH_SWAP_CONTRACT;

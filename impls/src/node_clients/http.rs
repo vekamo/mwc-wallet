@@ -32,10 +32,10 @@ use crate::util::{self, to_hex};
 
 use super::resp_types::*;
 use crate::client_utils::json_rpc::*;
-use std::time::{Duration, Instant};
-use std::sync::{Arc, RwLock};
-use grin_wallet_util::grin_api::{Libp2pPeers, Libp2pMessages};
 use failure::_core::sync::atomic::{AtomicU8, Ordering};
+use grin_wallet_util::grin_api::{Libp2pMessages, Libp2pPeers};
+use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
 
 const ENDPOINT: &str = "/v2/foreign";
 const CACHE_VALID_TIME_MS: u128 = 5000; // 2 seconds for cache should be enough for our purpose
@@ -46,12 +46,13 @@ const NODE_VERSION_CALL_RETRY: i32 = 7; // it is total 3 attempts  to get the da
 // cashed values are stored by the key K
 #[derive(Clone)]
 struct CachedValue<K, T> {
-	data: Arc<RwLock<HashMap<K, (T,Instant)>>>,
+	data: Arc<RwLock<HashMap<K, (T, Instant)>>>,
 }
 
-impl<K,T> CachedValue<K,T>
-	where K: std::cmp::Eq + std::hash::Hash,
-		  T: Clone
+impl<K, T> CachedValue<K, T>
+where
+	K: std::cmp::Eq + std::hash::Hash,
+	T: Clone,
 {
 	fn new() -> Self {
 		CachedValue {
@@ -62,25 +63,27 @@ impl<K,T> CachedValue<K,T>
 	// Return none is cached value not set of epired
 	fn get_value(&self, key: &K) -> Option<T> {
 		match self.data.write().unwrap().get(key) {
-			Some( (data, time) ) => {
+			Some((data, time)) => {
 				if time.elapsed().as_millis() > CACHE_VALID_TIME_MS {
 					return None;
 				}
-				Some( (*data).clone())
-			},
-			None => None
+				Some((*data).clone())
+			}
+			None => None,
 		}
 	}
 
 	fn set_value(&self, key: K, value: T) {
-		self.data.write().unwrap().insert(key, (value, Instant::now()) );
+		self.data
+			.write()
+			.unwrap()
+			.insert(key, (value, Instant::now()));
 	}
 
 	fn clean(&self) {
 		self.data.write().unwrap().clear();
 	}
 }
-
 
 #[derive(Clone)]
 pub struct HTTPNodeClient {
@@ -91,14 +94,17 @@ pub struct HTTPNodeClient {
 	client: Client,
 
 	// cache for the data
-	chain_tip:   CachedValue<u8,(u64, String, u64)>,
+	chain_tip: CachedValue<u8, (u64, String, u64)>,
 	header_info: CachedValue<u64, HeaderInfo>,
-	block_info:  CachedValue<u64, api::BlockPrintable>,
+	block_info: CachedValue<u64, api::BlockPrintable>,
 }
 
 impl HTTPNodeClient {
 	/// Create a new client that will communicate with the given grin node
-	pub fn new(node_url_list: Vec<String>, node_api_secret: Option<String>) -> Result<HTTPNodeClient, Error> {
+	pub fn new(
+		node_url_list: Vec<String>,
+		node_api_secret: Option<String>,
+	) -> Result<HTTPNodeClient, Error> {
 		let client = Client::new(false, None)
 			.map_err(|e| Error::GenericError(format!("Unable to create a client, {}", e)))?;
 
@@ -108,9 +114,9 @@ impl HTTPNodeClient {
 			current_node_index: Arc::new(AtomicU8::new(0)),
 			node_version_info: None,
 			client,
-			chain_tip: 	 CachedValue::new(),
+			chain_tip: CachedValue::new(),
 			header_info: CachedValue::new(),
-			block_info:  CachedValue::new(),
+			block_info: CachedValue::new(),
 		})
 	}
 
@@ -123,19 +129,21 @@ impl HTTPNodeClient {
 		&self,
 		method: &str,
 		params: &serde_json::Value,
-		counter: i32
+		counter: i32,
 	) -> Result<D, libwallet::Error> {
 		let url = format!("{}{}", self.node_url(), ENDPOINT);
 		let req = build_request(method, params);
-		let res = self.client.post::<Request, Response>(url.as_str(), self.node_api_secret(), &req);
+		let res = self
+			.client
+			.post::<Request, Response>(url.as_str(), self.node_api_secret(), &req);
 
 		match res {
 			Err(e) => {
-				if counter>0 {
+				if counter > 0 {
 					debug!("Retrying to call Node API method {}: {}", method, e);
 					//fail over use the next node.
 					self.increase_index();
-					return self.send_json_request(method, params, counter-1);
+					return self.send_json_request(method, params, counter - 1);
 				}
 				let report = format!("Error calling {}: {}", method, e);
 				error!("{}", report);
@@ -144,11 +152,11 @@ impl HTTPNodeClient {
 			Ok(inner) => match inner.clone().into_result() {
 				Ok(r) => Ok(r),
 				Err(e) => {
-					if counter>0 {
+					if counter > 0 {
 						debug!("Retrying to call Node API method {}: {}", method, e);
 						//fail over use the next node.
 						self.increase_index();
-						return self.send_json_request(method, params, counter-1);
+						return self.send_json_request(method, params, counter - 1);
 					}
 					error!("{:?}", inner);
 					// error message is likely what user want to see...
@@ -161,20 +169,27 @@ impl HTTPNodeClient {
 	}
 
 	/// Return Connected peers
-	fn get_connected_peer_info_impls(&self, counter: i32) -> Result<Vec<crate::grin_p2p::types::PeerInfoDisplayLegacy>, libwallet::Error> {
+	fn get_connected_peer_info_impls(
+		&self,
+		counter: i32,
+	) -> Result<Vec<crate::grin_p2p::types::PeerInfoDisplayLegacy>, libwallet::Error> {
 		// There is no v2 API with connected peers. Keep using v1 for that
 		let addr = self.node_url();
 		let url = format!("{}/v1/peers/connected", addr);
 
-		let res = self.client
-			.get::<Vec<crate::grin_p2p::types::PeerInfoDisplayLegacy>>(url.as_str(), self.node_api_secret());
+		let res = self
+			.client
+			.get::<Vec<crate::grin_p2p::types::PeerInfoDisplayLegacy>>(
+				url.as_str(),
+				self.node_api_secret(),
+			);
 		match res {
 			Err(e) => {
 				// Do retry
-				if counter>0 {
+				if counter > 0 {
 					debug!("Retry to call connected peers API {}, {}", url, e);
 					self.increase_index();
-					return self.get_connected_peer_info_impls(counter-1);
+					return self.get_connected_peer_info_impls(counter - 1);
 				}
 				let report = format!("Get connected peers error {}, {}", url, e);
 				error!("{}", report);
@@ -197,14 +212,16 @@ impl HTTPNodeClient {
 		// have to handle this manually since the error needs to be parsed
 		let url = format!("{}{}", self.node_url(), ENDPOINT);
 		let req = build_request(method, &params);
-		let res = self.client.post::<Request, Response>(url.as_str(), self.node_api_secret(), &req);
+		let res = self
+			.client
+			.post::<Request, Response>(url.as_str(), self.node_api_secret(), &req);
 
 		match res {
 			Err(e) => {
-				if counter>0 {
+				if counter > 0 {
 					debug!("Retry to call API get_kernel, {}", e);
 					self.increase_index();
-					return self.get_kernel_impl(excess, min_height, max_height, counter-1);
+					return self.get_kernel_impl(excess, min_height, max_height, counter - 1);
 				}
 				let report = format!("Error calling {}: {}", method, e);
 				error!("{}", report);
@@ -303,39 +320,54 @@ impl HTTPNodeClient {
 				let res: Result<Vec<Response>, _> = rt.block_on(task);
 				res
 			});
-			handle.join().unwrap()
-		})
-		.unwrap();
+			handle.join()
+		});
 
 		let results: Vec<OutputPrintable> = match res {
-			Ok(resps) => {
-				let mut results = vec![];
-				for r in resps {
-					match r.into_result::<Vec<OutputPrintable>>() {
-						Ok(mut r) => results.append(&mut r),
-						Err(e) => {
-							if counter>0 {
-								debug!("Retry to call API get_outputs, {}", e);
-								self.increase_index();
-								return self.get_outputs_from_node_impl(wallet_outputs,counter-1);
-							}
+			Ok(res) => match res {
+				Ok(res) => match res {
+					Ok(resps) => {
+						let mut results = vec![];
+						for r in resps {
+							match r.into_result::<Vec<OutputPrintable>>() {
+								Ok(mut r) => results.append(&mut r),
+								Err(e) => {
+									if counter > 0 {
+										debug!("Retry to call API get_outputs, {}", e);
+										self.increase_index();
+										return self.get_outputs_from_node_impl(
+											wallet_outputs,
+											counter - 1,
+										);
+									}
 
-							let report = format!("Unable to parse response for get_outputs: {}", e);
-							error!("{}", report);
-							return Err(libwallet::ErrorKind::ClientCallback(report).into());
+									let report =
+										format!("Unable to parse response for get_outputs: {}", e);
+									error!("{}", report);
+									return Err(libwallet::ErrorKind::ClientCallback(report).into());
+								}
+							};
 						}
-					};
+						results
+					}
+					Err(e) => {
+						if counter > 0 {
+							debug!("Retry to call API get_outputs, {}", e);
+							self.increase_index();
+							return self.get_outputs_from_node_impl(wallet_outputs, counter - 1);
+						}
+						let report = format!("Outputs by id failed: {}", e);
+						error!("{}", report);
+						return Err(libwallet::ErrorKind::ClientCallback(report).into());
+					}
+				},
+				_ => {
+					let report = format!("Get Outputs Failed!");
+					return Err(libwallet::ErrorKind::ClientCallback(report).into());
 				}
-				results
-			}
-			Err(e) => {
-				if counter>0 {
-					debug!("Retry to call API get_outputs, {}", e);
-					self.increase_index();
-					return self.get_outputs_from_node_impl(wallet_outputs,counter-1);
-				}
-				let report = format!("Outputs by id failed: {}", e);
-				error!("{}", report);
+			},
+			_ => {
+				let report = format!("Get Outputs Failed!");
 				return Err(libwallet::ErrorKind::ClientCallback(report).into());
 			}
 		};
@@ -363,8 +395,8 @@ impl HTTPNodeClient {
 impl NodeClient for HTTPNodeClient {
 	fn increase_index(&self) {
 		let index = self.current_node_index.load(Ordering::Relaxed);
-		if index < (self.node_url_list.len() -1) as u8 {
-			self.current_node_index.store(index+1, Ordering::Relaxed);
+		if index < (self.node_url_list.len() - 1) as u8 {
+			self.current_node_index.store(index + 1, Ordering::Relaxed);
 		} else {
 			self.current_node_index.store(0, Ordering::Relaxed); //start over again.
 		}
@@ -387,7 +419,7 @@ impl NodeClient for HTTPNodeClient {
 	fn set_node_index(&mut self, node_index: u8) {
 		self.current_node_index.store(node_index, Ordering::Relaxed);
 	}
-	fn get_node_index( &self) ->u8 {
+	fn get_node_index(&self) -> u8 {
 		let index = self.current_node_index.load(Ordering::Relaxed);
 		index
 	}
@@ -433,7 +465,6 @@ impl NodeClient for HTTPNodeClient {
 		Some(retval)
 	}
 
-
 	/// Posts a transaction to a grin node
 	fn post_tx(&self, tx: &Transaction, fluff: bool) -> Result<(), libwallet::Error> {
 		let params = json!([tx, fluff]);
@@ -447,7 +478,8 @@ impl NodeClient for HTTPNodeClient {
 			return Ok(tip);
 		}
 
-		let result = self.send_json_request::<GetTipResp>("get_tip", &serde_json::Value::Null, 1)?;
+		let result =
+			self.send_json_request::<GetTipResp>("get_tip", &serde_json::Value::Null, 1)?;
 		let res = (
 			result.height,
 			result.last_block_pushed,
@@ -464,7 +496,11 @@ impl NodeClient for HTTPNodeClient {
 		}
 
 		let params = json!([Some(height), None::<Option<String>>, None::<Option<String>>]);
-		let r = self.send_json_request::<api::BlockHeaderPrintable>("get_header", &params, NODE_CALL_RETRY)?;
+		let r = self.send_json_request::<api::BlockHeaderPrintable>(
+			"get_header",
+			&params,
+			NODE_CALL_RETRY,
+		)?;
 
 		assert!(r.height == height);
 		let hdr = HeaderInfo {
@@ -493,7 +529,6 @@ impl NodeClient for HTTPNodeClient {
 		min_height: Option<u64>,
 		max_height: Option<u64>,
 	) -> Result<Option<(TxKernel, u64, u64)>, libwallet::Error> {
-
 		self.get_kernel_impl(excess, min_height, max_height, NODE_CALL_RETRY)
 	}
 
@@ -524,7 +559,11 @@ impl NodeClient for HTTPNodeClient {
 			Vec::new();
 
 		let params = json!([start_index, end_index, max_outputs, Some(true)]);
-		let res = self.send_json_request::<OutputListing>("get_unspent_outputs", &params, NODE_CALL_RETRY)?;
+		let res = self.send_json_request::<OutputListing>(
+			"get_unspent_outputs",
+			&params,
+			NODE_CALL_RETRY,
+		)?;
 		for out in res.outputs {
 			if out.spent {
 				continue;
@@ -573,7 +612,8 @@ impl NodeClient for HTTPNodeClient {
 		end_height: Option<u64>,
 	) -> Result<(u64, u64), libwallet::Error> {
 		let params = json!([start_height, end_height]);
-		let res = self.send_json_request::<OutputListing>("get_pmmr_indices", &params, NODE_CALL_RETRY)?;
+		let res =
+			self.send_json_request::<OutputListing>("get_pmmr_indices", &params, NODE_CALL_RETRY)?;
 
 		Ok((res.last_retrieved_index, res.highest_index))
 	}
@@ -608,11 +648,15 @@ impl NodeClient for HTTPNodeClient {
 			while tasks.len() < threads_number && height <= end_height {
 				if let Some(b) = self.block_info.get_value(&height) {
 					result_blocks.push(b); // using cache
-				}
-				else {
-					let params = json!([Some(height), None::<Option<String>>, None::<Option<String>>]);
+				} else {
+					let params =
+						json!([Some(height), None::<Option<String>>, None::<Option<String>>]);
 					tasks.push(async move {
-						self.send_json_request::<api::BlockPrintable>("get_block", &params, NODE_CALL_RETRY)
+						self.send_json_request::<api::BlockPrintable>(
+							"get_block",
+							&params,
+							NODE_CALL_RETRY,
+						)
 					});
 				}
 				height += 1;
@@ -630,11 +674,12 @@ impl NodeClient for HTTPNodeClient {
 							self.block_info.set_value(b.header.height, b.clone());
 						}
 						result_blocks.extend(blocks)
-					},
+					}
 					Err(e) => {
 						let report = format!(
 							"get_blocks_by_height: error calling api 'get_block' at {}. Error: {}",
-							self.node_url(), e
+							self.node_url(),
+							e
 						);
 						error!("{}", report);
 						return Err(libwallet::ErrorKind::ClientCallback(report).into());
@@ -652,29 +697,34 @@ impl NodeClient for HTTPNodeClient {
 	fn get_libp2p_peers(&self) -> Result<Libp2pPeers, libwallet::Error> {
 		debug!("Requesting libp2p peer connections from mwc-node");
 		let params = json!([]);
-		let res = self.send_json_request::<Libp2pPeers>("get_libp2p_peers", &params, NODE_CALL_RETRY)?;
+		let res =
+			self.send_json_request::<Libp2pPeers>("get_libp2p_peers", &params, NODE_CALL_RETRY)?;
 		Ok(res)
 	}
 
 	fn get_libp2p_messages(&self) -> Result<Libp2pMessages, libwallet::Error> {
 		debug!("Requesting libp2p received messages from mwc-node");
 		let params = json!([]);
-		let res = self.send_json_request::<Libp2pMessages>("get_libp2p_messages", &params, NODE_CALL_RETRY)?;
+		let res = self.send_json_request::<Libp2pMessages>(
+			"get_libp2p_messages",
+			&params,
+			NODE_CALL_RETRY,
+		)?;
 		Ok(res)
 	}
 }
 
 #[cfg(test)]
 mod tests {
-	use std::thread;
-	use crate::HTTPNodeClient;
-	use std::thread::JoinHandle;
-	use grin_wallet_libwallet::NodeClient;
-	use std::time::Instant;
-	use crate::util::secp::pedersen::Commitment;
+	use crate::core::global;
 	use crate::libwallet;
 	use crate::util;
-	use crate::core::global;
+	use crate::util::secp::pedersen::Commitment;
+	use crate::HTTPNodeClient;
+	use grin_wallet_libwallet::NodeClient;
+	use std::thread;
+	use std::thread::JoinHandle;
+	use std::time::Instant;
 
 	// Let's do a stress test for the Node.
 	// Normally test is ignoting because the point of that test to run it manually and review the results.
@@ -697,102 +747,153 @@ mod tests {
 		//let node_url = "http://52.47.109.152:13413";
 		//let api_secret = "xgSQOfZLDkoYOVWTmjps";
 
-		let mut joins : Vec<JoinHandle<Result<(),libwallet::Error>>> = Vec::new();
+		let mut joins: Vec<JoinHandle<Result<(), libwallet::Error>>> = Vec::new();
 
 		for thr_idx in 0..threads_number {
 			let thr_idx = thr_idx;
 
 			let kernel_exist = Commitment::from_vec(
-				util::from_hex("0974e00703b771aaed85d3ff0c2050018a0b648078b3793fabb19dd9ce97b07efb").unwrap(),
+				util::from_hex(
+					"0974e00703b771aaed85d3ff0c2050018a0b648078b3793fabb19dd9ce97b07efb",
+				)
+				.unwrap(),
 			);
 			let kernel_not_exist = Commitment::from_vec(
-				util::from_hex("0974e00703b771aaed85d3ff0c2050018a0b648078b3793fabb19dd9ce97b07efa").unwrap(),
+				util::from_hex(
+					"0974e00703b771aaed85d3ff0c2050018a0b648078b3793fabb19dd9ce97b07efa",
+				)
+				.unwrap(),
 			);
 
 			let outputs_exist: Vec<Commitment> = vec![
-				Commitment::from_vec(util::from_hex("08a30bc4893f169098cab8291d699741853553f897f202fcdea2ca3d9c187551ab").unwrap()),
-				Commitment::from_vec(util::from_hex("09118e17c6a39d50336344cb490c94f96503d1fa45a7014ac037c89778839639c4").unwrap())
+				Commitment::from_vec(
+					util::from_hex(
+						"08a30bc4893f169098cab8291d699741853553f897f202fcdea2ca3d9c187551ab",
+					)
+					.unwrap(),
+				),
+				Commitment::from_vec(
+					util::from_hex(
+						"09118e17c6a39d50336344cb490c94f96503d1fa45a7014ac037c89778839639c4",
+					)
+					.unwrap(),
+				),
 			];
 
 			let outputs_not_exist: Vec<Commitment> = vec![
-				Commitment::from_vec(util::from_hex("08a30bc4893f169098cab8291d699741853553f897f202fcdea2ca3d9c187551ac").unwrap()),
-				Commitment::from_vec(util::from_hex("09118e17c6a39d50336344cb490c94f96503d1fa45a7014ac037c89778839639c5").unwrap())
+				Commitment::from_vec(
+					util::from_hex(
+						"08a30bc4893f169098cab8291d699741853553f897f202fcdea2ca3d9c187551ac",
+					)
+					.unwrap(),
+				),
+				Commitment::from_vec(
+					util::from_hex(
+						"09118e17c6a39d50336344cb490c94f96503d1fa45a7014ac037c89778839639c5",
+					)
+					.unwrap(),
+				),
 			];
 
 			let node_list_clone = node_list.clone();
-			joins.push(
-				thread::spawn(move || {
-					let client = HTTPNodeClient::new(node_list_clone, Some( api_secret.to_string() ))
-						.map_err(|e| libwallet::ErrorKind::ClientCallback(format!("{}", e)))?;
+			joins.push(thread::spawn(move || {
+				let client = HTTPNodeClient::new(node_list_clone, Some(api_secret.to_string()))
+					.map_err(|e| libwallet::ErrorKind::ClientCallback(format!("{}", e)))?;
 
-					let total_time = Instant::now();
+				let total_time = Instant::now();
 
-					for _ in 0..iterations_per_thread {
-						let now = Instant::now();
-						let (h, _, _) = client.get_chain_tip()?;
-						if print_call_latency {
-							println!("get_tip height {}, latency {} ms", h, now.elapsed().as_millis() );
-						}
-
-						let now = Instant::now();
-						let _ = client.get_header_info(h-2)?;
-						if print_call_latency {
-							println!("get_header_info latency {} ms", now.elapsed().as_millis() );
-						}
-
-						let now = Instant::now();
-						let _ = client.get_connected_peer_info()?;
-						if print_call_latency {
-							println!("get_connected_peer_info latency {} ms", now.elapsed().as_millis() );
-						}
-
-						let now = Instant::now();
-						let _ = client.get_kernel(&kernel_exist, None, None)?;
-						if print_call_latency {
-							println!("get_kernel exist latency {} ms", now.elapsed().as_millis() );
-						}
-						let now = Instant::now();
-						let _ = client.get_kernel(&kernel_not_exist, None, None)?;
-						if print_call_latency {
-							println!("get_kernel not exist latency {} ms", now.elapsed().as_millis() );
-						}
-
-						let now = Instant::now();
-						let _ = client.get_outputs_from_node(&outputs_exist)?;
-						if print_call_latency {
-							println!("get_outputs_from_node exist latency {} ms", now.elapsed().as_millis() );
-						}
-						let now = Instant::now();
-						let _ = client.get_outputs_from_node(&outputs_not_exist)?;
-						if print_call_latency {
-							println!("get_outputs_from_node not exist latency {} ms", now.elapsed().as_millis() );
-						}
-
-						let now = Instant::now();
-						let _ = client.get_outputs_by_pmmr_index(1342000, None, 100)?;
-						if print_call_latency {
-							println!("get_outputs_by_pmmr_index latency {} ms", now.elapsed().as_millis() );
-						}
-
-						let now = Instant::now();
-						let _ = client.height_range_to_pmmr_indices(h-10, None)?;
-						if print_call_latency {
-							println!("height_range_to_pmmr_indices latency {} ms", now.elapsed().as_millis() );
-						}
-
-						/*let now = Instant::now();
-						let blocks = client.get_blocks_by_height(h-3000, h, 5)?;
-						if print_call_latency {
-							println!("get_blocks_by_height {}, latency {} ms", blocks.len(), now.elapsed().as_millis() );
-						}*/
+				for _ in 0..iterations_per_thread {
+					let now = Instant::now();
+					let (h, _, _) = client.get_chain_tip()?;
+					if print_call_latency {
+						println!(
+							"get_tip height {}, latency {} ms",
+							h,
+							now.elapsed().as_millis()
+						);
 					}
 
-					if print_stat {
-						println!("Thread {} is done, latency per iteratoin {} ms", thr_idx, total_time.elapsed().as_millis()/iterations_per_thread );
+					let now = Instant::now();
+					let _ = client.get_header_info(h - 2)?;
+					if print_call_latency {
+						println!("get_header_info latency {} ms", now.elapsed().as_millis());
 					}
 
-					Ok(())
-				}));
+					let now = Instant::now();
+					let _ = client.get_connected_peer_info()?;
+					if print_call_latency {
+						println!(
+							"get_connected_peer_info latency {} ms",
+							now.elapsed().as_millis()
+						);
+					}
+
+					let now = Instant::now();
+					let _ = client.get_kernel(&kernel_exist, None, None)?;
+					if print_call_latency {
+						println!("get_kernel exist latency {} ms", now.elapsed().as_millis());
+					}
+					let now = Instant::now();
+					let _ = client.get_kernel(&kernel_not_exist, None, None)?;
+					if print_call_latency {
+						println!(
+							"get_kernel not exist latency {} ms",
+							now.elapsed().as_millis()
+						);
+					}
+
+					let now = Instant::now();
+					let _ = client.get_outputs_from_node(&outputs_exist)?;
+					if print_call_latency {
+						println!(
+							"get_outputs_from_node exist latency {} ms",
+							now.elapsed().as_millis()
+						);
+					}
+					let now = Instant::now();
+					let _ = client.get_outputs_from_node(&outputs_not_exist)?;
+					if print_call_latency {
+						println!(
+							"get_outputs_from_node not exist latency {} ms",
+							now.elapsed().as_millis()
+						);
+					}
+
+					let now = Instant::now();
+					let _ = client.get_outputs_by_pmmr_index(1342000, None, 100)?;
+					if print_call_latency {
+						println!(
+							"get_outputs_by_pmmr_index latency {} ms",
+							now.elapsed().as_millis()
+						);
+					}
+
+					let now = Instant::now();
+					let _ = client.height_range_to_pmmr_indices(h - 10, None)?;
+					if print_call_latency {
+						println!(
+							"height_range_to_pmmr_indices latency {} ms",
+							now.elapsed().as_millis()
+						);
+					}
+
+					/*let now = Instant::now();
+					let blocks = client.get_blocks_by_height(h-3000, h, 5)?;
+					if print_call_latency {
+						println!("get_blocks_by_height {}, latency {} ms", blocks.len(), now.elapsed().as_millis() );
+					}*/
+				}
+
+				if print_stat {
+					println!(
+						"Thread {} is done, latency per iteratoin {} ms",
+						thr_idx,
+						total_time.elapsed().as_millis() / iterations_per_thread
+					);
+				}
+
+				Ok(())
+			}));
 		}
 
 		for j in joins {

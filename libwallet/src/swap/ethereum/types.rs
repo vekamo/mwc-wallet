@@ -35,6 +35,8 @@ pub struct EthData {
 	pub redeem_address: Option<Address>,
 	/// Address for swap offer index in swap contract address
 	pub address_from_secret: Option<Address>,
+	/// ERC20 Approve transaction hash
+	pub erc20_approve_tx: Option<H256>,
 	/// Lock transaction Hash
 	pub lock_tx: Option<H256>,
 	/// Refund transaction Hash
@@ -52,6 +54,7 @@ impl EthData {
 		Ok(Self {
 			redeem_address: context.redeem_address,
 			address_from_secret: None,
+			erc20_approve_tx: None,
 			lock_tx: None,
 			refund_tx: None,
 			redeem_tx: None,
@@ -67,6 +70,7 @@ impl EthData {
 		Ok(Self {
 			redeem_address: offer.redeem_address,
 			address_from_secret: context.address_from_secret,
+			erc20_approve_tx: None,
 			lock_tx: None,
 			refund_tx: None,
 			redeem_tx: None,
