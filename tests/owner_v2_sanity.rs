@@ -40,7 +40,7 @@ use common::{
 #[test]
 fn owner_v2_sanity() -> Result<(), grin_wallet_controller::Error> {
 	// For windows we can't run it because of the leaks. And we dont want to see bunch of warnings as well
-	#[cfg(target_os = "windows")]
+	#[cfg(any(target_os = "windows", target_os = "linux"))]
 	if true {
 		return Ok(());
 	}
