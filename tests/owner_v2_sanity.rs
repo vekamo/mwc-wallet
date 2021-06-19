@@ -40,7 +40,7 @@ use common::{
 #[test]
 fn owner_v2_sanity() -> Result<(), grin_wallet_controller::Error> {
 	// For windows we can't run it because of the leaks. And we dont want to see bunch of warnings as well
-	#[cfg(any(target_os = "windows", target_os = "linux"))]
+	#[cfg(target_os = "windows")]
 	if true {
 		return Ok(());
 	}
@@ -87,7 +87,7 @@ fn owner_v2_sanity() -> Result<(), grin_wallet_controller::Error> {
 		execute_command(&app, test_dir, "wallet2", &client2, arg_vec.clone()).unwrap();
 	});
 
-	thread::sleep(Duration::from_millis(200));
+	thread::sleep(Duration::from_millis(1000));
 
 	// 1) Send simple retrieve_info request to owner listener
 	let req = include_str!("data/v2_reqs/retrieve_info.req.json");
