@@ -70,7 +70,7 @@ fn owner_v3_init_secure() -> Result<(), grin_wallet_controller::Error> {
 		let app = App::from_yaml(yml);
 		execute_command(&app, test_dir, "wallet1", &client1, arg_vec.clone()).unwrap();
 	});
-	thread::sleep(Duration::from_millis(200));
+	thread::sleep(Duration::from_millis(1000));
 
 	// use in all tests
 	let sec_key_str = "e00dcc4a009e3427c6b1e1a550c538179d46f3827a13ed74c759c860761caf1e";
