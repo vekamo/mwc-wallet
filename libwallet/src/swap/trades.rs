@@ -152,7 +152,7 @@ pub fn get_erc20_swap_contract_address(
 		Some(s) => Ok(s),
 		None => match swap_contract_addresss {
 			Some(s) => Ok(s),
-			None => swap_contract_addresss.ok_or(ErrorKind::UndefinedInfuraProjectId),
+			None => swap_contract_addresss.ok_or(ErrorKind::UndefinedEthSwapContractAddress),
 		},
 	}
 }
@@ -168,7 +168,7 @@ pub fn get_eth_infura_projectid(
 		Some(s) => Ok(s),
 		None => match infura_project_id {
 			Some(s) => Ok(s),
-			None => infura_project_id.ok_or(ErrorKind::UndefinedEthSwapContractAddress),
+			None => infura_project_id.ok_or(ErrorKind::UndefinedInfuraProjectId),
 		},
 	}
 }
