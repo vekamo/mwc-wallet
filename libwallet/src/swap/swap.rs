@@ -227,12 +227,19 @@ impl Swap {
 
 	/// Update secondary address. Depend on role, updates redeem or refund secondary currency address
 	pub fn update_secondary_address(&mut self, secondary_address: String) {
+		let mut sec_addr: String = secondary_address;
+		if !self.secondary_currency.is_btc_family() {
+			if sec_addr.as_str() == "0x0000000000000000000000000000000000000000" {
+				sec_addr = "Internal Ethereum Wallet Address!".to_string()
+			}
+		}
+
 		match &mut self.role {
 			Role::Buyer(address) => {
-				address.replace(secondary_address);
+				address.replace(sec_addr);
 			}
 			Role::Seller(address, _) => {
-				*address = secondary_address;
+				*address = sec_addr;
 			}
 		};
 	}

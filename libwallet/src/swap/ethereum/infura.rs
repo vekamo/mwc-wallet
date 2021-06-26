@@ -549,7 +549,6 @@ impl InfuraNodeClient {
 					}
 				},
 				_ => {
-					println!("erc20_initiate -- 4444");
 					Err(ErrorKind::EthContractCallError(format!(
 						"Buyer Initiate {} Swap Trade Failed!",
 						Currency::Ether
@@ -557,7 +556,6 @@ impl InfuraNodeClient {
 				}
 			},
 			_ => {
-				println!("erc20_initiate -- 5555");
 				Err(ErrorKind::EthContractCallError(format!(
 					"Buyer Initiate {} Swap Trade Failed!",
 					Currency::Usdc
