@@ -726,8 +726,9 @@ pub fn swap_trade(
 
 	match &swap.role {
 		Role::Seller(address, _) => {
-			if !swap.secondary_currency.is_btc_family() &&
-				address == "0x0000000000000000000000000000000000000000" {
+			if !swap.secondary_currency.is_btc_family()
+				&& address == "0x0000000000000000000000000000000000000000"
+			{
 				println!(
 					"    {} redeem address: {}",
 					"Internal Eth Wallet Address",
@@ -743,20 +744,21 @@ pub fn swap_trade(
 		}
 		Role::Buyer(address) => match address {
 			Some(address) => {
-				if !swap.secondary_currency.is_btc_family() &&
-				address == "0x0000000000000000000000000000000000000000" {
-				println!(
-					"    {} refund address: {}",
-					"Internal Eth Wallet Address",
-					address.bold().yellow()
-				);
-			} else {
-				println!(
-					"    {} refund address: {}",
-					swap.secondary_currency,
-					address.bold().yellow()
-				);
-			}
+				if !swap.secondary_currency.is_btc_family()
+					&& address == "0x0000000000000000000000000000000000000000"
+				{
+					println!(
+						"    {} refund address: {}",
+						"Internal Eth Wallet Address",
+						address.bold().yellow()
+					);
+				} else {
+					println!(
+						"    {} refund address: {}",
+						swap.secondary_currency,
+						address.bold().yellow()
+					);
+				}
 			}
 			None => {
 				println!("    {} refund address: Not Set", swap.secondary_currency);

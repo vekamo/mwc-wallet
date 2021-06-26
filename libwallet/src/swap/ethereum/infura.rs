@@ -548,19 +548,15 @@ impl InfuraNodeClient {
 						)))
 					}
 				},
-				_ => {
-					Err(ErrorKind::EthContractCallError(format!(
-						"Buyer Initiate {} Swap Trade Failed!",
-						Currency::Ether
-					)))
-				}
-			},
-			_ => {
-				Err(ErrorKind::EthContractCallError(format!(
+				_ => Err(ErrorKind::EthContractCallError(format!(
 					"Buyer Initiate {} Swap Trade Failed!",
-					Currency::Usdc
-				)))
-			}
+					Currency::Ether
+				))),
+			},
+			_ => Err(ErrorKind::EthContractCallError(format!(
+				"Buyer Initiate {} Swap Trade Failed!",
+				Currency::Usdc
+			))),
 		}
 	}
 
