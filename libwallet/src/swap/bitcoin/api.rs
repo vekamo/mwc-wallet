@@ -446,7 +446,7 @@ where
 		eth_swap_contract_address: Option<String>,
 		erc20_swap_contract_address: Option<String>,
 		eth_infura_project_id: Option<String>,
-		_eth_redirect_out_wallet: bool,
+		_eth_redirect_out_wallet: Option<bool>,
 		dry_run: bool,
 		tag: Option<String>,
 	) -> Result<Swap, ErrorKind> {
@@ -487,7 +487,7 @@ where
 			eth_swap_contract_address,
 			erc20_swap_contract_address,
 			eth_infura_project_id,
-			false,
+			Some(false),
 			dry_run,
 			tag,
 		)?;

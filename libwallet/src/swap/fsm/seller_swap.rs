@@ -1418,7 +1418,7 @@ where
 				if secondary_redeem_conf {
 					//for eth, now we try to transfer ethers from interal wallet to buyers' eth wallet.
 					if !swap.secondary_currency.is_btc_family()
-						&& swap.eth_redirect_to_private_wallet
+						&& swap.eth_redirect_to_private_wallet.unwrap()
 					{
 						self.swap_api.transfer_scondary(swap)?;
 					}

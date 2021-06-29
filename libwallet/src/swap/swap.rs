@@ -156,7 +156,7 @@ pub struct Swap {
 	/// Ethereum Infura Project Id
 	pub eth_infura_project_id: Option<String>,
 	/// Ethereum transfer to users' wallet directly
-	pub eth_redirect_to_private_wallet: bool,
+	pub eth_redirect_to_private_wallet: Option<bool>,
 
 	// --------------------------------
 	// Additional non stored params for the trade. They good for a single call, not for all sessions

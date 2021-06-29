@@ -75,7 +75,7 @@ pub trait SwapApi<K: Keychain>: Sync + Send {
 		eth_swap_contract_address: Option<String>,
 		erc20_swap_contract_address: Option<String>,
 		eth_infura_project_id: Option<String>,
-		eth_redirect_out_wallet: bool,
+		eth_redirect_out_wallet: Option<bool>,
 		dry_run: bool,
 		tag: Option<String>,
 	) -> Result<Swap, ErrorKind>;

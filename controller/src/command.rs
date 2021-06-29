@@ -1735,7 +1735,7 @@ pub struct SwapArgs {
 	/// Ethereum Infura Project Id
 	pub eth_infura_project_id: Option<String>,
 	/// Redirect to users' private ethereum wallet
-	pub eth_redirect_to_private_wallet: bool,
+	pub eth_redirect_to_private_wallet: Option<bool>,
 	/// Need to wait for the first backup.
 	pub wait_for_backup1: bool,
 	/// Assign tag to this trade

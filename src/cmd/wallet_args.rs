@@ -1083,7 +1083,7 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 		.value_of("eth_infura_project_id")
 		.map(|s| String::from(s))
 		.filter(|s| !s.is_empty());
-	let eth_redirect_to_private_wallet = args.is_present("eth_redirect_to_private_wallet");
+	let eth_redirect_to_private_wallet = Some(args.is_present("eth_redirect_to_private_wallet"));
 
 	let secondary_fee = match args.value_of("secondary_fee") {
 		Some(fee_str) => Some(fee_str.parse::<f32>().map_err(|e| {
@@ -1185,7 +1185,7 @@ pub fn parse_swap_args(args: &ArgMatches) -> Result<command::SwapArgs, ParseErro
 	let eth_infura_project_id = args
 		.value_of("eth_infura_project_id")
 		.map(|s| String::from(s));
-	let eth_redirect_to_private_wallet = args.is_present("eth_redirect_to_private_wallet");
+	let eth_redirect_to_private_wallet = Some(args.is_present("eth_redirect_to_private_wallet"));
 
 	Ok(command::SwapArgs {
 		subcommand,

@@ -252,7 +252,7 @@ where
 		params.eth_swap_contract_address.clone(),
 		params.erc20_swap_contract_address.clone(),
 		params.eth_infura_project_id.clone(),
-		params.eth_redirect_to_private_wallet,
+		params.eth_redirect_to_private_wallet.clone(),
 		params.dry_run,
 		params.tag.clone(),
 	)?;
