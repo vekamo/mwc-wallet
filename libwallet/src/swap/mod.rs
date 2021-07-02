@@ -627,7 +627,7 @@ mod tests {
 				None,
 				None,
 				None,
-				false,
+				Some(false),
 				false,
 				None,
 			)
