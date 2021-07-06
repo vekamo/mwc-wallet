@@ -63,6 +63,27 @@ where
 	))
 }
 
+/// get eth balance
+pub fn get_eth_balance(ethereum_wallet: EthereumWallet) -> Result<u64, Error> {
+	let eth_infura_project_id = trades::get_eth_infura_projectid(&Currency::Ether, &None).unwrap();
+	let chain = if global::is_mainnet() {
+		"mainnet".to_string()
+	} else {
+		"ropsten".to_string()
+	};
+	let eth_node_client = InfuraNodeClient::new(
+		eth_infura_project_id,
+		chain,
+		ethereum_wallet.clone(),
+		"".to_string(),
+		"".to_string(),
+	)?;
+
+	let balance = eth_node_client.balance(Currency::Ether)?;
+
+	Ok(balance.1)
+}
+
 /// transfer ethereum coins out
 pub fn transfer<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,

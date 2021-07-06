@@ -570,7 +570,8 @@ mod tests {
 		let nc = TestNodeClient::new(height + 12 * 60);
 
 		let (id, offer, secondary_update) = message.unwrap_offer().unwrap();
-		let res = BuyApi::accept_swap_offer(&kc_buy, &ctx_buy, id, offer, secondary_update, &nc);
+		let res =
+			BuyApi::accept_swap_offer(None, &kc_buy, &ctx_buy, id, offer, secondary_update, &nc);
 
 		assert_eq!(
 			res.err().unwrap(),
@@ -705,7 +706,8 @@ mod tests {
 
 		let (id, offer, secondary_update) = message_1.unwrap_offer().unwrap();
 		let mut swap_buy =
-			BuyApi::accept_swap_offer(&kc_buy, &ctx_buy, id, offer, secondary_update, &nc).unwrap();
+			BuyApi::accept_swap_offer(None, &kc_buy, &ctx_buy, id, offer, secondary_update, &nc)
+				.unwrap();
 
 		let mut fsm_buy = api_buy.get_fsm(&kc_buy, &swap_buy);
 		let tx_conf = api_buy
@@ -1824,6 +1826,7 @@ mod tests {
 			let (id, offer, secondary_update) = message1.clone().unwrap_offer().unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -1847,6 +1850,7 @@ mod tests {
 			let (id, offer, secondary_update) = message1.clone().unwrap_offer().unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -1868,6 +1872,7 @@ mod tests {
 			swap::set_testing_cur_time(START_TIME - 30);
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -1888,6 +1893,7 @@ mod tests {
 			offer.network = Network::Mainnet;
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -1909,6 +1915,7 @@ mod tests {
 				VersionedSlate::into_version_plain(lock_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -1932,6 +1939,7 @@ mod tests {
 				VersionedSlate::into_version_plain(lock_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -1956,6 +1964,7 @@ mod tests {
 				VersionedSlate::into_version_plain(lock_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -1978,6 +1987,7 @@ mod tests {
 				VersionedSlate::into_version_plain(lock_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -2000,6 +2010,7 @@ mod tests {
 				VersionedSlate::into_version_plain(lock_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -2022,6 +2033,7 @@ mod tests {
 				VersionedSlate::into_version_plain(lock_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -2045,6 +2057,7 @@ mod tests {
 				VersionedSlate::into_version_plain(lock_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -2066,6 +2079,7 @@ mod tests {
 				VersionedSlate::into_version_plain(lock_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -2086,6 +2100,7 @@ mod tests {
 				VersionedSlate::into_version_plain(lock_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -2107,6 +2122,7 @@ mod tests {
 				VersionedSlate::into_version_plain(refund_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -2127,6 +2143,7 @@ mod tests {
 				VersionedSlate::into_version_plain(refund_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -2147,6 +2164,7 @@ mod tests {
 				VersionedSlate::into_version_plain(refund_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -2169,6 +2187,7 @@ mod tests {
 				VersionedSlate::into_version_plain(refund_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -2192,6 +2211,7 @@ mod tests {
 				VersionedSlate::into_version_plain(refund_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -2215,6 +2235,7 @@ mod tests {
 				VersionedSlate::into_version_plain(refund_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -2238,6 +2259,7 @@ mod tests {
 				VersionedSlate::into_version_plain(refund_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -2258,6 +2280,7 @@ mod tests {
 				VersionedSlate::into_version_plain(refund_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -2281,6 +2304,7 @@ mod tests {
 				VersionedSlate::into_version_plain(refund_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -2301,6 +2325,7 @@ mod tests {
 				VersionedSlate::into_version_plain(refund_slate, SlateVersion::V3).unwrap();
 			assert_eq!(
 				BuyApi::accept_swap_offer(
+					None,
 					&kc_buy,
 					&ctx_buy,
 					id,
@@ -2319,9 +2344,16 @@ mod tests {
 		// Finaly going with buyer. Happy path
 		let mut buyer = {
 			let (id, offer, secondary_update) = message1.clone().unwrap_offer().unwrap();
-			let swap_buy =
-				BuyApi::accept_swap_offer(&kc_buy, &ctx_buy, id, offer, secondary_update, &nc)
-					.unwrap();
+			let swap_buy = BuyApi::accept_swap_offer(
+				None,
+				&kc_buy,
+				&ctx_buy,
+				id,
+				offer,
+				secondary_update,
+				&nc,
+			)
+			.unwrap();
 			let fsm_buy = api_buy.get_fsm(&kc_buy, &swap_buy);
 			// Seller: create swap offer
 			Trader {
@@ -5590,9 +5622,16 @@ mod tests {
 
 		let (uuid, offer_update, secondary_update) = offer_message.unwrap_offer().unwrap();
 
-		let mut swap_buy =
-			BuyApi::accept_swap_offer(&kc_buy, &ctx_buy, uuid, offer_update, secondary_update, &nc)
-				.unwrap();
+		let mut swap_buy = BuyApi::accept_swap_offer(
+			None,
+			&kc_buy,
+			&ctx_buy,
+			uuid,
+			offer_update,
+			secondary_update,
+			&nc,
+		)
+		.unwrap();
 
 		let sec_update =
 			swap_api.build_accept_offer_message_secondary_update(&kc_buy, &mut swap_buy);
@@ -5758,7 +5797,8 @@ mod tests {
 		let nc = TestNodeClient::new(height + 12 * 60);
 
 		let (id, offer, secondary_update) = message.unwrap_offer().unwrap();
-		let res = BuyApi::accept_swap_offer(&kc_buy, &ctx_buy, id, offer, secondary_update, &nc);
+		let res =
+			BuyApi::accept_swap_offer(None, &kc_buy, &ctx_buy, id, offer, secondary_update, &nc);
 
 		assert_eq!(
 			res.err().unwrap(),

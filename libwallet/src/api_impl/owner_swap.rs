@@ -30,7 +30,7 @@ use crate::swap::swap::{Swap, SwapJournalRecord};
 use crate::swap::types::{Action, Currency, Role, SwapTransactionsConfirmations};
 use crate::swap::{trades, BuyApi, Context, SwapApi};
 use crate::types::NodeClient;
-use crate::{get_receive_account, Error};
+use crate::{get_receive_account, owner_eth, Error};
 use crate::{
 	wallet_lock, OutputData, OutputStatus, Slate, SwapStartArgs, TxLogEntry, TxLogEntryType,
 	WalletBackend, WalletInst, WalletLCProvider,
@@ -106,7 +106,7 @@ where
 		.map(|o| (o.output.commit.clone().unwrap(), o.output.value))
 		.collect();
 
-	wallet_lock!(wallet_inst, w);
+	wallet_lock!(wallet_inst.clone(), w);
 	let node_client = w.w2n_client().clone();
 	let ethereum_wallet = w.get_ethereum_wallet()?.clone();
 	let keychain = w.keychain(keychain_mask)?;
@@ -264,6 +264,17 @@ where
 		if fee <= 0.0 {
 			return Err(ErrorKind::Generic("Invalid secondary transaction fee".to_string()).into());
 		}
+
+		let secondary_currency = Currency::try_from(params.secondary_currency.as_str())?;
+		if !secondary_currency.is_btc_family() && !params.dry_run {
+			let balance_gwei = owner_eth::get_eth_balance(ethereum_wallet.clone())?;
+			if fee > balance_gwei as f32 {
+				return Err(
+					ErrorKind::Generic("No enough ether as gas for swap".to_string()).into(),
+				);
+			}
+		}
+
 		swap.secondary_fee = fee;
 	}
 
@@ -1854,6 +1865,7 @@ where
 
 			let (id, offer, secondary_update) = message.unwrap_offer()?;
 			let swap = BuyApi::accept_swap_offer(
+				Some(ethereum_wallet),
 				&keychain,
 				&context,
 				id,

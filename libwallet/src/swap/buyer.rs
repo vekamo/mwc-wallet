@@ -19,6 +19,7 @@ use super::swap;
 use super::swap::{tx_add_input, tx_add_output, Swap};
 use super::types::*;
 use super::{ErrorKind, Keychain, CURRENT_VERSION};
+use crate::api_impl::owner_eth::get_eth_balance;
 use crate::grin_core::core::Committed;
 use crate::grin_core::core::KernelFeatures;
 use crate::grin_core::libtx::{build, proof, tx_fee};
@@ -27,7 +28,7 @@ use crate::grin_util::secp::aggsig;
 use crate::grin_util::secp::key::{PublicKey, SecretKey};
 use crate::grin_util::secp::pedersen::RangeProof;
 use crate::swap::bitcoin::BtcData;
-use crate::swap::ethereum::EthData;
+use crate::swap::ethereum::{EthData, EthereumWallet};
 use crate::swap::fsm::state::StateId;
 use crate::swap::multisig::{Builder as MultisigBuilder, ParticipantData as MultisigParticipant};
 use crate::{NodeClient, ParticipantData as TxParticipant, Slate, SlateVersion, VersionedSlate};
@@ -42,6 +43,7 @@ pub struct BuyApi {}
 impl BuyApi {
 	/// Accepting Seller offer and create Swap instance
 	pub fn accept_swap_offer<C: NodeClient, K: Keychain>(
+		ethereum_wallet: Option<EthereumWallet>,
 		keychain: &K,
 		context: &Context,
 		id: Uuid,
@@ -232,6 +234,15 @@ impl BuyApi {
 
 		let started = offer.start_time.clone();
 		let secondary_fee = offer.secondary_currency.get_default_fee(&offer.network);
+		if !offer.secondary_currency.is_btc_family() {
+			let balance_gwei = get_eth_balance(ethereum_wallet.unwrap())?;
+			if secondary_fee > balance_gwei as f32 {
+				return Err(
+					ErrorKind::Generic("No enough ether as gas for swap".to_string()).into(),
+				);
+			}
+		}
+
 		let mut swap = match offer.secondary_currency.is_btc_family() {
 			true => {
 				let btc_data = BtcData::from_offer(

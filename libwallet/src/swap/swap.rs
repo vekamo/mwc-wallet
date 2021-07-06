@@ -208,7 +208,12 @@ impl Swap {
 	/// Return Seller specific data
 	pub fn unwrap_seller(&self) -> Result<(String, u64), ErrorKind> {
 		match &self.role {
-			Role::Seller(address, change) => Ok((address.clone(), *change)),
+			Role::Seller(address, change) => {
+				match address == "0x0000000000000000000000000000000000000000" {
+					true => Ok(("Internal Ethereum Wallet".to_string(), *change)),
+					_ => Ok((address.clone(), *change)),
+				}
+			}
 			_ => Err(ErrorKind::UnexpectedRole(
 				"Swap call unwrap_seller".to_string(),
 			)),
@@ -218,7 +223,13 @@ impl Swap {
 	/// Return buyer specific data
 	pub fn unwrap_buyer(&self) -> Result<Option<String>, ErrorKind> {
 		match &self.role {
-			Role::Buyer(address) => Ok(address.clone()),
+			Role::Buyer(address) => match address {
+				Some(address) => match address == "0x0000000000000000000000000000000000000000" {
+					true => Ok(Some("Internal Ethereum Wallet".to_string())),
+					_ => Ok(Some(address.clone())),
+				},
+				_ => Ok(address.clone()),
+			},
 			_ => Err(ErrorKind::UnexpectedRole(
 				"Swap call unwrap_buyer".to_string(),
 			)),

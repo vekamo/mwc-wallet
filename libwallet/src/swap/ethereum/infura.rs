@@ -120,7 +120,7 @@ impl InfuraNodeClient {
 					Ok(balance) => {
 						let balance_gwei = balance / U256::exp10(9);
 						let balance = to_norm(balance_gwei.to_string().as_str(), "9");
-						Ok((format!("{}", balance.with_scale(4)), balance_gwei.as_u64()))
+						Ok((format!("{}", balance.with_scale(6)), balance_gwei.as_u64()))
 					}
 					_ => Err(ErrorKind::EthContractCallError(
 						"Get Ether Balance Failed!".to_string(),
