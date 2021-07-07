@@ -1304,7 +1304,7 @@ impl EthNodeClient for InfuraNodeClient {
 
 					//0: refundBlock, 1: contractAddress<Option>, 2: initiator, 3: participant, 4: value
 					if !currency.is_erc20() {
-						let res: (u64, Address, Address, u64) = contract
+						let res: (U256, Address, Address, U256) = contract
 							.query(
 								"getSwapDetails",
 								address_from_secret,
@@ -1316,7 +1316,7 @@ impl EthNodeClient for InfuraNodeClient {
 							.unwrap();
 						Ok((res.0, None, res.1, res.2, res.3))
 					} else {
-						let res: (u64, Address, Address, Address, u64) = contract
+						let res: (U256, Address, Address, Address, U256) = contract
 							.query(
 								"getSwapDetails",
 								address_from_secret,
@@ -1348,7 +1348,20 @@ impl EthNodeClient for InfuraNodeClient {
 			Ok(res) => match res {
 				Ok(result) => match result {
 					Ok(result) => match result {
-						Ok(result) => Ok(result),
+						Ok(result) => {
+							let balance: U256 = match currency.is_expo_shrinked18to9() {
+								true => result.4 / U256::exp10(9),
+								false => result.4,
+							};
+
+							Ok((
+								result.0.as_u64(),
+								result.1,
+								result.2,
+								result.3,
+								balance.as_u64(),
+							))
+						}
 						_ => Err(ErrorKind::InfuraNodeClient(format!(
 							"Get Swap Details {} Failed!",
 							currency

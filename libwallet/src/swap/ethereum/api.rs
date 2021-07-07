@@ -298,10 +298,6 @@ where
 						}
 					}
 				}
-				let mut value = value;
-				if swap.secondary_currency.is_expo_shrinked18to9() {
-					value = (U256::from(value) / U256::exp10(9)).as_u64();
-				}
 
 				if (eth_data.redeem_address.clone().unwrap() == participant)
 				&& (refund_time > eth_tip + 100u64) //100 about 25 minutes, make sure we have enough time to redeem ether

@@ -259,7 +259,6 @@ where
 
 	// Store swap result into the file.
 	let swap_id = swap.id.to_string();
-
 	if let Some(fee) = params.secondary_fee {
 		if fee <= 0.0 {
 			return Err(ErrorKind::Generic("Invalid secondary transaction fee".to_string()).into());
@@ -619,6 +618,19 @@ where
 					"Please define positive '--secondary_fee' value".to_string(),
 				)
 				.into());
+			}
+
+			if !swap.secondary_currency.is_btc_family() {
+				let balance_gwei = owner_eth::get_eth_balance(ethereum_wallet.clone())?;
+				println!(
+					"owner_swap.rs::swap_adjust ----- secondary_fee: {}, balance_gwei: {}",
+					secondary_fee, balance_gwei
+				);
+				if secondary_fee > balance_gwei as f32 {
+					return Err(
+						ErrorKind::Generic("No enough ether as gas for swap".to_string()).into(),
+					);
+				}
 			}
 
 			swap.secondary_fee = secondary_fee;
