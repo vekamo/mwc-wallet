@@ -1221,7 +1221,13 @@ impl fmt::Display for Action {
 			Action::WaitingForTradeBackup => "Backup trade data".to_string(),
 			Action::SellerPublishMwcLockTx => "Posting MWC lock transaction".to_string(),
 			Action::SellerPublishTxSecondaryRedeem { currency , address } => {
-				format!("Posting {} redeem transaction to {}", currency, address)
+				if !currency.is_btc_family() && address.as_str() == "0x0000000000000000000000000000000000000000" {
+					let address = &"Internal Ethereum Wallet Address!".to_string();
+					format!("Posting {} redeem transaction to {}", currency, address)
+				} else {
+					format!("Posting {} redeem transaction to {}", currency, address)
+				}
+				
 			}
 			Action::DepositSecondary {
 				currency,
