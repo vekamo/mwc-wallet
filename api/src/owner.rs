@@ -2439,7 +2439,7 @@ where
 		dest: Option<String>,
 		currency: Currency,
 		amount: Option<String>,
-	) -> Result<(), Error> {
+	) -> Result<(), libwallet::swap::ErrorKind> {
 		owner_eth::transfer(self.wallet_inst.clone(), currency, dest, amount)
 	}
 

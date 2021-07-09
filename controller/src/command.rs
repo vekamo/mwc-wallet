@@ -2962,7 +2962,7 @@ where
 				}
 				_ => {
 					return Err(ErrorKind::LibWallet(
-						"Ethereum Chain Operation failed!".to_string(),
+						"Ethereum Get Wallet Info failed!".to_string(),
 					)
 					.into());
 				}
@@ -2989,12 +2989,21 @@ where
 					);
 					return Ok(());
 				}
-				_ => {
-					return Err(ErrorKind::LibWallet(
-						"Ethereum Chain Operation failed!".to_string(),
-					)
-					.into());
-				}
+				Err(e) => match e {
+					grin_wallet_libwallet::swap::ErrorKind::EthBalanceNotEnough => Err(
+						ErrorKind::LibWallet("Not Enough Ether to transfer/gas".to_string()).into(),
+					),
+					grin_wallet_libwallet::swap::ErrorKind::ERC20TokenBalanceNotEnough(_error) => {
+						Err(ErrorKind::LibWallet(format!(
+							"Not Enough ERC-20 Token: {} to transfer",
+							currency
+						))
+						.into())
+					}
+					_ => {
+						Err(ErrorKind::LibWallet("Unknown Ethereum Chain Error".to_string()).into())
+					}
+				},
 			}
 		}
 	}
