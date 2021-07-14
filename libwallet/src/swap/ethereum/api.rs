@@ -32,7 +32,7 @@ use crate::{NodeClient, Slate};
 use failure::_core::marker::PhantomData;
 use grin_wallet_util::grin_core::core::Committed;
 use std::sync::Arc;
-use web3::types::{Address, H256, U256};
+use web3::types::{Address, H256};
 
 /// SwapApi trait implementaiton for ETH
 #[derive(Clone)]
@@ -267,15 +267,18 @@ where
 		let c = self.eth_node_client.lock();
 		let res = c.retrieve_receipt(tx_id.unwrap());
 		match res {
-			Ok(receipt) => match receipt.status {
-				Some(status) => {
-					if status == 1.into() {
-						Ok(1)
-					} else {
-						Ok(0)
+			Ok(receipt) => match receipt.block_number {
+				Some(_block_number) => match receipt.status {
+					Some(status) => {
+						if status == 1.into() {
+							Ok(1)
+						} else {
+							Ok(0)
+						}
 					}
-				}
-				_ => Ok(0),
+					_ => Ok(0),
+				},
+				_ => Err(ErrorKind::EthTransactionInPending),
 			},
 			_ => Err(ErrorKind::EthRetrieveTransReciptError),
 		}
@@ -550,7 +553,10 @@ where
 		assert!(swap.is_seller());
 		let eth_data = swap.secondary_data.unwrap_eth()?;
 		if eth_data.redeem_tx.is_some() {
-			return Ok(());
+			let status = self.check_eth_transaction_status(eth_data.redeem_tx)?;
+			if status == 1 {
+				return Ok(());
+			}
 		}
 
 		let eth_tx = self.seller_post_redeem_tx(keychain, swap)?;
@@ -743,8 +749,12 @@ where
 	) -> Result<(), ErrorKind> {
 		assert!(!swap.is_seller());
 		let eth_data = swap.secondary_data.unwrap_eth()?;
+
 		if eth_data.refund_tx.is_some() {
-			return Ok(());
+			let status = self.check_eth_transaction_status(eth_data.refund_tx)?;
+			if status == 1 {
+				return Ok(());
+			}
 		}
 
 		let eth_tx = self.buyer_refund(keychain, context, swap, post_tx)?;
@@ -759,8 +769,12 @@ where
 	fn post_secondary_lock_tx(&self, swap: &mut Swap) -> Result<(), ErrorKind> {
 		assert!(!swap.is_seller());
 		let eth_data = swap.secondary_data.unwrap_eth()?;
+
 		if eth_data.lock_tx.is_some() {
-			return Ok(());
+			let status = self.check_eth_transaction_status(eth_data.lock_tx)?;
+			if status == 1 {
+				return Ok(());
+			}
 		}
 
 		if swap.secondary_currency.is_erc20() {

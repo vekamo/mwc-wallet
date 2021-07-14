@@ -1170,11 +1170,18 @@ impl EthNodeClient for InfuraNodeClient {
 		address_from_secret: Address,
 		gas_limit: f32,
 	) -> Result<H256, ErrorKind> {
-		let gas_limit = U256::from(gas_limit as u64) * 1000_000_000u64;
+		let gas_limit = U256::from(gas_limit as u64) * U256::exp10(9);
 		let balance_ether = self.balance(Currency::Ether)?;
 		let balance_ether = U256::from(balance_ether.1) * U256::exp10(9);
 		if balance_ether < gas_limit {
 			return Err(ErrorKind::EthBalanceNotEnough);
+		}
+
+		let height = self.height()?;
+		let swap_details = self.get_swap_details(currency, address_from_secret)?;
+		let refund_time_blocks = swap_details.0;
+		if height < refund_time_blocks {
+			return Err(ErrorKind::EthRefundTimeNotArrived);
 		}
 
 		let task = async move {

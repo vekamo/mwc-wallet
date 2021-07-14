@@ -1467,7 +1467,7 @@ where
 		match input {
 			Input::Check => {
 				if let Some(conf) = tx_conf.secondary_refund_conf {
-					if conf >= swap.secondary_confirmations {
+					if conf > 0 {
 						// We are done
 						swap.add_journal_message(format!("{} refund transaction has enough confirmations. The trade is completed, refund is redeemed.", swap.secondary_currency));
 						return Ok(StateProcessRespond::new(StateId::BuyerCancelledRefunded));

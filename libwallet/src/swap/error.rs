@@ -171,6 +171,12 @@ pub enum ErrorKind {
 	/// ERC-20 Token Approve Failed
 	#[fail(display = "ERC20 Token Approve Failed!")]
 	EthERC20TokenApproveError,
+	/// Refund Time Not Arrived
+	#[fail(display = "Refund Time Not Arrived")]
+	EthRefundTimeNotArrived,
+	/// Transaction in Pending status
+	#[fail(display = "Transaction Not Confirmed")]
+	EthTransactionInPending,
 }
 
 impl ErrorKind {
