@@ -17,8 +17,8 @@
 use crate::grin_util::Mutex;
 use crate::{grin_util::secp::key::SecretKey, swap::ethereum::EthereumWallet};
 
-use crate::grin_core::core;
 use crate::grin_core::core::Committed;
+use crate::grin_core::{core, global};
 use crate::grin_keychain::ExtKeychainPath;
 use crate::grin_keychain::{Identifier, Keychain, SwitchCommitmentType};
 use crate::grin_util::to_hex;
@@ -27,7 +27,7 @@ use crate::swap::error::ErrorKind;
 use crate::swap::fsm::state::{Input, StateEtaInfo, StateId, StateProcessRespond};
 use crate::swap::message::{Message, SecondaryUpdate, Update};
 use crate::swap::swap::{Swap, SwapJournalRecord};
-use crate::swap::types::{Action, Currency, Role, SwapTransactionsConfirmations};
+use crate::swap::types::{Action, Currency, Network, Role, SwapTransactionsConfirmations};
 use crate::swap::{trades, BuyApi, Context, SwapApi};
 use crate::types::NodeClient;
 use crate::{get_receive_account, owner_eth, Error};
@@ -118,6 +118,7 @@ where
 	}
 
 	let mut swap_reserved_amount = 0;
+	let mut swap_reserved_gas_amount = 0.0;
 
 	if params.outputs.is_some() {
 		let outputs_to_use: HashSet<String> =
@@ -142,6 +143,13 @@ where
 							swap_reserved_amount += amount;
 						}
 					}
+				}
+
+				//check if eth/erc-20 swap, for unconfirmed eth/erc-20 swap, we need to keep ether as gas to redeem funds.
+				if !swap.secondary_currency.is_btc_family() {
+					swap_reserved_gas_amount += swap
+						.secondary_currency
+						.get_default_fee(&Network::from_chain_type(global::get_chain_type())?);
 				}
 			}
 		}
@@ -259,22 +267,29 @@ where
 
 	// Store swap result into the file.
 	let swap_id = swap.id.to_string();
-	if let Some(fee) = params.secondary_fee {
-		if fee <= 0.0 {
-			return Err(ErrorKind::Generic("Invalid secondary transaction fee".to_string()).into());
+	let secondary_fee = match params.secondary_fee {
+		Some(fee) => fee,
+		_ => {
+			secondary_currency.get_default_fee(&Network::from_chain_type(global::get_chain_type())?)
 		}
+	};
 
-		let secondary_currency = Currency::try_from(params.secondary_currency.as_str())?;
-		if !secondary_currency.is_btc_family() && !params.dry_run {
-			let balance_gwei = owner_eth::get_eth_balance(ethereum_wallet.clone())?;
-			if fee > balance_gwei as f32 {
-				return Err(
-					ErrorKind::Generic("No enough ether as gas for swap".to_string()).into(),
-				);
-			}
+	swap.secondary_fee = secondary_fee;
+	if secondary_fee <= 0.0 {
+		return Err(ErrorKind::Generic("Invalid secondary transaction fee".to_string()).into());
+	}
+
+	if !secondary_currency.is_btc_family() && !params.dry_run {
+		swap_reserved_gas_amount += secondary_fee;
+		let balance_gwei = owner_eth::get_eth_balance(ethereum_wallet.clone())?;
+
+		if swap_reserved_gas_amount > balance_gwei as f32 {
+			println!(
+				"WARNING. {} gases should be keeped. Now {} ethers in your ethereum wallet!",
+				swap_reserved_gas_amount, balance_gwei
+			);
+			return Err(ErrorKind::Generic("No enough ether as gas for swap".to_string()).into());
 		}
-
-		swap.secondary_fee = fee;
 	}
 
 	let swap_lock = trades::get_swap_lock(&swap_id);
