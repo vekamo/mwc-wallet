@@ -252,8 +252,8 @@ pub fn tor_secret_2_slatepack_secret(secret: &DalekSecretKey) -> xDalekSecretKey
 	let mut b = [0u8; 32];
 	b.copy_from_slice(&secret.as_bytes()[0..32]);
 	let mut hasher = Sha512::new();
-	hasher.input(&b);
-	let result = hasher.result();
+	hasher.update(&b);
+	let result = hasher.finalize();
 	b.copy_from_slice(&result[0..32]);
 	xDalekSecretKey::from(b)
 }

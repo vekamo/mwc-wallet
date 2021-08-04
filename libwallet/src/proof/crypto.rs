@@ -34,8 +34,8 @@ pub fn verify_signature(
 	public_key: &PublicKey,
 ) -> Result<(), Error> {
 	let mut hasher = Sha256::new();
-	hasher.input(challenge.as_bytes());
-	let message = Message::from_slice(hasher.result().as_slice())?;
+	hasher.update(challenge.as_bytes());
+	let message = Message::from_slice(hasher.finalize().as_slice())?;
 	let secp = Secp256k1::new();
 	secp.verify(&message, signature, public_key)
 		.map_err(|e| Error::from(e))?;
@@ -45,8 +45,8 @@ pub fn verify_signature(
 /// Sing the challenge with a private key.
 pub fn sign_challenge(challenge: &str, secret_key: &SecretKey) -> Result<Signature, Error> {
 	let mut hasher = Sha256::new();
-	hasher.input(challenge.as_bytes());
-	let message = Message::from_slice(hasher.result().as_slice())?;
+	hasher.update(challenge.as_bytes());
+	let message = Message::from_slice(hasher.finalize().as_slice())?;
 	let secp = Secp256k1::new();
 	secp.sign(&message, secret_key).map_err(|e| Error::from(e))
 }
