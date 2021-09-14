@@ -1462,7 +1462,8 @@ where
 			currency: _,
 			address: _,
 		} => {
-			if swap.unwrap_buyer()?.is_none() {
+			//only btc family need to check refund address.
+			if swap.secondary_currency.is_btc_family() && swap.unwrap_buyer()?.is_none() {
 				return Err(ErrorKind::Generic(format!(
 					"Please specify '--buyer_refund_address' {} address for your refund",
 					swap.secondary_currency
