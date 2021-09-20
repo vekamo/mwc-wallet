@@ -400,8 +400,6 @@ impl InfuraNodeClient {
 						)
 						.await
 						.unwrap();
-					let latest = web3.eth().block_number().await.unwrap();
-					let refund_block = latest.as_u64() + refund_time;
 					let gas_price = web3.eth().gas_price().await.unwrap();
 					let gas_price = gas_price + gas_price / 2;
 					let mut options = Options::default();
@@ -417,7 +415,7 @@ impl InfuraNodeClient {
 					contract
 						.signed_call(
 							"initiate",
-							(refund_block, address_from_secret, participant),
+							(refund_time, address_from_secret, participant),
 							options,
 							SecretKeyRef::new(&key),
 						)
@@ -493,8 +491,6 @@ impl InfuraNodeClient {
 						)
 						.await
 						.unwrap();
-					let latest = web3.eth().block_number().await.unwrap();
-					let refund_block = latest.as_u64() + refund_time;
 					let gas_price = web3.eth().gas_price().await.unwrap();
 					let gas_price = gas_price + gas_price / 2;
 					let mut options = Options::default();
@@ -510,7 +506,7 @@ impl InfuraNodeClient {
 						.signed_call(
 							"initiate",
 							(
-								refund_block,
+								refund_time,
 								address_from_secret,
 								participant,
 								token_address,
@@ -1180,6 +1176,7 @@ impl EthNodeClient for InfuraNodeClient {
 		let height = self.height()?;
 		let swap_details = self.get_swap_details(currency, address_from_secret)?;
 		let refund_time_blocks = swap_details.0;
+		println!("refund: hegiht = {}, refund_time_blocks = {}", height, refund_time_blocks);
 		if height < refund_time_blocks {
 			return Err(ErrorKind::EthRefundTimeNotArrived);
 		}

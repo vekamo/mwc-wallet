@@ -199,6 +199,7 @@ where
 		let eth_data = swap.secondary_data.unwrap_eth()?;
 		let height = self.eth_height()?;
 		let refund_time = height + refund_blocks;
+		println!("height: {}, refund_time: {}", height, refund_time);
 		let address_from_secret = eth_data.address_from_secret.clone().unwrap();
 		let participant = eth_data.redeem_address.clone().unwrap();
 		let value = swap.secondary_amount;
