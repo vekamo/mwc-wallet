@@ -1176,7 +1176,10 @@ impl EthNodeClient for InfuraNodeClient {
 		let height = self.height()?;
 		let swap_details = self.get_swap_details(currency, address_from_secret)?;
 		let refund_time_blocks = swap_details.0;
-		println!("refund: hegiht = {}, refund_time_blocks = {}", height, refund_time_blocks);
+		println!(
+			"refund: hegiht = {}, refund_time_blocks = {}",
+			height, refund_time_blocks
+		);
 		if height < refund_time_blocks {
 			return Err(ErrorKind::EthRefundTimeNotArrived);
 		}
@@ -1418,9 +1421,9 @@ mod tests {
 				wallet,
 				$contract_addr.to_string(),
 				$erc20_contract_addr.to_string(),
-				)
+			)
 			.unwrap()
-			}};
+		}};
 	}
 
 	#[test]
