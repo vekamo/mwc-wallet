@@ -1263,8 +1263,16 @@ impl fmt::Display for Action {
 				debug_assert!(address.len()>0);
 				debug_assert!(address.len()<=2);
 				if *expected_to_be_posted == 0 {
-					format!("{}, waiting for confirmations for {} address {} {}/{}", name, currency, address.join(","), actual, required)
-				}
+                    if !currency.is_btc_family() {
+                        if *actual >= 1 {
+                            format!("{}, waiting for confirmations for {} address {} locked", name, currency, address.join(","))
+                        } else {
+                            format!("{}, waiting for confirmations for {} address {} locking", name, currency, address.join(","))
+                        }
+                    } else {
+                        format!("{}, waiting for confirmations for {} address {} {}/{}", name, currency, address.join(","), actual, required)
+                    }
+                }
 				else {
 					let posted_str = currency.amount_to_hr_string(*expected_to_be_posted, true);
 					format!("{}, waiting for {} {} to be sent to {}", name, posted_str, currency, address.join(" or "))
@@ -1290,14 +1298,24 @@ impl fmt::Display for Action {
 						if sec_actual.is_none() {
 							format!("{} {}, hasn't been posted", currency, address.join(","))
 						} else {
-							if sec_actual.unwrap() == 0 {
-								format!("{} {} are in memory pool", currency, address.join(","))
-							}
-							else if sec_actual.unwrap() >= *sec_required {
-								format!("{} {}, are locked", currency, address.join(","))
+							if !currency.is_btc_family() {
+								if sec_actual.unwrap() == 0 {
+									format!("{} {} are in memory pool", currency, address.join(","))
+								}
+								else if sec_actual.unwrap() >= *sec_required {
+									format!("{} {}, are locked", currency, address.join(","))
+								}
+								else {
+									format!("{} {}, {}/{}", currency, address.join(","), sec_actual.unwrap(), sec_required)
+								}
 							}
 							else {
-								format!("{} {}, {}/{}", currency, address.join(","), sec_actual.unwrap(), sec_required)
+								if sec_actual.unwrap() == 0 {
+									format!("{} {} are in memory pool", currency, address.join(","))
+								}
+								else {
+									format!("{} {}, are locked", currency, address.join(","))
+								}
 							}
 						}
 				}
