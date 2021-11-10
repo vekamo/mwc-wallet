@@ -1026,7 +1026,7 @@ pub fn parse_swap_start_args(args: &ArgMatches) -> Result<SwapStartArgs, ParseEr
 	let secondary_currency = secondary_currency.to_lowercase();
 	match secondary_currency.as_str() {
 		"btc" | "bch" | "ltc" | "zcash" | "dash" | "doge" | "ether" | "usdt" | "busd" | "bnb"
-		| "usdc" | "link" | "trx" | "dai" | "tusd" | "pax" | "wbtc" | "tst" => (),
+		| "usdc" | "link" | "trx" | "dai" | "tusd" | "usdp" | "wbtc" | "tst" => (),
 		_ => {
 			return Err(ParseError::ArgumentError(format!(
 				"{} is not on the supported currency list.",

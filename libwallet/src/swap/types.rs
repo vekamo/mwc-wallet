@@ -114,7 +114,7 @@ pub enum Currency {
 	/// True USD
 	Tusd,
 	/// Paxos Standard
-	Pax,
+	Usdp,
 	/// Wrapped BTC
 	Wbtc,
 	/// Test Standard Token (Ropsten)
@@ -137,7 +137,7 @@ impl Currency {
 			| Currency::Link
 			| Currency::Dai
 			| Currency::Tusd
-			| Currency::Pax
+			| Currency::Usdp
 			| Currency::Tst => 9, // 18 is too big , shrink to 9
 			Currency::Wbtc => 8,
 			Currency::Usdt | Currency::Usdc | Currency::Trx => 6,
@@ -158,7 +158,7 @@ impl Currency {
 			| Currency::Link
 			| Currency::Dai
 			| Currency::Tusd
-			| Currency::Pax
+			| Currency::Usdp
 			| Currency::Wbtc
 			| Currency::Usdt
 			| Currency::Usdc
@@ -350,7 +350,7 @@ impl Currency {
 			| Currency::Link
 			| Currency::Dai
 			| Currency::Tusd
-			| Currency::Pax
+			| Currency::Usdp
 			| Currency::Wbtc
 			| Currency::Usdt
 			| Currency::Usdc
@@ -437,7 +437,7 @@ impl Currency {
 			| Currency::Link
 			| Currency::Dai
 			| Currency::Tusd
-			| Currency::Pax
+			| Currency::Usdp
 			| Currency::Wbtc
 			| Currency::Usdt
 			| Currency::Usdc
@@ -505,7 +505,7 @@ impl Currency {
 			| Currency::Link
 			| Currency::Dai
 			| Currency::Tusd
-			| Currency::Pax
+			| Currency::Usdp
 			| Currency::Wbtc
 			| Currency::Usdt
 			| Currency::Usdc
@@ -537,7 +537,7 @@ impl Currency {
 			| Currency::Link
 			| Currency::Dai
 			| Currency::Tusd
-			| Currency::Pax
+			| Currency::Usdp
 			| Currency::Wbtc
 			| Currency::Usdt
 			| Currency::Usdc
@@ -572,7 +572,7 @@ impl Currency {
 				| Currency::Link
 				| Currency::Dai
 				| Currency::Tusd
-				| Currency::Pax
+				| Currency::Usdp
 				| Currency::Wbtc
 				| Currency::Usdt
 				| Currency::Usdc
@@ -604,7 +604,7 @@ impl Currency {
 				| Currency::Link
 				| Currency::Dai
 				| Currency::Tusd
-				| Currency::Pax
+				| Currency::Usdp
 				| Currency::Wbtc
 				| Currency::Usdt
 				| Currency::Usdc
@@ -637,7 +637,7 @@ impl Currency {
 			| Currency::Link
 			| Currency::Dai
 			| Currency::Tusd
-			| Currency::Pax
+			| Currency::Usdp
 			| Currency::Wbtc
 			| Currency::Usdt
 			| Currency::Usdc
@@ -674,7 +674,7 @@ impl Currency {
 			Currency::Tusd => {
 				Ok(H160::from_str("0000000000085d4780B73119b644AE5ecd22b376").unwrap())
 			}
-			Currency::Pax => {
+			Currency::Usdp => {
 				Ok(H160::from_str("8e870d67f660d95d5be530380d0ec0bd388289e1").unwrap())
 			}
 			Currency::Wbtc => {
@@ -699,7 +699,7 @@ impl Currency {
 			| Currency::Link
 			| Currency::Dai
 			| Currency::Tusd
-			| Currency::Pax
+			| Currency::Usdp
 			| Currency::Tst => true,
 			_ => false,
 		}
@@ -721,7 +721,7 @@ impl fmt::Display for Currency {
 			Currency::Link => "Link",
 			Currency::Dai => "Dai",
 			Currency::Tusd => "Tusd",
-			Currency::Pax => "Pax",
+			Currency::Usdp => "Usdp",
 			Currency::Wbtc => "Wbtc",
 			Currency::Usdt => "Usdt",
 			Currency::Usdc => "Usdc",
@@ -749,7 +749,7 @@ impl TryFrom<&str> for Currency {
 			"link" => Ok(Currency::Link),
 			"dai" => Ok(Currency::Dai),
 			"tusd" => Ok(Currency::Tusd),
-			"pax" => Ok(Currency::Pax),
+			"usdp" => Ok(Currency::Usdp),
 			"wbtc" => Ok(Currency::Wbtc),
 			"usdt" => Ok(Currency::Usdt),
 			"usdc" => Ok(Currency::Usdc),
@@ -1407,7 +1407,7 @@ pub fn check_txs_confirmed(currency: Currency, lock: u64, lock_conf: u64) -> boo
 		| Currency::Link
 		| Currency::Dai
 		| Currency::Tusd
-		| Currency::Pax
+		| Currency::Usdp
 		| Currency::Wbtc
 		| Currency::Usdt
 		| Currency::Usdc

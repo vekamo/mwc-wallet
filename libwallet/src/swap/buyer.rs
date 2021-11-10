@@ -201,7 +201,7 @@ impl BuyApi {
 			| Currency::Link
 			| Currency::Dai
 			| Currency::Tusd
-			| Currency::Pax
+			| Currency::Usdp
 			| Currency::Wbtc
 			| Currency::Usdt
 			| Currency::Usdc

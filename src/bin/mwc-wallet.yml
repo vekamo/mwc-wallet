@@ -574,7 +574,7 @@ subcommands:
               - trx
               - dai
               - tusd
-              - pax
+              - usdp
               - wbtc
               - tst
             default_value: bch
