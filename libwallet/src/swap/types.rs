@@ -1227,7 +1227,6 @@ impl fmt::Display for Action {
 				} else {
 					format!("Posting {} redeem transaction to {}", currency, address)
 				}
-				
 			}
 			Action::DepositSecondary {
 				currency,
