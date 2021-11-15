@@ -101,9 +101,9 @@ impl Default for WalletConfig {
 			dark_background_color_scheme: Some(true),
 			wallet_data_dir: None,
 			base_fee: None,
-			eth_swap_contract_address: Some("A21b2c034dF046a3DB790dd20b0C5C0040a74c67".to_string()),
+			eth_swap_contract_address: Some("2FA243fC8f9EAF014f8d6E909157B6A48cEE0bdC".to_string()),
 			erc20_swap_contract_address: Some(
-				"78c2AFa498cC5866A2BAfe267FE8d7C4F09Eef8f".to_string(),
+				"Dd62a95626453F54E686cF0531bCbf6766150794".to_string(),
 			),
 			eth_infura_project_id: Some("7f1274674be54d2881bf3c0168bf9855".to_string()),
 			swap_electrumx_addr: Some(
