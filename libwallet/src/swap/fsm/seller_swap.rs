@@ -22,7 +22,7 @@ use crate::grin_keychain::Keychain;
 use crate::swap::fsm::state;
 use crate::swap::fsm::state::{Input, State, StateEtaInfo, StateId, StateProcessRespond};
 use crate::swap::message::Message;
-use crate::swap::types::{check_txs_confirmed, Action, Currency, SwapTransactionsConfirmations};
+use crate::swap::types::{Action, Currency, SwapTransactionsConfirmations};
 use crate::swap::{swap, Context, ErrorKind, SellApi, Swap, SwapApi};
 use crate::NodeClient;
 use chrono::{Local, TimeZone};
@@ -664,12 +664,7 @@ impl<'a, K: Keychain> State for SellerWaitingForLockConfirmations<'a, K> {
 				}
 
 				let time_limit = swap.get_time_message_redeem();
-				let secondary_confirmed = check_txs_confirmed(
-					swap.secondary_currency,
-					secondary_lock,
-					swap.secondary_confirmations,
-				);
-				if mwc_lock < swap.mwc_confirmations || !secondary_confirmed {
+				if mwc_lock < swap.mwc_confirmations || secondary_lock < swap.secondary_confirmations {
 					// Checking for a deadline. Note time_message_redeem is fine, we can borrow time from that operation and still be safe
 					if swap::get_cur_time() > time_limit {
 						// cancelling because of timeout
@@ -722,7 +717,7 @@ impl<'a, K: Keychain> State for SellerWaitingForLockConfirmations<'a, K> {
 					.time_limit(time_limit));
 				}
 
-				if !secondary_confirmed {
+				if secondary_lock < swap.secondary_confirmations {
 					return Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForLockConfirmations,
 					)
@@ -831,12 +826,7 @@ impl<K: Keychain> State for SellerWaitingForInitRedeemMessage<K> {
 				// Check if everything is still locked...
 				let mwc_lock = tx_conf.mwc_lock_conf.unwrap_or(0);
 				let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
-				let secondary_confirmed = check_txs_confirmed(
-					swap.secondary_currency,
-					secondary_lock,
-					swap.secondary_confirmations,
-				);
-				if mwc_lock < swap.mwc_confirmations || !secondary_confirmed {
+				if mwc_lock < swap.mwc_confirmations || secondary_lock < swap.secondary_confirmations {
 					swap.add_journal_message(JOURNAL_NOT_LOCKED.to_string());
 					return Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForLockConfirmations,
@@ -960,12 +950,7 @@ where
 					// Check if everything is still locked...
 					let mwc_lock = tx_conf.mwc_lock_conf.unwrap_or(0);
 					let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
-					let secondary_confirmed = check_txs_confirmed(
-						swap.secondary_currency,
-						secondary_lock,
-						swap.secondary_confirmations,
-					);
-					if mwc_lock < swap.mwc_confirmations || !secondary_confirmed {
+					if mwc_lock < swap.mwc_confirmations || secondary_lock < swap.secondary_confirmations {
 						swap.add_journal_message(JOURNAL_NOT_LOCKED.to_string());
 						return Ok(StateProcessRespond::new(
 							StateId::SellerWaitingForLockConfirmations,

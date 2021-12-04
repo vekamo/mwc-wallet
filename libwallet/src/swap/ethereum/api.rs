@@ -256,28 +256,26 @@ where
 		Ok(result)
 	}
 
-	/// Check transaction confirm status
+	/// Check transaction confirm status, return status, and confirmation blocks.
 	pub(crate) fn check_eth_transaction_status(
 		&self,
 		tx_id: Option<H256>,
-	) -> Result<u64, ErrorKind> {
+	) -> Result<(u64, u64), ErrorKind> {
 		if tx_id.is_none() {
 			return Err(ErrorKind::InvalidTxHash);
 		}
 
 		let c = self.eth_node_client.lock();
+		let eth_tip = self.eth_height()?;
 		let res = c.retrieve_receipt(tx_id.unwrap());
 		match res {
-			Ok(receipt) => match receipt.block_number {
-				Some(_block_number) => match receipt.status {
-					Some(status) => {
-						if status == 1.into() {
-							Ok(1)
-						} else {
-							Ok(0)
-						}
+			Ok(receipt) => match receipt.status {
+				Some(status) => {
+					if status == 1.into() {
+						Ok((1, eth_tip - receipt.block_number.unwrap().as_u64() + 1))
+					} else {
+						Ok((0, 0))
 					}
-					_ => Ok(0),
 				},
 				_ => Err(ErrorKind::EthTransactionInPending),
 			},
@@ -285,7 +283,7 @@ where
 		}
 	}
 
-	/// check deposit transaction status
+	/// check deposit transaction status, return amount and confrimation blocks
 	fn get_eth_initiate_tx_status(&self, swap: &Swap) -> Result<u64, ErrorKind> {
 		let eth_data = swap.secondary_data.unwrap_eth()?;
 		let eth_tip = self.eth_height()?;
@@ -338,7 +336,7 @@ where
 				} else {
 					Ok(0)
 				}
-			}
+			},
 			_ => Ok(0),
 		}
 	}
@@ -554,7 +552,7 @@ where
 		assert!(swap.is_seller());
 		let eth_data = swap.secondary_data.unwrap_eth()?;
 		if eth_data.redeem_tx.is_some() {
-			let status = self.check_eth_transaction_status(eth_data.redeem_tx)?;
+			let (status, _) = self.check_eth_transaction_status(eth_data.redeem_tx)?;
 			if status == 1 {
 				return Ok(());
 			}
@@ -585,30 +583,37 @@ where
 			self.get_slate_confirmation_number(&mwc_tip, &swap.refund_slate, !is_seller)?;
 
 		let secondary_tip = self.eth_height()?;
+		
 		// check eth transaction status
 		let secondary_lock_amount = self.get_eth_initiate_tx_status(swap)?;
-		let secondary_lock_conf = match secondary_lock_amount > 0 {
-			true => Some(1),
-			_ => None,
-		};
 
 		let eth_data = swap.secondary_data.unwrap_eth()?;
-		let secondary_redeem_conf = match self.check_eth_transaction_status(eth_data.redeem_tx) {
-			Ok(status) => {
+		let secondary_lock_conf = match self.check_eth_transaction_status(eth_data.lock_tx) {
+			Ok((status, blocks)) => {
 				if status == 0 {
 					None
 				} else {
-					Some(1)
+					Some(blocks)
+				}
+			}
+			_ => None,
+		};
+		let secondary_redeem_conf = match self.check_eth_transaction_status(eth_data.redeem_tx) {
+			Ok((status, blocks)) => {
+				if status == 0 {
+					None
+				} else {
+					Some(blocks)
 				}
 			}
 			_ => None,
 		};
 		let secondary_refund_conf = match self.check_eth_transaction_status(eth_data.refund_tx) {
-			Ok(status) => {
+			Ok((status, blocks)) => {
 				if status == 0 {
 					None
 				} else {
-					Some(1)
+					Some(blocks)
 				}
 			}
 			_ => None,
@@ -752,7 +757,7 @@ where
 		let eth_data = swap.secondary_data.unwrap_eth()?;
 
 		if eth_data.refund_tx.is_some() {
-			let status = self.check_eth_transaction_status(eth_data.refund_tx)?;
+			let (status, _) = self.check_eth_transaction_status(eth_data.refund_tx)?;
 			if status == 1 {
 				return Ok(());
 			}
@@ -772,7 +777,7 @@ where
 		let eth_data = swap.secondary_data.unwrap_eth()?;
 
 		if eth_data.lock_tx.is_some() {
-			let status = self.check_eth_transaction_status(eth_data.lock_tx)?;
+			let (status, _) = self.check_eth_transaction_status(eth_data.lock_tx)?;
 			if status == 1 {
 				return Ok(());
 			}
@@ -780,7 +785,7 @@ where
 
 		if swap.secondary_currency.is_erc20() {
 			if eth_data.erc20_approve_tx.is_some() {
-				let approve_status =
+				let (approve_status, _) =
 					self.check_eth_transaction_status(eth_data.erc20_approve_tx)?;
 				if approve_status == 1 {
 					let eth_tx = self.buyer_deposit(swap)?;
