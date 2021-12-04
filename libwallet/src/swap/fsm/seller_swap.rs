@@ -664,7 +664,9 @@ impl<'a, K: Keychain> State for SellerWaitingForLockConfirmations<'a, K> {
 				}
 
 				let time_limit = swap.get_time_message_redeem();
-				if mwc_lock < swap.mwc_confirmations || secondary_lock < swap.secondary_confirmations {
+				if mwc_lock < swap.mwc_confirmations
+					|| secondary_lock < swap.secondary_confirmations
+				{
 					// Checking for a deadline. Note time_message_redeem is fine, we can borrow time from that operation and still be safe
 					if swap::get_cur_time() > time_limit {
 						// cancelling because of timeout
@@ -826,7 +828,9 @@ impl<K: Keychain> State for SellerWaitingForInitRedeemMessage<K> {
 				// Check if everything is still locked...
 				let mwc_lock = tx_conf.mwc_lock_conf.unwrap_or(0);
 				let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
-				if mwc_lock < swap.mwc_confirmations || secondary_lock < swap.secondary_confirmations {
+				if mwc_lock < swap.mwc_confirmations
+					|| secondary_lock < swap.secondary_confirmations
+				{
 					swap.add_journal_message(JOURNAL_NOT_LOCKED.to_string());
 					return Ok(StateProcessRespond::new(
 						StateId::SellerWaitingForLockConfirmations,
@@ -950,7 +954,9 @@ where
 					// Check if everything is still locked...
 					let mwc_lock = tx_conf.mwc_lock_conf.unwrap_or(0);
 					let secondary_lock = tx_conf.secondary_lock_conf.unwrap_or(0);
-					if mwc_lock < swap.mwc_confirmations || secondary_lock < swap.secondary_confirmations {
+					if mwc_lock < swap.mwc_confirmations
+						|| secondary_lock < swap.secondary_confirmations
+					{
 						swap.add_journal_message(JOURNAL_NOT_LOCKED.to_string());
 						return Ok(StateProcessRespond::new(
 							StateId::SellerWaitingForLockConfirmations,

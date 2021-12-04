@@ -276,7 +276,7 @@ where
 					} else {
 						Ok((0, 0))
 					}
-				},
+				}
 				_ => Err(ErrorKind::EthTransactionInPending),
 			},
 			_ => Err(ErrorKind::EthRetrieveTransReciptError),
@@ -336,7 +336,7 @@ where
 				} else {
 					Ok(0)
 				}
-			},
+			}
 			_ => Ok(0),
 		}
 	}
@@ -583,7 +583,7 @@ where
 			self.get_slate_confirmation_number(&mwc_tip, &swap.refund_slate, !is_seller)?;
 
 		let secondary_tip = self.eth_height()?;
-		
+
 		// check eth transaction status
 		let secondary_lock_amount = self.get_eth_initiate_tx_status(swap)?;
 
