@@ -753,8 +753,14 @@ impl<'a, K: Keychain> State for SellerWaitingForLockConfirmations<'a, K> {
 
 				// We can accept message durinf the wait. Byers can already get a confirmation and sending a message
 				if swap.adaptor_signature.is_none() {
-					let (_, init_redeem, _) = message.unwrap_init_redeem()?;
-					SellApi::init_redeem(&*self.keychain, swap, context, init_redeem)?;
+					let (_, init_redeem, secondary_update) = message.unwrap_init_redeem()?;
+					SellApi::init_redeem(
+						&*self.keychain,
+						swap,
+						context,
+						init_redeem,
+						secondary_update,
+					)?;
 				}
 				debug_assert!(swap.adaptor_signature.is_some());
 				swap.add_journal_message("Init Redeem message is accepted".to_string());
@@ -854,8 +860,14 @@ impl<K: Keychain> State for SellerWaitingForInitRedeemMessage<K> {
 			}
 			Input::IncomeMessage(message) => {
 				if swap.adaptor_signature.is_none() {
-					let (_, init_redeem, _) = message.unwrap_init_redeem()?;
-					SellApi::init_redeem(&*self.keychain, swap, context, init_redeem)?;
+					let (_, init_redeem, secondary_update) = message.unwrap_init_redeem()?;
+					SellApi::init_redeem(
+						&*self.keychain,
+						swap,
+						context,
+						init_redeem,
+						secondary_update,
+					)?;
 				}
 				debug_assert!(swap.adaptor_signature.is_some());
 				swap.add_journal_message("Init Redeem message is accepted".to_string());

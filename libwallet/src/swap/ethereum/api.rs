@@ -266,7 +266,7 @@ where
 		}
 
 		let c = self.eth_node_client.lock();
-		let eth_tip = self.eth_height()?;
+		let eth_tip = c.height()?;
 		let res = c.retrieve_receipt(tx_id.unwrap());
 		match res {
 			Ok(receipt) => match receipt.status {

@@ -417,18 +417,39 @@ impl BuyApi {
 
 	/// Generate 'InitRedeem' slate message
 	pub fn init_redeem_message(swap: &Swap) -> Result<Message, ErrorKind> {
-		swap.message(
-			Update::InitRedeem(InitRedeemUpdate {
-				redeem_slate: VersionedSlate::into_version_plain(
-					swap.redeem_slate.clone(),
-					SlateVersion::V2, // V2 should satify our needs, dont adding extra
-				)?,
-				adaptor_signature: swap.adaptor_signature.ok_or(ErrorKind::UnexpectedAction(
-					"Buyer Fn init_redeem_message(), multisig is empty".to_string(),
-				))?,
-			}),
-			SecondaryUpdate::Empty,
-		)
+		if swap.secondary_currency.is_btc_family() {
+			swap.message(
+				Update::InitRedeem(InitRedeemUpdate {
+					redeem_slate: VersionedSlate::into_version_plain(
+						swap.redeem_slate.clone(),
+						SlateVersion::V2, // V2 should satify our needs, dont adding extra
+					)?,
+					adaptor_signature: swap.adaptor_signature.ok_or(
+						ErrorKind::UnexpectedAction(
+							"Buyer Fn init_redeem_message(), multisig is empty".to_string(),
+						),
+					)?,
+				}),
+				SecondaryUpdate::Empty,
+			)
+		} else {
+			let eth_data = swap.secondary_data.unwrap_eth()?;
+
+			swap.message(
+				Update::InitRedeem(InitRedeemUpdate {
+					redeem_slate: VersionedSlate::into_version_plain(
+						swap.redeem_slate.clone(),
+						SlateVersion::V2, // V2 should satify our needs, dont adding extra
+					)?,
+					adaptor_signature: swap.adaptor_signature.ok_or(
+						ErrorKind::UnexpectedAction(
+							"Buyer Fn init_redeem_message(), multisig is empty".to_string(),
+						),
+					)?,
+				}),
+				SecondaryUpdate::ETH(eth_data.accept_offer_update()),
+			)
+		}
 	}
 
 	/// Secret that unlocks the funds on both chains

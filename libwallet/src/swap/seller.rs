@@ -284,6 +284,7 @@ impl SellApi {
 		swap: &mut Swap,
 		context: &Context,
 		init_redeem: InitRedeemUpdate,
+		secondary_update: SecondaryUpdate,
 	) -> Result<(), ErrorKind> {
 		assert!(swap.is_seller());
 
@@ -321,6 +322,12 @@ impl SellApi {
 		swap.adaptor_signature = Some(init_redeem.adaptor_signature);
 
 		Self::sign_redeem_slate(keychain, swap, context)?;
+
+		if !swap.secondary_currency.is_btc_family() {
+			let eth_update = secondary_update.unwrap_eth()?.unwrap_accept_offer()?;
+			let eth_data = swap.secondary_data.unwrap_eth_mut()?;
+			eth_data.accepted_offer(eth_update)?;
+		}
 
 		Ok(())
 	}
