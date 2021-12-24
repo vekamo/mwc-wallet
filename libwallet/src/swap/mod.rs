@@ -5688,9 +5688,16 @@ mod tests {
 		// going to redeem step...
 		BuyApi::init_redeem(&kc_buy, &mut swap_buy, &ctx_buy).unwrap();
 		let init_redeem_message = BuyApi::init_redeem_message(&swap_buy).unwrap();
-		let (_uuid, init_redeem, _secondary_update) =
+		let (_uuid, init_redeem, secondary_update) =
 			init_redeem_message.unwrap_init_redeem().unwrap();
-		SellApi::init_redeem(&kc_sell, &mut swap_sell, &ctx_sell, init_redeem).unwrap();
+		SellApi::init_redeem(
+			&kc_sell,
+			&mut swap_sell,
+			&ctx_sell,
+			init_redeem,
+			secondary_update,
+		)
+		.unwrap();
 
 		let redeem_message = SellApi::redeem_message(&swap_sell).unwrap();
 		let (_uuid, redeem, _secondary_update) = redeem_message.unwrap_redeem().unwrap();
