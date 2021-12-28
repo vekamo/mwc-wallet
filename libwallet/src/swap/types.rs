@@ -1385,6 +1385,42 @@ pub struct SwapTransactionsConfirmations {
 	pub secondary_refund_conf: Option<u64>,
 }
 
+/// check transactin confirmed
+pub fn check_txs_confirmed(currency: Currency, lock: u64, lock_conf: u64) -> bool {
+	match currency {
+		Currency::Btc
+		| Currency::Bch
+		| Currency::Ltc
+		| Currency::Dash
+		| Currency::ZCash
+		| Currency::Doge => {
+			if lock < lock_conf {
+				false
+			} else {
+				true
+			}
+		}
+		Currency::Ether
+		| Currency::Busd
+		| Currency::Bnb
+		| Currency::Link
+		| Currency::Dai
+		| Currency::Tusd
+		| Currency::Usdp
+		| Currency::Wbtc
+		| Currency::Usdt
+		| Currency::Usdc
+		| Currency::Trx
+		| Currency::Tst => {
+			if lock >= 1 {
+				true
+			} else {
+				false
+			}
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
