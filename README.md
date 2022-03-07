@@ -11,7 +11,7 @@ This is the reference implementation of MWC's wallet. It consists of 2 major pie
 
 To use the command-line wallet, we recommend using the latest release from the Releases page. There are distributions for Linux, MacOS and Windows.
 
-Full documentation outlining how to use the command line wallet can be found on [Grin's Wiki](https://github.com/mimblewimble/docs/wiki/Wallet-User-Guide)
+Full documentation outlining how to use the command line wallet can be found on [MWC's Wiki](https://github.com/mwcproject/docs/wiki/Wallet-User-Guide)
 
 # License
 
