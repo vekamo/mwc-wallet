@@ -21,6 +21,7 @@ use crate::libwallet::{
 use crate::util::secp::key::SecretKey;
 use crate::util::{from_hex, to_base64, Mutex};
 use crate::{Error, ErrorKind};
+use futures::channel::oneshot;
 use grin_wallet_api::JsonId;
 use grin_wallet_util::OnionV3Address;
 use hyper::body;
@@ -769,12 +770,13 @@ where
 				ErrorKind::GenericError(format!("Router failed to add route /v2/foreign, {}", e))
 			})?;
 	}
-
+	let api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>) =
+		Box::leak(Box::new(oneshot::channel::<()>()));
 	let mut apis = ApiServer::new();
 	warn!("Starting HTTP Owner API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
 	let api_thread = apis
-		.start(socket_addr, router, tls_config)
+		.start(socket_addr, router, tls_config, api_chan)
 		.map_err(|e| ErrorKind::GenericError(format!("API thread failed to start, {}", e)))?;
 	warn!("HTTP Owner listener started.");
 
@@ -984,11 +986,14 @@ where
 			ErrorKind::GenericError(format!("Router failed to add route /v2/foreign, {}", e))
 		})?;
 
+	let api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>) =
+		Box::leak(Box::new(oneshot::channel::<()>()));
 	let mut apis = ApiServer::new();
 	warn!("Starting HTTP Foreign listener API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
 	let api_thread = apis
-		.start(socket_addr, router, tls_config)
+		// Assuming you have a variable `channel_pair` of the required type
+		.start(socket_addr, router, tls_config, api_chan)
 		.map_err(|e| ErrorKind::GenericError(format!("API thread failed to start, {}", e)))?;
 
 	warn!("HTTP Foreign listener started.");
