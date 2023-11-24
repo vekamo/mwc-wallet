@@ -617,7 +617,7 @@ impl InfuraNodeClient {
 					let accounts_sign = Accounts::new(web3.eth().transport().clone());
 					let hashed_message = signing::keccak256(&address_bytes);
 					let signed_data: SignedData = accounts_sign.sign(hashed_message, &secret_key);
-					
+
 					#[allow(unused_assignments)]
 					let mut key = secp256k1::SecretKey::new(&mut thread_rng());
 					key = secp256k1::SecretKey::from_slice(
@@ -758,7 +758,7 @@ impl InfuraNodeClient {
 					let accounts_sign = Accounts::new(web3.eth().transport().clone());
 					let hashed_message = signing::keccak256(&address_bytes);
 					let signed_data: SignedData = accounts_sign.sign(hashed_message, &secret_key);
-					
+
 					#[allow(unused_assignments)]
 					let mut key = secp256k1::SecretKey::new(&mut thread_rng());
 					key = secp256k1::SecretKey::from_slice(
