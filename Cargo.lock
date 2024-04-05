@@ -3001,10 +3001,9 @@ dependencies = [
 [[package]]
 name = "liblmdb-sys"
 version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "feed38a3a580f60bf61aaa067b0ff4123395966839adeaf67258a9e50c4d2e49"
+source = "git+https://github.com/mwcproject/lmdb-rs?branch=master#fefef209579d8d8b698e6f764b7d725cb9251a22"
 dependencies = [
- "gcc",
+ "cc",
  "libc",
 ]
 
